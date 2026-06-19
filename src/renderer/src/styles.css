@@ -1,0 +1,67 @@
+@import "highlight.js/styles/github-dark.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg font-sans text-ink antialiased;
+  }
+
+  #root {
+    height: 100vh;
+  }
+}
+
+@layer components {
+  /* Electron window-drag regions. */
+  .titlebar {
+    -webkit-app-region: drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Thin, theme-tinted scrollbar for scroll containers. */
+  .scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.border.strong") transparent;
+  }
+
+  .scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: theme("colors.border.strong");
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: theme("colors.ink.faint");
+  }
+
+  /* Highlighted code regions (highlight.js theme imported above). */
+  .hl pre,
+  .hl pre code.hljs {
+    @apply rounded-lg bg-bg-raised text-sm;
+  }
+
+  .hl code {
+    @apply font-mono;
+  }
+}
