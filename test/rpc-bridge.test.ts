@@ -8,6 +8,7 @@ import type {
   ExtensionUiResponse,
   RpcFrame,
 } from "../src/shared/rpc";
+import { hasOmp } from "./has-omp";
 
 // Real integration test: drives the installed `omp --mode rpc-ui` binary through
 // the actual OmpRpcSession bridge. The handshake assertions cost nothing; the
@@ -16,39 +17,50 @@ import type {
 const cwd = mkdtempSync(join(tmpdir(), "omp-studio-rpc-"));
 afterAll(() => rmSync(cwd, { recursive: true, force: true }));
 
-test("bridge spawns omp, reaches ready, and reports a model + tools", async () => {
-  const session = new OmpRpcSession({ cwd });
-  try {
+// These two spawn the real installed omp; skip on a clean runner (no omp).
+const ompTest = test.skipIf(!hasOmp());
+
+ompTest(
+  "bridge spawns omp, reaches ready, and reports a model + tools",
+  async () => {
+    const session = new OmpRpcSession({ cwd });
+    try {
+      await session.whenReady();
+      const state = await session.getState();
+      expect(state.model).toBeDefined();
+      expect(typeof state.model.provider).toBe("string");
+      expect(typeof state.model.id).toBe("string");
+      expect(Array.isArray(state.dumpTools)).toBe(true);
+      expect((state.dumpTools ?? []).length).toBeGreaterThan(0);
+
+      const messages = await session.getMessages();
+      expect(Array.isArray(messages)).toBe(true);
+    } finally {
+      session.dispose();
+    }
+  },
+  30000,
+);
+
+ompTest(
+  "bridge emits a lifecycle 'exited' frame when omp shuts down",
+  async () => {
+    const session = new OmpRpcSession({ cwd });
     await session.whenReady();
-    const state = await session.getState();
-    expect(state.model).toBeDefined();
-    expect(typeof state.model.provider).toBe("string");
-    expect(typeof state.model.id).toBe("string");
-    expect(Array.isArray(state.dumpTools)).toBe(true);
-    expect((state.dumpTools ?? []).length).toBeGreaterThan(0);
-
-    const messages = await session.getMessages();
-    expect(Array.isArray(messages)).toBe(true);
-  } finally {
-    session.dispose();
-  }
-}, 30000);
-
-test("bridge emits a lifecycle 'exited' frame when omp shuts down", async () => {
-  const session = new OmpRpcSession({ cwd });
-  await session.whenReady();
-  const exited = new Promise<string>((resolve) => {
-    session.on("lifecycle", (status: string) => {
-      if (status === "exited") resolve(status);
+    const exited = new Promise<string>((resolve) => {
+      session.on("lifecycle", (status: string) => {
+        if (status === "exited") resolve(status);
+      });
     });
-  });
-  // Closing stdin makes omp exit 0.
-  // dispose() removes consumer listeners, so trigger a natural exit instead.
-  (
-    session as unknown as { child: { stdin: { end(): void } } }
-  ).child.stdin.end();
-  expect(await exited).toBe("exited");
-}, 20000);
+    // Closing stdin makes omp exit 0.
+    // dispose() removes consumer listeners, so trigger a natural exit instead.
+    (
+      session as unknown as { child: { stdin: { end(): void } } }
+    ).child.stdin.end();
+    expect(await exited).toBe("exited");
+  },
+  20000,
+);
 
 const live = process.env.RPC_LIVE === "1" ? test : test.skip;
 live(

@@ -8,26 +8,34 @@ import {
 } from "../src/main/services/config-service";
 import { currentRepo } from "../src/main/services/github";
 import { listSessions } from "../src/main/services/session-store";
+import { hasOmp } from "./has-omp";
 
-// Real integration tests against the live omp install + on-disk agent state.
+// Mixed suite. Tests that assert real `omp` output (models/providers/bundled
+// agents) need a host omp install, so they skip on a clean CI runner. The
+// graceful-degrade tests below (skills/mcp/sessions/repo) tolerate missing
+// omp/gh and run everywhere.
+const ompTest = test.skipIf(!hasOmp());
 
-test("listModels returns selectable models from `omp models --json`", async () => {
-  const models = await listModels();
-  expect(Array.isArray(models)).toBe(true);
-  expect(models.length).toBeGreaterThan(0);
-  const first = models[0]!;
-  expect(typeof first.provider).toBe("string");
-  expect(typeof first.selector).toBe("string");
-  expect(first.selector).toContain("/");
-});
+ompTest(
+  "listModels returns selectable models from `omp models --json`",
+  async () => {
+    const models = await listModels();
+    expect(Array.isArray(models)).toBe(true);
+    expect(models.length).toBeGreaterThan(0);
+    const first = models[0]!;
+    expect(typeof first.provider).toBe("string");
+    expect(typeof first.selector).toBe("string");
+    expect(first.selector).toContain("/");
+  },
+);
 
-test("listProviders groups models by provider", async () => {
+ompTest("listProviders groups models by provider", async () => {
   const providers = await listProviders();
   expect(providers.length).toBeGreaterThan(0);
   expect(providers.every((p) => p.modelCount > 0)).toBe(true);
 });
 
-test("listAgents includes the bundled task agents", async () => {
+ompTest("listAgents includes the bundled task agents", async () => {
   const agents = await listAgents();
   const names = agents.map((a) => a.name);
   expect(names).toContain("task");
