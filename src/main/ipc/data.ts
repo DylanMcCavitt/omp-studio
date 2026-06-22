@@ -1,4 +1,8 @@
-import type { DashboardData, ProjectSessions } from "@shared/domain";
+import type {
+  DashboardData,
+  ListSessionsOptions,
+  ProjectSessions,
+} from "@shared/domain";
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
 import { dialog, shell } from "electron";
@@ -15,7 +19,16 @@ import {
   listPrs,
   listRepos,
 } from "../services/github";
-import { listSessions, readSession } from "../services/session-store";
+import {
+  archiveSession,
+  deleteSession,
+  exportSessionHtml,
+  listSessions,
+  readSession,
+  renameSession,
+  revealSession,
+  unarchiveSession,
+} from "../services/session-store";
 
 async function buildDashboard(): Promise<DashboardData> {
   const [sessions, models, mcp, skills, agents, repo, issues, prs] =
@@ -77,7 +90,9 @@ async function buildDashboard(): Promise<DashboardData> {
 export function registerDataIpc(ipcMain: IpcMain): void {
   ipcMain.handle(CH.dashboard, () => buildDashboard());
 
-  ipcMain.handle(CH.listSessions, () => listSessions());
+  ipcMain.handle(CH.listSessions, (_event, opts?: ListSessionsOptions) =>
+    listSessions(opts),
+  );
   ipcMain.handle(CH.readSession, (_event, path: string) => readSession(path));
 
   ipcMain.handle(CH.listMcp, () => listMcpServers());
@@ -112,5 +127,26 @@ export function registerDataIpc(ipcMain: IpcMain): void {
   );
   ipcMain.handle(CH.ghListPrs, (_event, repo?: string, cwd?: string) =>
     listPrs(repo, cwd),
+  );
+
+  // session actions (mutating; operate on JSONL files). The electron `shell`
+  // capabilities are injected here so the session-store service stays
+  // electron-free and unit-testable.
+  ipcMain.handle(CH.sessionRename, (_event, path: string, title: string) =>
+    renameSession(path, title),
+  );
+  ipcMain.handle(CH.sessionDelete, (_event, path: string) =>
+    deleteSession(path, (p) => shell.trashItem(p)),
+  );
+  ipcMain.handle(
+    CH.sessionArchive,
+    (_event, path: string, archived: boolean) =>
+      archived ? archiveSession(path) : unarchiveSession(path),
+  );
+  ipcMain.handle(CH.sessionReveal, (_event, path: string) =>
+    revealSession(path, (p) => shell.showItemInFolder(p)),
+  );
+  ipcMain.handle(CH.sessionExportHtml, (_event, path: string) =>
+    exportSessionHtml(path),
   );
 }

@@ -48,6 +48,11 @@ export interface SessionSearchOptions {
   includeArchived?: boolean;
 }
 
+export interface ListSessionsOptions {
+  /** include archived sessions (from the archive root) in the result */
+  includeArchived?: boolean;
+}
+
 export interface SessionSearchHit {
   session: SessionSummary;
   messageIndex: number;
