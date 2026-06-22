@@ -24,6 +24,16 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: { index: resolve(__dirname, "src/preload/index.ts") },
+        // Sandboxed preload scripts (sandbox:true in src/main/index.ts) must be
+        // CommonJS — Electron cannot load an ESM preload in a sandboxed context.
+        // The package is `"type":"module"`, so force CJS output with a `.cjs`
+        // extension to override that default; inlineDynamicImports keeps the
+        // sandbox-safe single-file bundle (no runtime require of local chunks).
+        output: {
+          format: "cjs",
+          entryFileNames: "[name].cjs",
+          inlineDynamicImports: true,
+        },
       },
     },
   },
