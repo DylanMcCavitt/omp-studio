@@ -3,7 +3,9 @@ import { electronApp, is, optimizer } from "@electron-toolkit/utils";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { registerChatIpc } from "./ipc/chat";
 import { registerDataIpc } from "./ipc/data";
+import { registerSettingsIpc } from "./ipc/settings";
 import { SessionRegistry } from "./omp/registry";
+import { setSettingsDir } from "./services/settings-service";
 
 let mainWindow: BrowserWindow | null = null;
 const registry = new SessionRegistry();
@@ -65,8 +67,10 @@ void app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window);
   });
 
+  setSettingsDir(app.getPath("userData"));
   registerDataIpc(ipcMain);
   registerChatIpc(ipcMain, registry, () => mainWindow);
+  registerSettingsIpc(ipcMain);
 
   createWindow();
 
