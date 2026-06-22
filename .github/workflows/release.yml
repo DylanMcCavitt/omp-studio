@@ -28,6 +28,60 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Fail-fast boot gate: package an unpacked build and verify the app boots
+      # cleanly before spending time on full installers and publishing artifacts.
+      # Scoped to Linux/macOS (Windows headless GUI launch is impractical in CI).
+      - name: Package unpacked for smoke
+        if: runner.os != 'Windows'
+        run: npx electron-builder --dir --publish never
+
+      - name: Smoke-test packaged app
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          OMP_STUDIO_SMOKE: "1"
+        run: |
+          set -uo pipefail
+          # Locate the unpacked executable produced by `electron-builder --dir`.
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            BIN="$(find release -type f -path '*linux-unpacked/omp-studio' | head -n1)"
+            if [ -z "$BIN" ]; then
+              echo "::error::unpacked Linux binary not found"; ls -R release || true; exit 1
+            fi
+            # --no-sandbox/--disable-gpu: required for headless Electron under xvfb in CI.
+            CMD=(xvfb-run -a "$BIN" --no-sandbox --disable-gpu)
+          else
+            ARCH="$(uname -m)"
+            APP="$(find release -type d -name '*.app' -path "*mac-$ARCH*" | head -n1)"
+            [ -z "$APP" ] && APP="$(find release -type d -name '*.app' | head -n1)"
+            if [ -z "$APP" ]; then
+              echo "::error::unpacked macOS app not found"; ls -R release || true; exit 1
+            fi
+            BIN="$APP/Contents/MacOS/$(basename "$APP" .app)"
+            CMD=("$BIN")
+          fi
+          echo "Launching: ${CMD[*]}"
+          LOG="$(mktemp)"
+          "${CMD[@]}" >"$LOG" 2>&1 &
+          PID=$!
+          ok=0
+          for _ in $(seq 1 60); do
+            if grep -q "smoke ok" "$LOG"; then ok=1; break; fi
+            if ! kill -0 "$PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          kill "$PID" 2>/dev/null || true
+          pkill -P "$PID" 2>/dev/null || true
+          wait "$PID" 2>/dev/null || true
+          echo "----- packaged app output -----"
+          cat "$LOG"
+          echo "-------------------------------"
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::packaged app did not emit '[omp-studio] smoke ok'"
+            exit 1
+          fi
+          echo "Smoke passed: packaged app booted and emitted 'smoke ok'."
+
       - name: Package distributables
         run: npx electron-builder --publish never
 
