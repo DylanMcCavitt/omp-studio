@@ -37,6 +37,7 @@ function StartPanel() {
   const selectedProject = useAppStore((s) => s.selectedProject);
   const setSelectedProject = useAppStore((s) => s.setSelectedProject);
   const settings = useSettingsStore((s) => s.settings);
+  const settingsLoading = useSettingsStore((s) => s.loading);
   const start = useChatStore((s) => s.start);
   const send = useChatStore((s) => s.send);
   const status = useChatStore((s) => s.status);
@@ -51,16 +52,19 @@ function StartPanel() {
     }
   }, [selectedProject, settings?.defaultProject, setSelectedProject]);
 
-  // Prefer the saved default model, then fall back to the first available.
+  // Seed the model once BOTH the model list and persisted settings have
+  // loaded: prefer the saved default, else fall back to the first available.
+  // Gating on `settingsLoading` avoids racing in the first model before
+  // `defaultModel` is known (which would then stick via the early return).
   useEffect(() => {
-    if (model || !models || models.length === 0) return;
+    if (model || settingsLoading || !models || models.length === 0) return;
     const defaultModel = settings?.defaultModel ?? null;
     const preferred =
       defaultModel && models.some((m) => m.selector === defaultModel)
         ? defaultModel
         : (models[0]?.selector ?? "");
     setModel(preferred);
-  }, [models, model, settings?.defaultModel]);
+  }, [models, model, settingsLoading, settings?.defaultModel]);
 
   const spawning = status === "spawning";
   const canStart =
