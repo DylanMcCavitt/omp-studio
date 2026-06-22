@@ -152,6 +152,10 @@ export class SessionRegistry {
     if (refreshed.title === null && state.sessionName) {
       refreshed.title = state.sessionName;
     }
+    // A resume targeting an already-live chat must retire the previous child
+    // before replacing the record, or the orphan keeps emitting frames against
+    // a session id that now points at a different child.
+    this.records.get(id)?.child?.dispose();
     this.register(id, session, refreshed);
     await this.persist();
     return { id, session, state };
@@ -205,12 +209,16 @@ export class SessionRegistry {
     await this.persist();
   }
 
-  // App-quit teardown: stop every child but leave the persisted descriptors in
-  // place so the workspace can be restored on the next boot. Synchronous to
-  // match the electron lifecycle hooks that call it.
+  // Stop every live child but RETAIN the descriptor records (marked hibernated)
+  // so the workspace survives. On macOS window-all-closed does NOT quit the app,
+  // so a reopened window must still be able to list/resume these chats.
+  // Synchronous to match the electron lifecycle hooks that call it.
   disposeAll(): void {
-    for (const record of this.records.values()) record.child?.dispose();
-    this.records.clear();
+    for (const record of this.records.values()) {
+      record.child?.dispose();
+      record.child = null;
+      record.descriptor.status = "hibernated";
+    }
   }
 
   // ---- internals --------------------------------------------------------

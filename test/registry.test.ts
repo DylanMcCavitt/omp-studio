@@ -230,3 +230,50 @@ test("dispose tears the child down and drops the descriptor from persistence", a
   // The latest persisted set no longer contains the disposed descriptor.
   expect(saves.at(-1)!.some((d) => d.studioSessionId === c.id)).toBe(false);
 });
+
+test("resume of an already-live session retires the previous child (no orphan)", async () => {
+  const { registry, sessions } = makeRegistry();
+  const live = await registry.create({ cwd: "/work/dup" });
+  const first = sessions.at(-1)!;
+  expect(first.disposed).toBe(false);
+  expect(registry.list()).toHaveLength(1);
+
+  const file = join(tmpRoot, "dup.jsonl");
+  writeFileSync(file, '{"type":"message"}\n');
+  await registry.resume(
+    descriptor({ studioSessionId: live.id, sessionFile: file }),
+  );
+  const second = sessions.at(-1)!;
+
+  expect(first).not.toBe(second);
+  expect(first.disposed).toBe(true); // old child retired
+  expect(second.disposed).toBe(false); // new child is live
+  // Still exactly one record for the chat, now pointing at the new child.
+  expect(registry.list()).toHaveLength(1);
+  expect(registry.get(live.id)).toBe(second as unknown as OmpRpcSession);
+});
+
+test("disposeAll retires children but retains descriptors as hibernated", async () => {
+  const { registry, sessions } = makeRegistry();
+  const a = await registry.create({ cwd: "/work/a" });
+  const b = await registry.create({ cwd: "/work/b" });
+
+  registry.disposeAll();
+
+  // Children stopped...
+  expect(sessions[0]!.disposed).toBe(true);
+  expect(sessions[1]!.disposed).toBe(true);
+  // ...but descriptors survive (macOS reopen after window-all-closed), now
+  // hibernated and resumable rather than wiped.
+  const snap = registry.list();
+  expect(snap).toHaveLength(2);
+  expect(snap.every((s) => s.status === "hibernated")).toBe(true);
+  expect(
+    registry
+      .descriptors()
+      .map((d) => d.studioSessionId)
+      .sort(),
+  ).toEqual([a.id, b.id].sort());
+  expect(registry.get(a.id)).toBeUndefined();
+  expect(registry.get(b.id)).toBeUndefined();
+});
