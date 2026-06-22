@@ -11,3 +11,8 @@ node_modules/.tmp/
 *.tsbuildinfo
 .vite/
 coverage/
+
+# Playwright e2e artifacts (traces/screenshots/reports on failure)
+test-results/
+playwright-report/
+.playwright/
