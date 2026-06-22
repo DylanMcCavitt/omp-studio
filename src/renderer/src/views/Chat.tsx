@@ -16,6 +16,7 @@ import { useAsync } from "@/lib/useAsync";
 import { useAppStore } from "@/store/app";
 import type { ChatStatus } from "@/store/chat";
 import { useChatStore } from "@/store/chat";
+import { useSettingsStore } from "@/store/settings";
 
 const THINKING_LEVELS: ThinkingLevel[] = [
   "off",
@@ -35,6 +36,7 @@ export default function Chat() {
 function StartPanel() {
   const selectedProject = useAppStore((s) => s.selectedProject);
   const setSelectedProject = useAppStore((s) => s.setSelectedProject);
+  const settings = useSettingsStore((s) => s.settings);
   const start = useChatStore((s) => s.start);
   const send = useChatStore((s) => s.send);
   const status = useChatStore((s) => s.status);
@@ -42,9 +44,23 @@ function StartPanel() {
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
 
+  // Seed the project picker from the saved default the first time it is unset.
   useEffect(() => {
-    if (!model && models && models.length > 0) setModel(models[0].selector);
-  }, [models, model]);
+    if (!selectedProject && settings?.defaultProject) {
+      setSelectedProject(settings.defaultProject);
+    }
+  }, [selectedProject, settings?.defaultProject, setSelectedProject]);
+
+  // Prefer the saved default model, then fall back to the first available.
+  useEffect(() => {
+    if (model || !models || models.length === 0) return;
+    const defaultModel = settings?.defaultModel ?? null;
+    const preferred =
+      defaultModel && models.some((m) => m.selector === defaultModel)
+        ? defaultModel
+        : (models[0]?.selector ?? "");
+    setModel(preferred);
+  }, [models, model, settings?.defaultModel]);
 
   const spawning = status === "spawning";
   const canStart =
@@ -54,7 +70,17 @@ function StartPanel() {
     if (!selectedProject || prompt.trim() === "") return;
     const text = prompt;
     setPrompt("");
-    await start({ cwd: selectedProject, model: model || undefined });
+    await start({
+      cwd: selectedProject,
+      model: model || undefined,
+      thinkingLevel: settings?.defaultThinkingLevel,
+      approvalPolicy: settings
+        ? {
+            mode: settings.defaultApprovalMode,
+            autoApprove: settings.defaultAutoApprove,
+          }
+        : undefined,
+    });
     await send(text);
   };
 

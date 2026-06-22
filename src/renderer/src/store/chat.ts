@@ -19,6 +19,7 @@ import type {
 } from "@shared/rpc";
 import { create } from "zustand";
 import { useAppStore } from "@/store/app";
+import { useSettingsStore } from "@/store/settings";
 
 export type ChatStatus = "idle" | "spawning" | "streaming" | "error";
 
@@ -153,6 +154,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     set({ status: "spawning", error: undefined });
     try {
       const { sessionId, state } = await window.omp.chat.create(opts);
+      void useSettingsStore.getState().recordProject(opts.cwd);
       useAppStore.getState().openChat(sessionId);
       await get().attach(sessionId, state);
     } catch (e) {
