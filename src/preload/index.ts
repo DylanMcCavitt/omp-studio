@@ -1,4 +1,4 @@
-import type { SessionSearchOptions } from "@shared/domain";
+import type { ListSessionsOptions, SessionSearchOptions } from "@shared/domain";
 import type {
   ChatCreateOptions,
   ChatLifecycleEvent,
@@ -16,7 +16,8 @@ import { contextBridge, ipcRenderer } from "electron";
 
 const api: OmpApi = {
   getDashboard: () => ipcRenderer.invoke(CH.dashboard),
-  listSessions: () => ipcRenderer.invoke(CH.listSessions),
+  listSessions: (opts?: ListSessionsOptions) =>
+    ipcRenderer.invoke(CH.listSessions, opts),
   readSession: (path: string) => ipcRenderer.invoke(CH.readSession, path),
   listMcpServers: () => ipcRenderer.invoke(CH.listMcp),
   listSkills: () => ipcRenderer.invoke(CH.listSkills),

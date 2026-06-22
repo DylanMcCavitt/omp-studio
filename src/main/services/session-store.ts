@@ -10,7 +10,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
-import type { SessionSummary, SessionTranscript } from "@shared/domain";
+import type {
+  ListSessionsOptions,
+  SessionSummary,
+  SessionTranscript,
+} from "@shared/domain";
 import type { OmpMessage } from "@shared/rpc";
 import { agentDir, ompBinary, sessionsDir } from "../paths";
 import { runCli } from "./cli";
@@ -198,11 +202,6 @@ async function writeAliases(aliases: Record<string, string>): Promise<void> {
 // ---------------------------------------------------------------------------
 // Listing
 // ---------------------------------------------------------------------------
-
-export interface ListSessionsOptions {
-  /** Include archived sessions (from the archive root) in the result. */
-  includeArchived?: boolean;
-}
 
 export async function listSessions(
   opts: ListSessionsOptions = {},

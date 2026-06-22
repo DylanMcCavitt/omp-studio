@@ -8,6 +8,7 @@ import type {
   GhIssue,
   GhPr,
   GhRepo,
+  ListSessionsOptions,
   McpServerInfo,
   ModelInfo,
   ProviderInfo,
@@ -184,7 +185,7 @@ export interface StudioSettingsV1 {
 
 export interface OmpApi {
   getDashboard(): Promise<DashboardData>;
-  listSessions(): Promise<SessionSummary[]>;
+  listSessions(opts?: ListSessionsOptions): Promise<SessionSummary[]>;
   readSession(path: string): Promise<SessionTranscript>;
   searchSessions(
     query: string,

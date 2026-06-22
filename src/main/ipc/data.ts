@@ -1,4 +1,8 @@
-import type { DashboardData, ProjectSessions } from "@shared/domain";
+import type {
+  DashboardData,
+  ListSessionsOptions,
+  ProjectSessions,
+} from "@shared/domain";
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
 import { dialog, shell } from "electron";
@@ -86,7 +90,9 @@ async function buildDashboard(): Promise<DashboardData> {
 export function registerDataIpc(ipcMain: IpcMain): void {
   ipcMain.handle(CH.dashboard, () => buildDashboard());
 
-  ipcMain.handle(CH.listSessions, () => listSessions());
+  ipcMain.handle(CH.listSessions, (_event, opts?: ListSessionsOptions) =>
+    listSessions(opts),
+  );
   ipcMain.handle(CH.readSession, (_event, path: string) => readSession(path));
 
   ipcMain.handle(CH.listMcp, () => listMcpServers());
