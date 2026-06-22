@@ -1,6 +1,7 @@
-import type { ComponentType } from "react";
+import { type ComponentType, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { type Route, useAppStore } from "@/store/app";
+import { useSettingsStore } from "@/store/settings";
 import Agents from "@/views/Agents";
 import Chat from "@/views/Chat";
 import Dashboard from "@/views/Dashboard";
@@ -23,6 +24,10 @@ const VIEWS: Record<Route, ComponentType> = {
 
 export default function App() {
   const route = useAppStore((s) => s.route);
+  const loadSettings = useSettingsStore((s) => s.load);
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
   const View = VIEWS[route];
   return (
     <Layout>
