@@ -12,6 +12,7 @@ import { Badge, EmptyState, IconButton, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatNumber, formatRelativeTime } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
+import { useAppStore } from "@/store/app";
 
 const TABS = [
   { id: "repos", label: "Repos", Icon: GitBranch },
@@ -83,8 +84,10 @@ function ReposTab() {
 }
 
 function IssuesTab() {
-  const { data, loading, error } = useAsync(() =>
-    window.omp.github.listIssues(),
+  const selectedProject = useAppStore((s) => s.selectedProject);
+  const { data, loading, error } = useAsync(
+    () => window.omp.github.listIssues(undefined, selectedProject ?? undefined),
+    [selectedProject],
   );
   if (loading) return <Centered />;
   if (error) return <Failed hint={error} />;
@@ -135,8 +138,14 @@ function IssuesTab() {
 }
 
 function PrsTab() {
-  const { data, loading, error } = useAsync(() =>
-    window.omp.github.listPullRequests(),
+  const selectedProject = useAppStore((s) => s.selectedProject);
+  const { data, loading, error } = useAsync(
+    () =>
+      window.omp.github.listPullRequests(
+        undefined,
+        selectedProject ?? undefined,
+      ),
+    [selectedProject],
   );
   if (loading) return <Centered />;
   if (error) return <Failed hint={error} />;
@@ -224,9 +233,10 @@ function Failed({ hint }: { hint: string }) {
 export default function GitHub() {
   const [tab, setTab] = useState<TabId>("repos");
   const [nonce, setNonce] = useState(0);
+  const selectedProject = useAppStore((s) => s.selectedProject);
   const { data: repo, loading: repoLoading } = useAsync(
-    () => window.omp.github.currentRepo(),
-    [nonce],
+    () => window.omp.github.currentRepo(selectedProject ?? undefined),
+    [nonce, selectedProject],
   );
 
   return (
