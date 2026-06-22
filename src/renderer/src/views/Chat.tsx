@@ -1,7 +1,8 @@
-// The live agent chat view. With no active chat it shows a start panel (project
-// picker, model select, initial prompt). With an active chat it shows the
-// transcript + composer on the left and model / thinking / plan / subagent rails
-// on the right, attaching the chat store to the bridge session on mount.
+// The live agent chat view. With no active session it shows a start panel
+// (project picker, model select, initial prompt). With an active session it
+// shows the transcript + composer on the left and model / thinking / plan /
+// subagent rails on the right, reading the active session's slice from the
+// normalized multi-session store.
 
 import type { RpcModel, ThinkingLevel } from "@shared/rpc";
 import { FolderOpen, MessageSquarePlus, Sparkles } from "lucide-react";
@@ -14,8 +15,7 @@ import { Badge, Button, Panel, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
 import { useAppStore } from "@/store/app";
-import type { ChatStatus } from "@/store/chat";
-import { useChatStore } from "@/store/chat";
+import { type ChatStatus, useActiveSession, useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
 
 const THINKING_LEVELS: ThinkingLevel[] = [
@@ -28,9 +28,9 @@ const THINKING_LEVELS: ThinkingLevel[] = [
 ];
 
 export default function Chat() {
-  const activeChatId = useAppStore((s) => s.activeChatId);
-  if (!activeChatId) return <StartPanel />;
-  return <ChatSession activeChatId={activeChatId} />;
+  const activeSessionId = useChatStore((s) => s.activeSessionId);
+  if (!activeSessionId) return <StartPanel />;
+  return <ChatSession sessionId={activeSessionId} />;
 }
 
 function StartPanel() {
@@ -40,7 +40,7 @@ function StartPanel() {
   const settingsLoading = useSettingsStore((s) => s.loading);
   const start = useChatStore((s) => s.start);
   const send = useChatStore((s) => s.send);
-  const status = useChatStore((s) => s.status);
+  const creating = useChatStore((s) => s.creating);
   const { data: models, loading } = useAsync(() => window.omp.listModels(), []);
   const [model, setModel] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -66,7 +66,7 @@ function StartPanel() {
     setModel(preferred);
   }, [models, model, settingsLoading, settings?.defaultModel]);
 
-  const spawning = status === "spawning";
+  const spawning = creating;
   const canStart =
     Boolean(selectedProject) && prompt.trim() !== "" && !spawning;
 
@@ -182,24 +182,27 @@ function StartPanel() {
   );
 }
 
-function ChatSession({ activeChatId }: { activeChatId: string }) {
-  const sessionId = useChatStore((s) => s.sessionId);
-  const attach = useChatStore((s) => s.attach);
-  const status = useChatStore((s) => s.status);
-  const model = useChatStore((s) => s.model);
-  const thinkingLevel = useChatStore((s) => s.thinkingLevel);
-  const contextUsage = useChatStore((s) => s.contextUsage);
+function ChatSession({ sessionId }: { sessionId: string }) {
+  const open = useChatStore((s) => Boolean(s.openSessions[sessionId]));
+  const openSession = useChatStore((s) => s.openSession);
+  const status = useActiveSession((s) => s?.status ?? "idle");
+  const model = useActiveSession((s) => s?.model ?? null);
+  const thinkingLevel = useActiveSession((s) => s?.thinkingLevel ?? "medium");
+  const contextUsage = useActiveSession((s) => s?.contextUsage);
   const setModel = useChatStore((s) => s.setModel);
   const setThinking = useChatStore((s) => s.setThinking);
-  const error = useChatStore((s) => s.error);
+  const error = useActiveSession((s) => s?.error);
 
+  // Safety net: if the active session isn't registered yet (e.g. selected from
+  // another surface), open it now. start() registers before activating, so this
+  // no-ops for freshly created chats and on session switches.
   useEffect(() => {
-    if (sessionId === activeChatId) return;
+    if (open) return;
     let cancelled = false;
     void (async () => {
       try {
-        const state = await window.omp.chat.getState(activeChatId);
-        if (!cancelled) await attach(activeChatId, state);
+        const state = await window.omp.chat.getState(sessionId);
+        if (!cancelled) await openSession(sessionId, state);
       } catch {
         // The bridge may not hold this session id; leave the store untouched.
       }
@@ -207,7 +210,7 @@ function ChatSession({ activeChatId }: { activeChatId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [activeChatId, sessionId, attach]);
+  }, [sessionId, open, openSession]);
 
   const modelName = model
     ? (model.name ?? `${model.provider}/${model.id}`)

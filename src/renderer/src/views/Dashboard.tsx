@@ -23,10 +23,11 @@ import {
 import { formatNumber, formatRelativeTime } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 import { useAppStore } from "@/store/app";
+import { useChatStore } from "@/store/chat";
 
 export default function Dashboard() {
   const setRoute = useAppStore((s) => s.setRoute);
-  const newChat = useAppStore((s) => s.newChat);
+  const newChat = useChatStore((s) => s.newChat);
   const { data, loading, error, reload } = useAsync(() =>
     window.omp.getDashboard(),
   );

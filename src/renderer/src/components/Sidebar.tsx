@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { type Route, useAppStore } from "@/store/app";
+import { useChatStore } from "@/store/chat";
 
 interface NavItem {
   route: Route;
@@ -33,7 +34,7 @@ const NAV: NavItem[] = [
 export function Sidebar() {
   const route = useAppStore((s) => s.route);
   const setRoute = useAppStore((s) => s.setRoute);
-  const newChat = useAppStore((s) => s.newChat);
+  const newChat = useChatStore((s) => s.newChat);
 
   return (
     <nav className="no-drag flex w-60 shrink-0 flex-col border-r border-border bg-bg-raised">

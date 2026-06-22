@@ -1,11 +1,11 @@
 // The agent's current plan: phases with status-iconed tasks. Completed and
 // dropped tasks are struck through.
 
-import type { TodoStatus } from "@shared/rpc";
+import type { TodoPhase, TodoStatus } from "@shared/rpc";
 import { CheckCircle2, Circle, ListTodo, Loader, XCircle } from "lucide-react";
 import { EmptyState, Panel } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { useChatStore } from "@/store/chat";
+import { useActiveSession } from "@/store/chat";
 
 function TodoIcon({ status }: { status: TodoStatus }) {
   if (status === "completed") {
@@ -24,8 +24,10 @@ function TodoIcon({ status }: { status: TodoStatus }) {
   return <Circle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-faint" />;
 }
 
+const EMPTY_TODOS: TodoPhase[] = [];
+
 export function TodoPanel() {
-  const phases = useChatStore((s) => s.todoPhases);
+  const phases = useActiveSession((s) => s?.todoPhases ?? EMPTY_TODOS);
   const hasTasks = phases.some((p) => p.tasks.length > 0);
 
   return (

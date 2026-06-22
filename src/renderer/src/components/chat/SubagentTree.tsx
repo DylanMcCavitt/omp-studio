@@ -1,12 +1,15 @@
 // Roster of subagents spawned by the active session: label, agent-type badge
 // and a status badge tinted by the reported status string.
 
+import type { SubagentInfo } from "@shared/rpc";
 import { Bot, Users } from "lucide-react";
 import { Badge, EmptyState, Panel } from "@/components/ui";
-import { useChatStore } from "@/store/chat";
+import { useActiveSession } from "@/store/chat";
+
+const EMPTY_SUBAGENTS: SubagentInfo[] = [];
 
 export function SubagentTree() {
-  const subagents = useChatStore((s) => s.subagents);
+  const subagents = useActiveSession((s) => s?.subagents ?? EMPTY_SUBAGENTS);
 
   return (
     <Panel title="Subagents">

@@ -5,19 +5,22 @@
 import type {
   AssistantMessage,
   ContentBlock,
+  OmpMessage,
   ToolResultMessage,
 } from "@shared/rpc";
 import { Loader } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { useChatStore } from "@/store/chat";
+import { useActiveSession } from "@/store/chat";
 import { MessageBubble } from "./MessageBubble";
 
+const EMPTY_MESSAGES: OmpMessage[] = [];
+
 export function MessageList() {
-  const messages = useChatStore((s) => s.messages);
-  const status = useChatStore((s) => s.status);
-  const liveText = useChatStore((s) => s.liveText);
-  const liveThinking = useChatStore((s) => s.liveThinking);
-  const activeTool = useChatStore((s) => s.activeTool);
+  const messages = useActiveSession((s) => s?.messages ?? EMPTY_MESSAGES);
+  const status = useActiveSession((s) => s?.status ?? "idle");
+  const liveText = useActiveSession((s) => s?.liveText ?? "");
+  const liveThinking = useActiveSession((s) => s?.liveThinking ?? "");
+  const activeTool = useActiveSession((s) => s?.activeTool ?? null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);

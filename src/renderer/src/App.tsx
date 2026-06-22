@@ -1,6 +1,7 @@
 import { type ComponentType, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { type Route, useAppStore } from "@/store/app";
+import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
 import Agents from "@/views/Agents";
 import Chat from "@/views/Chat";
@@ -25,9 +26,13 @@ const VIEWS: Record<Route, ComponentType> = {
 export default function App() {
   const route = useAppStore((s) => s.route);
   const loadSettings = useSettingsStore((s) => s.load);
+  const ensureSubscribed = useChatStore((s) => s.ensureSubscribed);
+  // Bootstrap once: load persisted settings and open the single global bridge
+  // subscription that routes every session's frames into the chat store.
   useEffect(() => {
     void loadSettings();
-  }, [loadSettings]);
+    ensureSubscribed();
+  }, [loadSettings, ensureSubscribed]);
   const View = VIEWS[route];
   return (
     <Layout>

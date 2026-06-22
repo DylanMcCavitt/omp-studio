@@ -5,11 +5,11 @@
 import { Navigation, Send, Square } from "lucide-react";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui";
-import { useChatStore } from "@/store/chat";
+import { useActiveSession, useChatStore } from "@/store/chat";
 
 export function Composer() {
-  const sessionId = useChatStore((s) => s.sessionId);
-  const status = useChatStore((s) => s.status);
+  const sessionId = useActiveSession((s) => s?.sessionId ?? null);
+  const status = useActiveSession((s) => s?.status ?? "idle");
   const send = useChatStore((s) => s.send);
   const steer = useChatStore((s) => s.steer);
   const abort = useChatStore((s) => s.abort);

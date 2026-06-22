@@ -14,6 +14,37 @@ import { CH } from "@shared/ipc";
 import type { ThinkingLevel } from "@shared/rpc";
 import { contextBridge, ipcRenderer } from "electron";
 
+// One IPC listener per channel, fanning out to a set of renderer subscribers.
+// Gap 18 fix: many onEvent/onLifecycle/onUiRequest callbacks must NOT stack
+// duplicate `ipcRenderer.on` listeners (each would re-deliver every frame). We
+// bind exactly one IPC listener per channel on the first subscribe and remove it
+// when the last subscriber leaves, so every returned unsubscribe is real and the
+// channel never double-registers.
+function channelSubscription<T>(
+  channel: string,
+): (cb: (payload: T) => void) => () => void {
+  const subscribers = new Set<(payload: T) => void>();
+  const onIpc = (_e: unknown, payload: T): void => {
+    for (const cb of subscribers) cb(payload);
+  };
+  return (cb) => {
+    subscribers.add(cb);
+    if (subscribers.size === 1) ipcRenderer.on(channel, onIpc);
+    return () => {
+      if (!subscribers.delete(cb)) return;
+      if (subscribers.size === 0) ipcRenderer.removeListener(channel, onIpc);
+    };
+  };
+}
+
+const onRpcEvent = channelSubscription<ChatRpcEvent>(CH.evtRpc);
+const onLifecycleEvent = channelSubscription<ChatLifecycleEvent>(
+  CH.evtLifecycle,
+);
+const onUiRequestEvent = channelSubscription<ChatUiRequestEvent>(
+  CH.evtUiRequest,
+);
+
 const api: OmpApi = {
   getDashboard: () => ipcRenderer.invoke(CH.dashboard),
   listSessions: (opts?: ListSessionsOptions) =>
@@ -60,23 +91,9 @@ const api: OmpApi = {
       ipcRenderer.invoke(CH.chatGetSubagents, sessionId),
     dispose: (sessionId: string) =>
       ipcRenderer.invoke(CH.chatDispose, sessionId),
-    onEvent: (cb: (e: ChatRpcEvent) => void) => {
-      const listener = (_e: unknown, payload: ChatRpcEvent) => cb(payload);
-      ipcRenderer.on(CH.evtRpc, listener);
-      return () => ipcRenderer.removeListener(CH.evtRpc, listener);
-    },
-    onLifecycle: (cb: (e: ChatLifecycleEvent) => void) => {
-      const listener = (_e: unknown, payload: ChatLifecycleEvent) =>
-        cb(payload);
-      ipcRenderer.on(CH.evtLifecycle, listener);
-      return () => ipcRenderer.removeListener(CH.evtLifecycle, listener);
-    },
-    onUiRequest: (cb: (e: ChatUiRequestEvent) => void) => {
-      const listener = (_e: unknown, payload: ChatUiRequestEvent) =>
-        cb(payload);
-      ipcRenderer.on(CH.evtUiRequest, listener);
-      return () => ipcRenderer.removeListener(CH.evtUiRequest, listener);
-    },
+    onEvent: onRpcEvent,
+    onLifecycle: onLifecycleEvent,
+    onUiRequest: onUiRequestEvent,
     respondUiRequest: (payload: ChatUiRespondPayload) =>
       ipcRenderer.invoke(CH.chatRespondUi, payload),
     getSessionStats: (sessionId: string) =>
