@@ -16,9 +16,11 @@ Closes #
 
 ## Checklist
 
+- [ ] `npm run check` passes (Biome lint + format)
 - [ ] `npm run typecheck` passes
+- [ ] `bun test` passes (non-live; do not set `RPC_LIVE`)
 - [ ] `npm run build` succeeds
-- [ ] `npm run test:rpc` passes (if the RPC bridge is affected)
+- [ ] `npm run test:e2e` passes (Playwright `_electron` smoke; non-live)
 - [ ] Updated `CHANGELOG.md` under `## [Unreleased]`
 - [ ] Documentation updated where relevant
 

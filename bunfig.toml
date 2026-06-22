@@ -1,0 +1,6 @@
+[test]
+# Scope `bun test` discovery to the node-side suite in test/. Without this,
+# bun also matches e2e/*.spec.ts and tries to run the Playwright `_electron`
+# specs under its own runner, where `test.beforeAll()` throws. The e2e smoke
+# runs through Playwright instead (`npm run test:e2e`).
+root = "test"

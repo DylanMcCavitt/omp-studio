@@ -6,12 +6,19 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel superseded runs on the same ref so PR pushes don't pile up.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  # Quality gate: lint + type + unit tests + bundle, across the supported Node
+  # majors. This job never launches the app, so it skips the Electron binary
+  # download to stay fast.
+  gate:
+    name: gate (node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     env:
-      # Skip Electron's binary download: CI only type-checks and bundles,
-      # it does not run the app or package distributables.
       ELECTRON_SKIP_BINARY_DOWNLOAD: 1
     strategy:
       fail-fast: false
@@ -27,11 +34,71 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint + format check (Biome)
+        run: npm run check
 
       - name: Type-check
         run: npm run typecheck
 
+      # Node-side unit suite. Runs the bun runner over test/ (scoped via
+      # bunfig.toml). RPC_LIVE is intentionally unset so the paid live bridge
+      # test stays skipped — no model calls, no spend.
+      - name: Unit tests (bun)
+        run: bun test
+
       - name: Build
         run: npm run build
+
+  # End-to-end smoke: launch the BUILT app via Playwright's `_electron` runner
+  # under a virtual display. Hermetic by design — the spec points OMP_BINARY /
+  # GH_BINARY at an unresolvable path, so omp/gh need not be installed and no
+  # child process or model turn is ever spawned. Ubuntu-only: Electron needs a
+  # display server (xvfb) that the matrix gate above does not provide.
+  e2e-smoke:
+    name: e2e-smoke (Playwright _electron)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Real Electron binary is required here (the app actually launches), so
+      # this job does NOT set ELECTRON_SKIP_BINARY_DOWNLOAD.
+      - name: Install dependencies
+        run: npm ci
+
+      # Pull in the shared system libraries (libnss3, libgbm, libgtk, ...) that
+      # headless Electron/Chromium needs on the runner image.
+      - name: Install Electron system libraries
+        run: npx playwright install-deps
+
+      # npm extracts chrome-sandbox without the setuid bit, so Electron's
+      # SUID sandbox helper is rejected on the runner. Restore root ownership +
+      # the setuid bit instead of disabling the sandbox.
+      - name: Enable Electron's setuid sandbox
+        run: |
+          SANDBOX=node_modules/electron/dist/chrome-sandbox
+          if [ -f "$SANDBOX" ]; then
+            sudo chown root:root "$SANDBOX"
+            sudo chmod 4755 "$SANDBOX"
+          fi
+
+      - name: Build
+        run: npm run build
+
+      # STUDIO_E2E_LIVE / RPC_LIVE intentionally unset: non-live smoke only.
+      - name: e2e smoke (xvfb)
+        run: xvfb-run -a npm run test:e2e
