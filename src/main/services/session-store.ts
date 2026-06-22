@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Dirent, Stats } from "node:fs";
+import { createReadStream } from "node:fs";
 import {
   mkdir,
   readdir,
@@ -10,8 +11,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join } from "node:path";
+import { createInterface } from "node:readline";
 import type {
   ListSessionsOptions,
+  SessionSearchHit,
+  SessionSearchOptions,
   SessionSummary,
   SessionTranscript,
 } from "@shared/domain";
@@ -300,6 +304,183 @@ export async function readSession(path: string): Promise<SessionTranscript> {
   const alias = aliases[path];
   if (alias !== undefined) summary.title = alias;
   return { summary, messages: parsed.messages };
+}
+
+// ---------------------------------------------------------------------------
+// Search
+// ---------------------------------------------------------------------------
+
+/** Hard ceiling on returned hits; callers may request fewer but never more. */
+const SEARCH_RESULT_CAP = 100;
+/** Max hits surfaced from any one session, so a big transcript can't flood. */
+const SEARCH_HITS_PER_SESSION = 5;
+/** Characters of context kept on each side of the first match in a snippet. */
+const SEARCH_SNIPPET_RADIUS = 60;
+/** Max highlighted ranges recorded per hit. */
+const SEARCH_MAX_RANGES = 12;
+/**
+ * Skip pathologically long lines (almost always base64 image blocks): they hold
+ * no searchable prose and would defeat the line-at-a-time streaming budget.
+ */
+const SEARCH_MAX_LINE_LENGTH = 1_000_000;
+
+type SearchRole = SessionSearchHit["role"];
+
+/**
+ * Concatenate the human-readable text of a message (text blocks only). Tool-call
+ * arguments and image payloads are intentionally excluded from v1 search.
+ */
+function messageText(message: OmpMessage): string {
+  const content = message.content;
+  if (typeof content === "string") return content;
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") continue;
+    const b = block as { type?: unknown; text?: unknown };
+    if (b.type === "text" && typeof b.text === "string") parts.push(b.text);
+  }
+  return parts.join("\n");
+}
+
+/** All occurrence ranges of `needle` in the lowercased `text` (capped). */
+function findRanges(
+  text: string,
+  needle: string,
+): Array<{ start: number; end: number }> {
+  const hay = text.toLowerCase();
+  const ranges: Array<{ start: number; end: number }> = [];
+  let from = 0;
+  while (ranges.length < SEARCH_MAX_RANGES) {
+    const idx = hay.indexOf(needle, from);
+    if (idx < 0) break;
+    ranges.push({ start: idx, end: idx + needle.length });
+    from = idx + needle.length;
+  }
+  return ranges;
+}
+
+/**
+ * Build a hit with a bounded snippet windowed around the first match. Snippet
+ * offsets in `ranges` are re-based to the snippet string so the renderer can
+ * highlight directly; control whitespace is flattened 1:1 (length preserving)
+ * so those offsets stay exact. Case folding is assumed length-preserving
+ * (true for all ASCII and the overwhelming majority of text).
+ */
+function buildHit(
+  session: SessionSummary,
+  messageIndex: number,
+  role: SearchRole,
+  text: string,
+  textRanges: Array<{ start: number; end: number }>,
+): SessionSearchHit {
+  const first = textRanges[0]!;
+  const winStart = Math.max(0, first.start - SEARCH_SNIPPET_RADIUS);
+  const winEnd = Math.min(text.length, first.end + SEARCH_SNIPPET_RADIUS);
+  const core = text.slice(winStart, winEnd).replace(/[\r\n\t]/g, " ");
+  const prefix = winStart > 0 ? "… " : "";
+  const suffix = winEnd < text.length ? " …" : "";
+  const snippet = prefix + core + suffix;
+  const offset = prefix.length - winStart;
+  const ranges = textRanges
+    .filter((r) => r.start >= winStart && r.end <= winEnd)
+    .map((r) => ({ start: r.start + offset, end: r.end + offset }));
+  return {
+    session,
+    messageIndex,
+    role,
+    snippet,
+    ranges,
+    updatedAt: session.updatedAt,
+  };
+}
+
+/**
+ * Stream a session's JSONL line by line (never loading the whole file into
+ * memory) and collect up to `cap` snippet hits whose message text contains
+ * `needle` (already lowercased). `messageIndex` matches the index into the
+ * `messages` array returned by {@link readSession} (valid message records only).
+ */
+async function scanSessionFile(
+  session: SessionSummary,
+  needle: string,
+  cap: number,
+): Promise<SessionSearchHit[]> {
+  const hits: SessionSearchHit[] = [];
+  if (cap <= 0) return hits;
+  const input = createReadStream(session.path, { encoding: "utf8" });
+  const rl = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
+  let messageIndex = -1;
+  try {
+    for await (const raw of rl) {
+      const line = raw.trim();
+      if (!line || line.length > SEARCH_MAX_LINE_LENGTH) continue;
+      let record: Record<string, unknown>;
+      try {
+        record = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (record.type !== "message") continue;
+      const message = record.message;
+      if (!message || typeof message !== "object") continue;
+      // Index only valid message objects so it lines up with readSession().
+      messageIndex += 1;
+      const role = (message as { role?: unknown }).role;
+      if (role !== "user" && role !== "assistant" && role !== "toolResult") {
+        continue;
+      }
+      const text = messageText(message as OmpMessage);
+      if (!text) continue;
+      const ranges = findRanges(text, needle);
+      if (ranges.length === 0) continue;
+      hits.push(buildHit(session, messageIndex, role, text, ranges));
+      if (hits.length >= cap) break;
+    }
+  } catch {
+    // File vanished or became unreadable mid-scan: return what we gathered.
+  } finally {
+    rl.close();
+    input.destroy();
+  }
+  return hits;
+}
+
+function normalizeLimit(limit: number | undefined): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) {
+    return SEARCH_RESULT_CAP;
+  }
+  return Math.min(Math.floor(limit), SEARCH_RESULT_CAP);
+}
+
+/**
+ * Case-insensitive substring search over the message text of every session's
+ * JSONL transcript. Sessions are visited newest-first (the {@link listSessions}
+ * order), each scanned via a streamed line reader; results are bounded by a hard
+ * cap and a per-session limit. An empty or whitespace-only query returns [].
+ */
+export async function searchSessions(
+  query: string,
+  opts: SessionSearchOptions = {},
+): Promise<SessionSearchHit[]> {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+
+  const cap = normalizeLimit(opts.limit);
+  const sessions = await listSessions({
+    includeArchived: opts.includeArchived,
+  });
+
+  const hits: SessionSearchHit[] = [];
+  for (const session of sessions) {
+    if (hits.length >= cap) break;
+    const perSession = Math.min(SEARCH_HITS_PER_SESSION, cap - hits.length);
+    const sessionHits = await scanSessionFile(session, needle, perSession);
+    for (const hit of sessionHits) {
+      hits.push(hit);
+      if (hits.length >= cap) break;
+    }
+  }
+  return hits;
 }
 
 // ---------------------------------------------------------------------------

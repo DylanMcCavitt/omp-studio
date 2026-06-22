@@ -2,6 +2,7 @@ import type {
   DashboardData,
   ListSessionsOptions,
   ProjectSessions,
+  SessionSearchOptions,
 } from "@shared/domain";
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
@@ -27,6 +28,7 @@ import {
   readSession,
   renameSession,
   revealSession,
+  searchSessions,
   unarchiveSession,
 } from "../services/session-store";
 
@@ -94,6 +96,11 @@ export function registerDataIpc(ipcMain: IpcMain): void {
     listSessions(opts),
   );
   ipcMain.handle(CH.readSession, (_event, path: string) => readSession(path));
+  ipcMain.handle(
+    CH.searchSessions,
+    (_event, query: string, opts?: SessionSearchOptions) =>
+      searchSessions(query, opts),
+  );
 
   ipcMain.handle(CH.listMcp, () => listMcpServers());
   ipcMain.handle(CH.listSkills, () => listSkills());
