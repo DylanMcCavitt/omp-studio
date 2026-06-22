@@ -105,7 +105,16 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   }
   const providers: ProviderInfo[] = [];
   for (const [id, modelCount] of counts) {
-    providers.push({ id, name: id, authenticated: true, modelCount });
+    // B2 replaces this with real usage/token detection; stopgap keeps the
+    // contract satisfied without leaking or probing tokens.
+    const authenticated = true;
+    providers.push({
+      id,
+      name: id,
+      authenticated,
+      authStatus: authenticated ? "authenticated" : "unknown",
+      modelCount,
+    });
   }
   return providers;
 }

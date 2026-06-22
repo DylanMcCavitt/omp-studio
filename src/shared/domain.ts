@@ -115,7 +115,7 @@ export interface ProviderInfo {
   name: string;
   /** legacy truthiness flag, retained for back-compat; prefer `authStatus` */
   authenticated: boolean;
-  authStatus?: ProviderAuthStatus;
+  authStatus: ProviderAuthStatus;
   authSource?: "usage" | "token" | "local" | "none" | "error";
   modelCount: number;
 }
