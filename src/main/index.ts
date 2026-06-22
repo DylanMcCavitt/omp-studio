@@ -21,8 +21,8 @@ function createWindow(): void {
     titleBarStyle: "hiddenInset",
     backgroundColor: "#0b0d12",
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
-      sandbox: false,
+      preload: join(__dirname, "../preload/index.cjs"),
+      sandbox: true,
       contextIsolation: true,
     },
   });
