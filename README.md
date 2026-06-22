@@ -83,10 +83,13 @@ npm run build && npm run test:e2e
 
 `npm run test:e2e` uses Playwright's `_electron` API to launch the bundled app
 from `out/main/index.js`, so the app must be built first. The smoke suite
-(`e2e/smoke.spec.ts`) is **non-live**: it never starts a chat, so no `omp` child
-is spawned and no paid model turn runs. It asserts the window title, the sidebar
-navigation, the Dashboard, and that every browse view (Sessions, Skills, MCP,
-Agents, GitHub, Settings) navigates without a renderer crash.
+(`e2e/smoke.spec.ts`) is **non-live and hermetic**: it never starts a chat, and
+it launches the app with `omp`/`gh` pointed at a nonexistent binary and the
+agent-state dir at an empty temp dir, so the data services hit their
+graceful-degrade path and no `omp`/`gh` child is spawned. The result is
+identical whether or not `omp`/`gh` are installed. It asserts the window title,
+the sidebar navigation, the Dashboard, and that every browse view (Sessions,
+Skills, MCP, Agents, GitHub, Settings) navigates without a renderer crash.
 
 Electron needs a display server even for a smoke launch, so on headless Linux CI
 wrap the command with xvfb:

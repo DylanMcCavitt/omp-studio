@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   type ElectronApplication,
@@ -7,12 +10,13 @@ import {
   test,
 } from "@playwright/test";
 
-// Non-live Electron smoke test.
+// Non-live, hermetic Electron smoke test.
 //
 // It launches the BUILT app (out/main/index.js) and verifies that the cockpit
-// boots and every browse view renders without crashing. It never starts a chat,
-// so no `omp` child is spawned and no paid model turn ever runs — the app's data
-// services degrade gracefully when `omp`/`gh` are absent, so this is safe in CI.
+// boots and every browse view renders without crashing. It never starts a chat
+// and forces omp/gh to be unresolvable (see beforeAll), so NO omp/gh child is
+// spawned, no paid model turn runs, and the result is identical whether or not
+// omp/gh are installed — every view renders its graceful-degrade path.
 //
 // Prerequisite: `npm run build` (so out/main/index.js exists). Run the whole
 // flow with `npm run build && npm run test:e2e`. On headless Linux CI, wrap with
@@ -37,13 +41,26 @@ const HEADING_VIEWS = [
 
 let app: ElectronApplication;
 let page: Page;
+let tempAgentDir: string;
 const pageErrors: Error[] = [];
 
 test.beforeAll(async () => {
-  // Inherit the host environment (PATH lets the app discover omp/gh) but blank
-  // out ELECTRON_RENDERER_URL so the built renderer file is loaded rather than a
-  // dev server, even if the variable leaked into the environment.
-  const env = { ...process.env, ELECTRON_RENDERER_URL: "" };
+  // Hermetic, non-live posture: point omp/gh at a nonexistent binary so the
+  // data services deterministically hit their graceful-degrade path and spawn
+  // NO omp/gh children, and point the agent-state dir at an empty temp dir so
+  // the session/MCP services read an empty tree. The view assertions below check
+  // only always-rendered headers, so the smoke passes identically whether or not
+  // omp/gh are installed on the host.
+  tempAgentDir = mkdtempSync(join(tmpdir(), "omp-studio-e2e-"));
+  const unresolvable = join(tempAgentDir, "no-such-binary");
+  const env = {
+    ...process.env,
+    // Load the built renderer file, not a leaked dev-server URL.
+    ELECTRON_RENDERER_URL: "",
+    OMP_BINARY: unresolvable,
+    GH_BINARY: unresolvable,
+    PI_CODING_AGENT_DIR: tempAgentDir,
+  };
 
   app = await electron.launch({ args: [mainEntry], env });
   page = await app.firstWindow();
@@ -53,6 +70,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close();
+  if (tempAgentDir) rmSync(tempAgentDir, { recursive: true, force: true });
 });
 
 test("window reports the OMP Studio title", async () => {

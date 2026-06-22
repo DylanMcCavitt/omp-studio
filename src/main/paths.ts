@@ -11,8 +11,11 @@ let cachedBinary: string | null = null;
 
 export function ompBinary(): string {
   if (cachedBinary) return cachedBinary;
+  // An explicit override always wins, even if the path does not exist: callers
+  // (runCli) degrade gracefully on a failed spawn, so pointing OMP_BINARY at a
+  // nonexistent path is how the e2e smoke stays hermetic (no omp child spawned).
   const override = process.env.OMP_BINARY;
-  if (override && existsSync(override)) {
+  if (override) {
     cachedBinary = override;
     return cachedBinary;
   }
@@ -32,11 +35,16 @@ export function ompBinary(): string {
   return cachedBinary;
 }
 
-/** Same probing strategy for the `gh` CLI. */
+/** Same probing strategy for the `gh` CLI, with a matching `GH_BINARY` override. */
 let cachedGh: string | null = null;
 
 export function ghBinary(): string {
   if (cachedGh) return cachedGh;
+  const override = process.env.GH_BINARY;
+  if (override) {
+    cachedGh = override;
+    return cachedGh;
+  }
   const candidates = ["/opt/homebrew/bin/gh", "/usr/local/bin/gh"];
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
