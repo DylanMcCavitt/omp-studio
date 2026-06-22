@@ -44,7 +44,15 @@ export function registerChatIpc(
   };
 
   handle(CH.chatCreate, async (opts: ChatCreateOptions) => {
-    const { id, session, state } = await registry.create(opts);
+    // Forward only the known create fields — never spread the raw renderer
+    // payload, so an extra prop (e.g. a `binary` override) can't reach the
+    // session spawn. registry.create has no other spawn-config sink.
+    const { id, session, state } = await registry.create({
+      cwd: opts.cwd,
+      model: opts.model,
+      thinkingLevel: opts.thinkingLevel,
+      approvalPolicy: opts.approvalPolicy,
+    });
     session.on("frame", (frame: RpcFrame) =>
       getWindow()?.webContents.send(CH.evtRpc, {
         sessionId: id,

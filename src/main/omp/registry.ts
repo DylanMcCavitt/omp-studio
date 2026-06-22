@@ -2,30 +2,52 @@
 // renderer uses to address a chat. Plain node, no electron.
 
 import { randomUUID } from "node:crypto";
-import type { ApprovalPolicy, RpcState, ThinkingLevel } from "@shared/rpc";
+import type {
+  ApprovalMode,
+  ApprovalPolicy,
+  RpcState,
+  ThinkingLevel,
+} from "@shared/rpc";
 import { OmpRpcSession } from "./rpc-session";
+
+/** The fully-resolved spawn config handed to the session factory. */
+interface SpawnSessionOptions {
+  cwd: string;
+  model?: string;
+  thinkingLevel?: ThinkingLevel;
+  approvalMode: ApprovalMode;
+  autoApprove: boolean;
+}
+
+// How the registry materializes a live session. Injectable at construction —
+// main owns the registry and the renderer never constructs it, so this is not a
+// renderer-reachable sink — letting tests assert the resolved spawn config
+// without spawning a child. Mirrors config-service's injectable CLI runner.
+type SessionFactory = (opts: SpawnSessionOptions) => OmpRpcSession;
 
 export class SessionRegistry {
   private readonly sessions = new Map<string, OmpRpcSession>();
+  private readonly createSession: SessionFactory;
+
+  constructor(createSession?: SessionFactory) {
+    this.createSession = createSession ?? ((opts) => new OmpRpcSession(opts));
+  }
 
   async create(opts: {
     cwd: string;
     model?: string;
     thinkingLevel?: ThinkingLevel;
     approvalPolicy?: ApprovalPolicy;
-    /** test seam: override the resolved omp binary */
-    binary?: string;
   }): Promise<{ id: string; session: OmpRpcSession; state: RpcState }> {
     const id = randomUUID();
     // Default to the safest policy (ask every time, no blanket auto-approve)
     // when the renderer omits one.
-    const session = new OmpRpcSession({
+    const session = this.createSession({
       cwd: opts.cwd,
       model: opts.model,
       thinkingLevel: opts.thinkingLevel,
       approvalMode: opts.approvalPolicy?.mode ?? "always-ask",
       autoApprove: opts.approvalPolicy?.autoApprove ?? false,
-      binary: opts.binary,
     });
     try {
       await session.whenReady();

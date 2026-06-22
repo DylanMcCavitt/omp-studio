@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type { BrowserWindow, IpcMain } from "electron";
 import { registerChatIpc } from "../src/main/ipc/chat";
 import { SessionRegistry } from "../src/main/omp/registry";
+import { OmpRpcSession } from "../src/main/omp/rpc-session";
 import type { ChatCreateOptions, ChatUiRequestEvent } from "../src/shared/ipc";
 import { CH } from "../src/shared/ipc";
 import type {
@@ -207,10 +208,42 @@ test("approvalPolicy flows into registry.create", async () => {
   });
 });
 
+test("chat:create forwards only known fields to registry.create (drops a renderer-supplied binary override)", async () => {
+  const { ipcMain, invoke } = makeIpcMain();
+  const { registry, createCalls } = makeRegistry();
+  const { win } = makeWindow();
+  registerChatIpc(ipcMain, registry, () => win);
+
+  // A malicious renderer payload carrying an extra `binary` (an arbitrary
+  // executable) plus an unknown key — neither may reach registry.create.
+  const malicious = {
+    cwd: "/tmp/x",
+    approvalPolicy: { mode: "write", autoApprove: true },
+    binary: "/evil/payload",
+    bogus: 1,
+  } as unknown as ChatCreateOptions;
+  await invoke(CH.chatCreate, malicious);
+
+  const seen = createCalls[0] as Record<string, unknown>;
+  expect(seen).not.toHaveProperty("binary");
+  expect(seen).not.toHaveProperty("bogus");
+  expect(Object.keys(seen).sort()).toEqual([
+    "approvalPolicy",
+    "cwd",
+    "model",
+    "thinkingLevel",
+  ]);
+  expect(seen.cwd).toBe("/tmp/x");
+  expect(seen.approvalPolicy).toEqual({ mode: "write", autoApprove: true });
+});
+
 // ---------------------------------------------------------------------------
-// registry.create -> rpc-ui spawn flags. A tiny fake omp records its argv to
-// `argv.json` in its cwd, then speaks just enough protocol (ready + response to
-// any id'd command) for registry.create to resolve.
+// approvalPolicy -> rpc-ui spawn flags. Two layers, tested hermetically:
+//   1. SessionRegistry maps ApprovalPolicy -> {approvalMode, autoApprove} via an
+//      injected session factory (no child spawned, no renderer-reachable sink).
+//   2. OmpRpcSession turns those into argv flags — driven through a tiny fake
+//      omp passed by `binary` (never via the global OMP_BINARY/ompBinary cache,
+//      which Bun shares across test files) that records its argv to argv.json.
 // ---------------------------------------------------------------------------
 
 const fakeDir = mkdtempSync(join(tmpdir(), "omp-studio-chatipc-"));
@@ -245,40 +278,69 @@ process.stdin.on("end", () => process.exit(0));
 chmodSync(fakeOmp, 0o755);
 afterAll(() => rmSync(fakeDir, { recursive: true, force: true }));
 
-test("explicit approvalPolicy becomes rpc-ui spawn flags via registry.create", async () => {
-  const registry = new SessionRegistry();
-  const cwd = mkdtempSync(join(fakeDir, "wt-"));
-  const { id } = await registry.create({
-    cwd,
-    binary: fakeOmp,
+test("SessionRegistry maps approvalPolicy into the session spawn opts (and defaults safely)", async () => {
+  const calls: Array<Record<string, unknown>> = [];
+  const fakeSession = {
+    whenReady: async () => undefined,
+    getState: async () => ({}) as RpcState,
+    dispose: () => undefined,
+  } as unknown as OmpRpcSession;
+  const registry = new SessionRegistry(((opts: Record<string, unknown>) => {
+    calls.push(opts);
+    return fakeSession;
+  }) as unknown as ConstructorParameters<typeof SessionRegistry>[0]);
+
+  await registry.create({
+    cwd: "/tmp/x",
     approvalPolicy: { mode: "write", autoApprove: true },
   });
+  await registry.create({ cwd: "/tmp/y" });
+
+  expect(calls[0]).toMatchObject({
+    cwd: "/tmp/x",
+    approvalMode: "write",
+    autoApprove: true,
+  });
+  // An omitted policy defaults to the safest spawn config.
+  expect(calls[1]).toMatchObject({
+    approvalMode: "always-ask",
+    autoApprove: false,
+  });
+});
+
+test("OmpRpcSession turns an explicit approval policy into rpc-ui spawn flags", async () => {
+  const cwd = mkdtempSync(join(fakeDir, "wt-"));
+  const session = new OmpRpcSession({
+    cwd,
+    binary: fakeOmp,
+    approvalMode: "write",
+    autoApprove: true,
+  });
   try {
+    await session.whenReady();
     const argv = JSON.parse(
       readFileSync(join(cwd, "argv.json"), "utf8"),
     ) as string[];
     expect(argv).toContain("--mode");
     expect(argv[argv.indexOf("--mode") + 1]).toBe("rpc-ui");
-    expect(argv).toContain("--approval-mode");
     expect(argv[argv.indexOf("--approval-mode") + 1]).toBe("write");
     expect(argv).toContain("--auto-approve");
   } finally {
-    await registry.dispose(id);
+    session.dispose();
   }
 }, 15000);
 
-test("omitted approvalPolicy defaults to always-ask with no --auto-approve", async () => {
-  const registry = new SessionRegistry();
+test("OmpRpcSession defaults to always-ask spawn flags with no --auto-approve", async () => {
   const cwd = mkdtempSync(join(fakeDir, "wt-"));
-  const { id } = await registry.create({ cwd, binary: fakeOmp });
+  const session = new OmpRpcSession({ cwd, binary: fakeOmp });
   try {
+    await session.whenReady();
     const argv = JSON.parse(
       readFileSync(join(cwd, "argv.json"), "utf8"),
     ) as string[];
-    expect(argv).toContain("--approval-mode");
     expect(argv[argv.indexOf("--approval-mode") + 1]).toBe("always-ask");
     expect(argv).not.toContain("--auto-approve");
   } finally {
-    await registry.dispose(id);
+    session.dispose();
   }
 }, 15000);
