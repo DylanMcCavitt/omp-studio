@@ -11,7 +11,7 @@ import type {
   SkillInfo,
 } from "@shared/domain";
 import { agentDir, mcpConfigPath, ompBinary } from "../paths";
-import { runCli, runJson } from "./cli";
+import { probeCredential, runCli, runJson } from "./cli";
 
 // ---------------------------------------------------------------------------
 // Frontmatter parsing (shared by skills + agents)
@@ -102,6 +102,9 @@ export async function listModels(): Promise<ModelInfo[]> {
 /** Signature of the shared CLI runner; injectable so tests can stub spawning. */
 type CliRunner = typeof runCli;
 
+/** Signature of the count-only credential probe; injectable for tests. */
+type CredentialProbe = typeof probeCredential;
+
 /** Re-probe provider auth at most this often; spawning `omp` is not free. */
 const PROVIDER_CACHE_TTL_MS = 60_000;
 
@@ -147,31 +150,36 @@ async function fetchUsageProviders(run: CliRunner): Promise<Set<string>> {
 
 /**
  * Count-only credential probe for a single provider. Reads ONLY whether a
- * credential exists — a clean exit with non-empty stdout. The token bytes are
- * never inspected, stored, returned, or logged. A timeout / spawn failure
- * (code < 0) is too ambiguous to call a negative, so it degrades to "unknown".
+ * credential exists — a clean exit with at least one stdout byte. The probe
+ * never accumulates, inspects, stores, returns, or logs the token bytes (see
+ * {@link probeCredential}). A timeout / spawn failure (exit code < 0) is too
+ * ambiguous to call a negative, so it degrades to "unknown".
  */
 async function probeToken(
-  run: CliRunner,
+  probe: CredentialProbe,
   provider: string,
 ): Promise<ProviderAuthStatus> {
-  const result = await run(ompBinary(), ["token", provider], {
-    timeoutMs: TOKEN_PROBE_TIMEOUT_MS,
-  });
-  if (result.code < 0) return "unknown";
-  const hasCredential = result.code === 0 && result.stdout.length > 0;
-  return hasCredential ? "authenticated" : "unauthenticated";
+  const { exitCode, hasStdout } = await probe(
+    ompBinary(),
+    ["token", provider],
+    {
+      timeoutMs: TOKEN_PROBE_TIMEOUT_MS,
+    },
+  );
+  if (exitCode < 0) return "unknown";
+  return exitCode === 0 && hasStdout ? "authenticated" : "unauthenticated";
 }
 
 /**
  * Resolve real auth status for every provider that has models, using a single
- * `omp usage` snapshot plus count-only token probes. Exported (and runner-
- * injectable) so the no-leak / timeout / not-required paths are unit-testable
- * without spawning a real `omp`.
+ * `omp usage` snapshot plus count-only token probes. Exported (with injectable
+ * `run`/`probe` deps) so the no-leak / timeout / not-required paths are
+ * unit-testable without spawning a real `omp`.
  */
 export async function detectProviderAuth(
   models: ModelInfo[],
   run: CliRunner = runCli,
+  probe: CredentialProbe = probeCredential,
 ): Promise<ProviderInfo[]> {
   const groups = new Map<string, { count: number; allFree: boolean }>();
   for (const model of models) {
@@ -198,7 +206,7 @@ export async function detectProviderAuth(
       authStatus = "not_required";
       authSource = "local";
     } else {
-      authStatus = await probeToken(run, id);
+      authStatus = await probeToken(probe, id);
       authSource =
         authStatus === "authenticated"
           ? "token"
