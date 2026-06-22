@@ -105,8 +105,12 @@ export function registerDataIpc(ipcMain: IpcMain): void {
     }
   });
 
-  ipcMain.handle(CH.ghCurrentRepo, () => currentRepo());
+  ipcMain.handle(CH.ghCurrentRepo, (_event, cwd?: string) => currentRepo(cwd));
   ipcMain.handle(CH.ghListRepos, () => listRepos());
-  ipcMain.handle(CH.ghListIssues, (_event, repo?: string) => listIssues(repo));
-  ipcMain.handle(CH.ghListPrs, (_event, repo?: string) => listPrs(repo));
+  ipcMain.handle(CH.ghListIssues, (_event, repo?: string, cwd?: string) =>
+    listIssues(repo, cwd),
+  );
+  ipcMain.handle(CH.ghListPrs, (_event, repo?: string, cwd?: string) =>
+    listPrs(repo, cwd),
+  );
 }

@@ -199,10 +199,10 @@ export interface OmpApi {
   openExternal(url: string): Promise<void>;
 
   github: {
-    currentRepo(): Promise<GhRepo | null>;
+    currentRepo(cwd?: string): Promise<GhRepo | null>;
     listRepos(): Promise<GhRepo[]>;
-    listIssues(repo?: string): Promise<GhIssue[]>;
-    listPullRequests(repo?: string): Promise<GhPr[]>;
+    listIssues(repo?: string, cwd?: string): Promise<GhIssue[]>;
+    listPullRequests(repo?: string, cwd?: string): Promise<GhPr[]>;
   };
 
   chat: {
