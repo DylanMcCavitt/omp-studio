@@ -284,11 +284,15 @@ test("SessionRegistry maps approvalPolicy into the session spawn opts (and defau
     whenReady: async () => undefined,
     getState: async () => ({}) as RpcState,
     dispose: () => undefined,
+    on: () => undefined,
   } as unknown as OmpRpcSession;
-  const registry = new SessionRegistry(((opts: Record<string, unknown>) => {
-    calls.push(opts);
-    return fakeSession;
-  }) as unknown as ConstructorParameters<typeof SessionRegistry>[0]);
+  const registry = new SessionRegistry({
+    createSession: (opts) => {
+      calls.push(opts as unknown as Record<string, unknown>);
+      return fakeSession;
+    },
+    store: { save: async () => undefined },
+  });
 
   await registry.create({
     cwd: "/tmp/x",
