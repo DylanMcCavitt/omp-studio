@@ -69,11 +69,11 @@ function mapRepo(raw: RawRepo): GhRepo {
   };
 }
 
-export async function currentRepo(): Promise<GhRepo | null> {
+export async function currentRepo(cwd?: string): Promise<GhRepo | null> {
   const raw = await runJson<RawRepo>(
     ghBinary(),
     ["repo", "view", "--json", `${REPO_FIELDS},defaultBranchRef`],
-    { cwd: process.cwd() },
+    { cwd: cwd ?? process.cwd() },
   );
   return raw ? mapRepo(raw) : null;
 }
@@ -87,12 +87,15 @@ export async function listRepos(): Promise<GhRepo[]> {
   return raw ? raw.map(mapRepo) : [];
 }
 
-export async function listIssues(repo?: string): Promise<GhIssue[]> {
+export async function listIssues(
+  repo?: string,
+  cwd?: string,
+): Promise<GhIssue[]> {
   const args = ["issue", "list"];
   if (repo) args.push("--repo", repo);
   args.push("--json", ISSUE_FIELDS, "--limit", "30");
   const raw = await runJson<RawIssue[]>(ghBinary(), args, {
-    cwd: process.cwd(),
+    cwd: cwd ?? process.cwd(),
   });
   if (!raw) return [];
   return raw.map((i) => {
@@ -118,11 +121,13 @@ export async function listIssues(repo?: string): Promise<GhIssue[]> {
   });
 }
 
-export async function listPrs(repo?: string): Promise<GhPr[]> {
+export async function listPrs(repo?: string, cwd?: string): Promise<GhPr[]> {
   const args = ["pr", "list"];
   if (repo) args.push("--repo", repo);
   args.push("--json", PR_FIELDS, "--limit", "30");
-  const raw = await runJson<RawPr[]>(ghBinary(), args, { cwd: process.cwd() });
+  const raw = await runJson<RawPr[]>(ghBinary(), args, {
+    cwd: cwd ?? process.cwd(),
+  });
   if (!raw) return [];
   return raw.map((p) => ({
     number: p.number ?? 0,

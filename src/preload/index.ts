@@ -29,10 +29,12 @@ const api: OmpApi = {
     ipcRenderer.invoke(CH.searchSessions, query, opts),
 
   github: {
-    currentRepo: () => ipcRenderer.invoke(CH.ghCurrentRepo),
+    currentRepo: (cwd?: string) => ipcRenderer.invoke(CH.ghCurrentRepo, cwd),
     listRepos: () => ipcRenderer.invoke(CH.ghListRepos),
-    listIssues: (repo?: string) => ipcRenderer.invoke(CH.ghListIssues, repo),
-    listPullRequests: (repo?: string) => ipcRenderer.invoke(CH.ghListPrs, repo),
+    listIssues: (repo?: string, cwd?: string) =>
+      ipcRenderer.invoke(CH.ghListIssues, repo, cwd),
+    listPullRequests: (repo?: string, cwd?: string) =>
+      ipcRenderer.invoke(CH.ghListPrs, repo, cwd),
   },
 
   chat: {
