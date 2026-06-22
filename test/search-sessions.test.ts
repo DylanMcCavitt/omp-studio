@@ -180,6 +180,24 @@ test("messageIndex aligns with the readSession transcript", async () => {
   expect(msg.role).toBe("assistant");
 });
 
+test("counts over-long lines so later hit indexes stay aligned", async () => {
+  // A >1MB image line is parsed and counted but not searched; the following
+  // text message must therefore land at readSession index 1.
+  const huge = "x".repeat(1_100_000);
+  const path = await makeSession("proj", "a.jsonl", { id: "a" }, [
+    { role: "assistant", content: [{ type: "image", data: huge }] },
+    userMsg("the FINDME token is here"),
+  ]);
+
+  const hits = await searchSessions("findme");
+  expect(hits.length).toBe(1);
+  expect(hits[0]!.messageIndex).toBe(1);
+
+  const transcript = await readSession(path);
+  expect(transcript.messages.length).toBe(2);
+  expect(transcript.messages[hits[0]!.messageIndex]!.role).toBe("user");
+});
+
 test("respects the hard result cap on a large synthetic history", async () => {
   // 25 sessions * 5 matching messages = 125 candidate hits; cap is 100.
   for (let s = 0; s < 25; s++) {

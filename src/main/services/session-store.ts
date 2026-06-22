@@ -319,12 +319,30 @@ const SEARCH_SNIPPET_RADIUS = 60;
 /** Max highlighted ranges recorded per hit. */
 const SEARCH_MAX_RANGES = 12;
 /**
- * Skip pathologically long lines (almost always base64 image blocks): they hold
- * no searchable prose and would defeat the line-at-a-time streaming budget.
+ * Above this raw-line length we skip *searching* a line's content (almost always
+ * a base64 image block with no searchable prose) — but we still parse and count
+ * it as a message so `messageIndex` stays aligned with {@link readSession}.
  */
 const SEARCH_MAX_LINE_LENGTH = 1_000_000;
 
 type SearchRole = SessionSearchHit["role"];
+
+/** A session file located by a cheap metadata-only scan (no content read). */
+interface SessionFile {
+  path: string;
+  project: string;
+  file: string;
+  archived: boolean;
+  stats: Stats;
+}
+
+/** A match found during the streamed scan, before its summary is resolved. */
+interface RawHit {
+  messageIndex: number;
+  role: SearchRole;
+  snippet: string;
+  ranges: Array<{ start: number; end: number }>;
+}
 
 /**
  * Concatenate the human-readable text of a message (text blocks only). Tool-call
@@ -360,19 +378,16 @@ function findRanges(
 }
 
 /**
- * Build a hit with a bounded snippet windowed around the first match. Snippet
- * offsets in `ranges` are re-based to the snippet string so the renderer can
- * highlight directly; control whitespace is flattened 1:1 (length preserving)
- * so those offsets stay exact. Case folding is assumed length-preserving
- * (true for all ASCII and the overwhelming majority of text).
+ * Build a bounded snippet windowed around the first match. Snippet offsets in
+ * `ranges` are re-based to the snippet string so the renderer can highlight
+ * directly; control whitespace is flattened 1:1 (length preserving) so those
+ * offsets stay exact. Case folding is assumed length-preserving (true for all
+ * ASCII and the overwhelming majority of text).
  */
-function buildHit(
-  session: SessionSummary,
-  messageIndex: number,
-  role: SearchRole,
+function buildSnippet(
   text: string,
   textRanges: Array<{ start: number; end: number }>,
-): SessionSearchHit {
+): { snippet: string; ranges: Array<{ start: number; end: number }> } {
   const first = textRanges[0]!;
   const winStart = Math.max(0, first.start - SEARCH_SNIPPET_RADIUS);
   const winEnd = Math.min(text.length, first.end + SEARCH_SNIPPET_RADIUS);
@@ -384,36 +399,30 @@ function buildHit(
   const ranges = textRanges
     .filter((r) => r.start >= winStart && r.end <= winEnd)
     .map((r) => ({ start: r.start + offset, end: r.end + offset }));
-  return {
-    session,
-    messageIndex,
-    role,
-    snippet,
-    ranges,
-    updatedAt: session.updatedAt,
-  };
+  return { snippet, ranges };
 }
 
 /**
  * Stream a session's JSONL line by line (never loading the whole file into
- * memory) and collect up to `cap` snippet hits whose message text contains
- * `needle` (already lowercased). `messageIndex` matches the index into the
- * `messages` array returned by {@link readSession} (valid message records only).
+ * memory) and collect up to `cap` snippet matches whose message text contains
+ * `needle` (already lowercased). `messageIndex` advances for every valid message
+ * record — including unsearched over-long lines — so it stays aligned with the
+ * `messages` array returned by {@link readSession}.
  */
 async function scanSessionFile(
-  session: SessionSummary,
+  path: string,
   needle: string,
   cap: number,
-): Promise<SessionSearchHit[]> {
-  const hits: SessionSearchHit[] = [];
+): Promise<RawHit[]> {
+  const hits: RawHit[] = [];
   if (cap <= 0) return hits;
-  const input = createReadStream(session.path, { encoding: "utf8" });
+  const input = createReadStream(path, { encoding: "utf8" });
   const rl = createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY });
   let messageIndex = -1;
   try {
     for await (const raw of rl) {
       const line = raw.trim();
-      if (!line || line.length > SEARCH_MAX_LINE_LENGTH) continue;
+      if (!line) continue;
       let record: Record<string, unknown>;
       try {
         record = JSON.parse(line) as Record<string, unknown>;
@@ -423,8 +432,10 @@ async function scanSessionFile(
       if (record.type !== "message") continue;
       const message = record.message;
       if (!message || typeof message !== "object") continue;
-      // Index only valid message objects so it lines up with readSession().
+      // Count every valid message object so the index matches readSession(),
+      // even for the over-long lines we skip searching below.
       messageIndex += 1;
+      if (line.length > SEARCH_MAX_LINE_LENGTH) continue;
       const role = (message as { role?: unknown }).role;
       if (role !== "user" && role !== "assistant" && role !== "toolResult") {
         continue;
@@ -433,7 +444,7 @@ async function scanSessionFile(
       if (!text) continue;
       const ranges = findRanges(text, needle);
       if (ranges.length === 0) continue;
-      hits.push(buildHit(session, messageIndex, role, text, ranges));
+      hits.push({ messageIndex, role, ...buildSnippet(text, ranges) });
       if (hits.length >= cap) break;
     }
   } catch {
@@ -445,6 +456,92 @@ async function scanSessionFile(
   return hits;
 }
 
+/**
+ * Enumerate every session JSONL with a cheap metadata-only pass (readdir +
+ * stat, never reading file contents) ordered newest-first, so search can stream
+ * files one at a time instead of loading every transcript up front.
+ */
+async function listSessionFiles(
+  includeArchived: boolean | undefined,
+): Promise<SessionFile[]> {
+  const roots: { root: string; archived: boolean }[] = [
+    { root: sessionsDir(), archived: false },
+  ];
+  if (includeArchived) roots.push({ root: archivedDir(), archived: true });
+
+  const located: Omit<SessionFile, "stats">[] = [];
+  for (const { root, archived } of roots) {
+    let slugs: Dirent[];
+    try {
+      slugs = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const slug of slugs) {
+      if (!slug.isDirectory()) continue;
+      const dir = join(root, slug.name);
+      let files: string[];
+      try {
+        files = await readdir(dir);
+      } catch {
+        continue;
+      }
+      for (const file of files) {
+        if (!file.endsWith(".jsonl")) continue;
+        located.push({
+          path: join(dir, file),
+          project: slug.name,
+          file,
+          archived,
+        });
+      }
+    }
+  }
+
+  const statted = await Promise.all(
+    located.map(async (t): Promise<SessionFile | null> => {
+      try {
+        return { ...t, stats: await stat(t.path) };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  const targets = statted.filter((t): t is SessionFile => t !== null);
+  targets.sort((a, b) =>
+    a.stats.mtime < b.stats.mtime ? 1 : a.stats.mtime > b.stats.mtime ? -1 : 0,
+  );
+  return targets;
+}
+
+/**
+ * Resolve the full summary (header + alias) for a session that produced hits.
+ * Reads the file once, reusing the same parse + alias path as
+ * {@link listSessions} so the surfaced summary is identical.
+ */
+async function summarizeTarget(
+  target: SessionFile,
+  aliases: Record<string, string>,
+): Promise<SessionSummary | null> {
+  let content: string;
+  try {
+    content = await readFile(target.path, "utf8");
+  } catch {
+    return null;
+  }
+  const summary = toSummary(
+    target.path,
+    target.project,
+    target.file,
+    parseSession(content, false),
+    target.stats,
+    target.archived,
+  );
+  const alias = aliases[target.path];
+  if (alias !== undefined) summary.title = alias;
+  return summary;
+}
+
 function normalizeLimit(limit: number | undefined): number {
   if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) {
     return SEARCH_RESULT_CAP;
@@ -454,9 +551,10 @@ function normalizeLimit(limit: number | undefined): number {
 
 /**
  * Case-insensitive substring search over the message text of every session's
- * JSONL transcript. Sessions are visited newest-first (the {@link listSessions}
- * order), each scanned via a streamed line reader; results are bounded by a hard
- * cap and a per-session limit. An empty or whitespace-only query returns [].
+ * JSONL transcript. Files are located newest-first by a cheap metadata pass,
+ * then streamed and scanned one at a time, stopping as soon as the hard cap is
+ * reached; only sessions that actually produce hits pay for a full summary read.
+ * An empty or whitespace-only query returns [].
  */
 export async function searchSessions(
   query: string,
@@ -466,17 +564,27 @@ export async function searchSessions(
   if (!needle) return [];
 
   const cap = normalizeLimit(opts.limit);
-  const sessions = await listSessions({
-    includeArchived: opts.includeArchived,
-  });
+  const targets = await listSessionFiles(opts.includeArchived);
 
   const hits: SessionSearchHit[] = [];
-  for (const session of sessions) {
+  let aliases: Record<string, string> | null = null;
+  for (const target of targets) {
     if (hits.length >= cap) break;
     const perSession = Math.min(SEARCH_HITS_PER_SESSION, cap - hits.length);
-    const sessionHits = await scanSessionFile(session, needle, perSession);
-    for (const hit of sessionHits) {
-      hits.push(hit);
+    const raw = await scanSessionFile(target.path, needle, perSession);
+    if (raw.length === 0) continue;
+    if (!aliases) aliases = await readAliases();
+    const session = await summarizeTarget(target, aliases);
+    if (!session) continue;
+    for (const r of raw) {
+      hits.push({
+        session,
+        messageIndex: r.messageIndex,
+        role: r.role,
+        snippet: r.snippet,
+        ranges: r.ranges,
+        updatedAt: session.updatedAt,
+      });
       if (hits.length >= cap) break;
     }
   }
