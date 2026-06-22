@@ -1,17 +1,20 @@
 // Bridges the renderer's `window.omp.chat` surface to live `OmpRpcSession`
 // instances held by the SessionRegistry. Every chat command is request/response
-// over `ipcMain.handle`; frame + lifecycle streams are pushed to the renderer's
-// window over `evt:rpc` / `evt:lifecycle`.
+// over `ipcMain.handle`. Frame, lifecycle, and extension-UI-request streams are
+// pushed to the renderer over `evt:rpc` / `evt:lifecycle` / `evt:ui-request`;
+// the renderer answers UI requests back over `chat:uiRespond`.
 
 import type {
   ChatCreateOptions,
   ChatCreateResult,
   ChatLifecycleEvent,
   ChatRpcEvent,
+  ChatUiRequestEvent,
+  ChatUiRespondPayload,
   PromptOptions,
 } from "@shared/ipc";
 import { CH } from "@shared/ipc";
-import type { RpcFrame, ThinkingLevel } from "@shared/rpc";
+import type { ExtensionUiRequest, RpcFrame, ThinkingLevel } from "@shared/rpc";
 import type { BrowserWindow, IpcMain } from "electron";
 import type { SessionRegistry } from "../omp/registry";
 
@@ -57,6 +60,18 @@ export function registerChatIpc(
           detail,
         } satisfies ChatLifecycleEvent),
     );
+    // Forward every extension UI request (modal-required and passive hints
+    // alike, incl. open_url) to the renderer; C3 owns the dialogs/hints and the
+    // explicit open-url action. Matches the frame/lifecycle sender above.
+    session.on(
+      "ui-request",
+      (payload: { request: ExtensionUiRequest; responseRequired: boolean }) =>
+        getWindow()?.webContents.send(CH.evtUiRequest, {
+          sessionId: id,
+          request: payload.request,
+          responseRequired: payload.responseRequired,
+        } satisfies ChatUiRequestEvent),
+    );
     return { sessionId: id, state } satisfies ChatCreateResult;
   });
 
@@ -80,4 +95,12 @@ export function registerChatIpc(
   handle(CH.chatGetMessages, (id: string) => lookup(id).getMessages());
   handle(CH.chatGetSubagents, (id: string) => lookup(id).getSubagents());
   handle(CH.chatDispose, (id: string) => registry.dispose(id));
+  // Route a renderer UI-request response back to the originating child. Safe
+  // no-op when the session is gone (disposed/exited) so a late or orphaned
+  // reply never throws across IPC.
+  handle(CH.chatRespondUi, (payload: ChatUiRespondPayload) => {
+    registry
+      .get(payload.sessionId)
+      ?.respondUi(payload.requestId, payload.response);
+  });
 }
