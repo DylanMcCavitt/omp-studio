@@ -20,6 +20,49 @@ export interface ImageContent {
 }
 
 // ---------------------------------------------------------------------------
+// Approval policy (rpc-ui spawn contract)
+// ---------------------------------------------------------------------------
+
+export type ApprovalMode = "always-ask" | "write" | "yolo";
+
+export interface ApprovalPolicy {
+  mode: ApprovalMode;
+  autoApprove: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Extension UI requests (`extension_ui_request` / `extension_ui_response`)
+// ---------------------------------------------------------------------------
+
+export type ExtensionUiMethod =
+  | "select"
+  | "confirm"
+  | "input"
+  | "editor"
+  | "cancel"
+  | "notify"
+  | "setStatus"
+  | "setWidget"
+  | "setTitle"
+  | "set_editor_text"
+  | "open_url";
+
+export interface ExtensionUiRequest {
+  type: "extension_ui_request";
+  id: string;
+  method: ExtensionUiMethod;
+  title?: string;
+  message?: string;
+  timeout?: number;
+  [key: string]: unknown;
+}
+
+export type ExtensionUiResponse =
+  | { confirmed: boolean }
+  | { value: string }
+  | { cancelled: true; timedOut?: boolean };
+
+// ---------------------------------------------------------------------------
 // Message / content-block model (matches the session JSONL `message` records)
 // ---------------------------------------------------------------------------
 
@@ -169,6 +212,21 @@ export interface RpcState {
   systemPrompt?: string[];
   dumpTools?: DumpTool[];
   contextUsage?: ContextUsage;
+}
+
+// ---------------------------------------------------------------------------
+// Session stats (`get_session_stats`)
+// ---------------------------------------------------------------------------
+
+export interface SessionStats {
+  /** total tokens consumed by the session */
+  tokens?: number;
+  /** total cost in USD */
+  cost?: number;
+  /** current context-window usage */
+  contextUsage?: ContextUsage;
+  /** permissive: extra stats fields omp may report */
+  [key: string]: unknown;
 }
 
 // ---------------------------------------------------------------------------

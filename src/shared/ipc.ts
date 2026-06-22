@@ -11,17 +11,24 @@ import type {
   McpServerInfo,
   ModelInfo,
   ProviderInfo,
+  SessionSearchHit,
+  SessionSearchOptions,
   SessionSummary,
   SessionTranscript,
   SkillInfo,
 } from "./domain";
 import type {
+  ApprovalMode,
+  ApprovalPolicy,
+  ExtensionUiRequest,
+  ExtensionUiResponse,
+  ImageContent,
+  OmpMessage,
   RpcFrame,
   RpcState,
+  SessionStats,
   SubagentInfo,
   ThinkingLevel,
-  OmpMessage,
-  ImageContent,
 } from "./rpc";
 
 export const CH = {
@@ -36,11 +43,21 @@ export const CH = {
   listProviders: "data:providers:list",
   pickDirectory: "data:pickDirectory",
   openExternal: "data:openExternal",
+  searchSessions: "data:searchSessions",
   // github
   ghCurrentRepo: "gh:currentRepo",
   ghListRepos: "gh:repos",
   ghListIssues: "gh:issues",
   ghListPrs: "gh:prs",
+  // session actions (mutating; operate on JSONL files)
+  sessionRename: "data:sessions:rename",
+  sessionDelete: "data:sessions:delete",
+  sessionArchive: "data:sessions:archive",
+  sessionReveal: "data:sessions:reveal",
+  sessionExportHtml: "data:sessions:exportHtml",
+  // settings store
+  settingsGet: "settings:get",
+  settingsUpdate: "settings:update",
   // chat / rpc bridge (request/response)
   chatCreate: "chat:create",
   chatPrompt: "chat:prompt",
@@ -53,9 +70,16 @@ export const CH = {
   chatGetMessages: "chat:getMessages",
   chatGetSubagents: "chat:getSubagents",
   chatDispose: "chat:dispose",
+  chatList: "chat:list",
+  chatResume: "chat:resume",
+  chatClose: "chat:close",
+  chatRespondUi: "chat:uiRespond",
+  chatGetSessionStats: "chat:getSessionStats",
+  chatCompact: "chat:compact",
   // chat / rpc bridge (events main -> renderer)
   evtRpc: "evt:rpc",
   evtLifecycle: "evt:lifecycle",
+  evtUiRequest: "evt:ui-request",
 } as const;
 
 export type ChannelName = (typeof CH)[keyof typeof CH];
@@ -70,6 +94,8 @@ export interface ChatCreateOptions {
   /** optional model selector, e.g. "anthropic/claude-opus-4-8" */
   model?: string;
   thinkingLevel?: ThinkingLevel;
+  /** per-session approval policy applied to the rpc-ui child */
+  approvalPolicy?: ApprovalPolicy;
 }
 
 export interface ChatCreateResult {
@@ -102,6 +128,61 @@ export interface ChatRpcEvent {
 }
 
 // ---------------------------------------------------------------------------
+// UI-request events (`evt:ui-request` / `chat:uiRespond`)
+// ---------------------------------------------------------------------------
+
+export interface ChatUiRequestEvent {
+  sessionId: string;
+  request: ExtensionUiRequest;
+  responseRequired: boolean;
+}
+
+export interface ChatUiRespondPayload {
+  sessionId: string;
+  requestId: string;
+  response: ExtensionUiResponse;
+}
+
+// ---------------------------------------------------------------------------
+// Settings & open-session descriptors (main-owned, persisted to userData)
+// ---------------------------------------------------------------------------
+
+export type ThemeMode = "system" | "dark" | "light";
+
+export interface RecentProject {
+  cwd: string;
+  label: string;
+  lastUsedAt: string;
+}
+
+export interface OpenSessionDescriptor {
+  studioSessionId: string;
+  cwd: string;
+  createdAt: string;
+  lastActiveAt: string;
+  title: string | null;
+  model?: string;
+  thinkingLevel?: ThinkingLevel;
+  approvalPolicy: ApprovalPolicy;
+  sessionFile?: string;
+  ompSessionId?: string;
+  status: "open" | "hibernated" | "closed";
+}
+
+export interface StudioSettingsV1 {
+  version: 1;
+  theme: ThemeMode;
+  defaultProject: string | null;
+  defaultModel: string | null;
+  defaultThinkingLevel: ThinkingLevel;
+  defaultApprovalMode: ApprovalMode;
+  defaultAutoApprove: boolean;
+  liveSessionLimit: number;
+  recentProjects: RecentProject[];
+  openSessions: OpenSessionDescriptor[];
+}
+
+// ---------------------------------------------------------------------------
 // The bridge exposed to the renderer as `window.omp`
 // ---------------------------------------------------------------------------
 
@@ -109,6 +190,10 @@ export interface OmpApi {
   getDashboard(): Promise<DashboardData>;
   listSessions(): Promise<SessionSummary[]>;
   readSession(path: string): Promise<SessionTranscript>;
+  searchSessions(
+    query: string,
+    opts?: SessionSearchOptions,
+  ): Promise<SessionSearchHit[]>;
   listMcpServers(): Promise<McpServerInfo[]>;
   listSkills(): Promise<SkillInfo[]>;
   listAgents(): Promise<AgentInfo[]>;
@@ -146,5 +231,26 @@ export interface OmpApi {
     dispose(sessionId: string): Promise<void>;
     onEvent(cb: (e: ChatRpcEvent) => void): () => void;
     onLifecycle(cb: (e: ChatLifecycleEvent) => void): () => void;
+    onUiRequest(cb: (e: ChatUiRequestEvent) => void): () => void;
+    respondUiRequest(payload: ChatUiRespondPayload): Promise<void>;
+    getSessionStats(sessionId: string): Promise<SessionStats>;
+    compact(sessionId: string, instructions?: string): Promise<void>;
+    list(): Promise<OpenSessionDescriptor[]>;
+    resume(descriptor: OpenSessionDescriptor): Promise<ChatCreateResult>;
+    close(sessionId: string): Promise<void>;
+  };
+
+  settings: {
+    get(): Promise<StudioSettingsV1>;
+    update(patch: Partial<StudioSettingsV1>): Promise<StudioSettingsV1>;
+  };
+
+  session: {
+    rename(path: string, title: string): Promise<void>;
+    delete(path: string): Promise<void>;
+    archive(path: string): Promise<void>;
+    unarchive(path: string): Promise<void>;
+    reveal(path: string): Promise<void>;
+    exportHtml(path: string): Promise<string>;
   };
 }

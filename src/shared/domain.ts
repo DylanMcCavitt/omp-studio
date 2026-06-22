@@ -25,6 +25,8 @@ export interface SessionSummary {
   messageCount: number;
   model?: string;
   sizeBytes: number;
+  /** true when the session has been archived out of the default listing */
+  archived?: boolean;
 }
 
 export interface SessionTranscript {
@@ -37,6 +39,22 @@ export interface ProjectSessions {
   cwd: string;
   count: number;
   lastActive: string;
+}
+
+export interface SessionSearchOptions {
+  /** maximum number of hits to return */
+  limit?: number;
+  /** include archived sessions in the scan */
+  includeArchived?: boolean;
+}
+
+export interface SessionSearchHit {
+  session: SessionSummary;
+  messageIndex: number;
+  role: "user" | "assistant" | "toolResult";
+  snippet: string;
+  ranges: Array<{ start: number; end: number }>;
+  updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,10 +104,19 @@ export interface AgentInfo {
 // Providers (auth status per provider)
 // ---------------------------------------------------------------------------
 
+export type ProviderAuthStatus =
+  | "authenticated"
+  | "unauthenticated"
+  | "not_required"
+  | "unknown";
+
 export interface ProviderInfo {
   id: string;
   name: string;
+  /** legacy truthiness flag, retained for back-compat; prefer `authStatus` */
   authenticated: boolean;
+  authStatus?: ProviderAuthStatus;
+  authSource?: "usage" | "token" | "local" | "none" | "error";
   modelCount: number;
 }
 

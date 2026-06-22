@@ -215,6 +215,7 @@ into request/response channels (handled with `ipcMain.handle` /
 | `listProviders` | `data:providers:list` | Providers + auth status |
 | `pickDirectory` | `data:pickDirectory` | Native directory picker |
 | `openExternal` | `data:openExternal` | Open a URL in the OS browser |
+| `searchSessions` | `data:searchSessions` | Transcript search hits |
 
 **GitHub (`gh:*`)**
 
@@ -240,6 +241,29 @@ into request/response channels (handled with `ipcMain.handle` /
 | `chatGetMessages` | `chat:getMessages` | Fetch session messages |
 | `chatGetSubagents` | `chat:getSubagents` | List subagents |
 | `chatDispose` | `chat:dispose` | Tear down the session |
+| `chatList` | `chat:list` | List open-session descriptors |
+| `chatResume` | `chat:resume` | Resume a session from its JSONL path |
+| `chatClose` | `chat:close` | Dispose the live child (keeps transcript) |
+| `chatRespondUi` | `chat:uiRespond` | Renderer reply to a UI request |
+| `chatGetSessionStats` | `chat:getSessionStats` | Token/cost/context stats |
+| `chatCompact` | `chat:compact` | Compact the transcript |
+
+**Session actions (`data:sessions:*`, mutating)**
+
+| `CH` key | Channel | Purpose |
+| --- | --- | --- |
+| `sessionRename` | `data:sessions:rename` | Rename a session title |
+| `sessionDelete` | `data:sessions:delete` | Move a session to the OS trash |
+| `sessionArchive` | `data:sessions:archive` | Archive / unarchive a session |
+| `sessionReveal` | `data:sessions:reveal` | Reveal the JSONL file in the host |
+| `sessionExportHtml` | `data:sessions:exportHtml` | Export a session to HTML |
+
+**Settings (`settings:*`)**
+
+| `CH` key | Channel | Purpose |
+| --- | --- | --- |
+| `settingsGet` | `settings:get` | Read persisted studio settings |
+| `settingsUpdate` | `settings:update` | Merge a settings patch |
 
 **Events (main → renderer)**
 
@@ -247,6 +271,7 @@ into request/response channels (handled with `ipcMain.handle` /
 | --- | --- | --- |
 | `evtRpc` | `evt:rpc` | `{sessionId, frame}` — forwarded RPC frames |
 | `evtLifecycle` | `evt:lifecycle` | `{sessionId, status, detail?}` |
+| `evtUiRequest` | `evt:ui-request` | `{sessionId, request, responseRequired}` |
 
 ## Security notes
 
