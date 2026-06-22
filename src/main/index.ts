@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { electronApp, is, optimizer } from "@electron-toolkit/utils";
-import { SessionRegistry } from "./omp/registry";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { registerChatIpc } from "./ipc/chat";
 import { registerDataIpc } from "./ipc/data";
+import { SessionRegistry } from "./omp/registry";
 
 let mainWindow: BrowserWindow | null = null;
 const registry = new SessionRegistry();

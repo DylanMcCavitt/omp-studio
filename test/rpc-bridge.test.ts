@@ -40,7 +40,9 @@ test("bridge emits a lifecycle 'exited' frame when omp shuts down", async () => 
   });
   // Closing stdin makes omp exit 0.
   // dispose() removes consumer listeners, so trigger a natural exit instead.
-  (session as unknown as { child: { stdin: { end(): void } } }).child.stdin.end();
+  (
+    session as unknown as { child: { stdin: { end(): void } } }
+  ).child.stdin.end();
   expect(await exited).toBe("exited");
 }, 20000);
 

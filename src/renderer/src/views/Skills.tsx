@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
 import { RefreshCw, Search, Sparkles, TriangleAlert } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Badge, Card, EmptyState, IconButton, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
 
 export default function Skills() {
-  const { data, loading, error, reload } = useAsync(() => window.omp.listSkills());
+  const { data, loading, error, reload } = useAsync(() =>
+    window.omp.listSkills(),
+  );
   const [query, setQuery] = useState("");
 
   const skills = useMemo(() => {

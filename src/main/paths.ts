@@ -1,5 +1,5 @@
-import { homedir } from "node:os";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -49,9 +49,7 @@ export function ghBinary(): string {
 }
 
 export function agentDir(): string {
-  return (
-    process.env.PI_CODING_AGENT_DIR || join(homedir(), ".omp", "agent")
-  );
+  return process.env.PI_CODING_AGENT_DIR || join(homedir(), ".omp", "agent");
 }
 
 export function sessionsDir(): string {

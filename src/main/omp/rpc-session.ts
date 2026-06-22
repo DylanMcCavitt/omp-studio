@@ -13,9 +13,9 @@
 //  - "lifecycle" (status: "ready"|"exited"|"error", detail?: string)
 //  - "exit"      ()                                       — child process exited
 
-import { spawn, type ChildProcess } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { ompBinary, augmentedEnv } from "../paths";
+import type { PromptOptions } from "@shared/ipc";
 import type {
   OmpMessage,
   RpcFrame,
@@ -23,7 +23,7 @@ import type {
   SubagentInfo,
   ThinkingLevel,
 } from "@shared/rpc";
-import type { PromptOptions } from "@shared/ipc";
+import { augmentedEnv, ompBinary } from "../paths";
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -269,17 +269,18 @@ export class OmpRpcSession extends EventEmitter {
     const method = frame.method;
     if (method === "confirm") {
       this.writeFrame({ type: "extension_ui_response", id, confirmed: false });
-    } else if (method === "select" || method === "input" || method === "editor") {
+    } else if (
+      method === "select" ||
+      method === "input" ||
+      method === "editor"
+    ) {
       this.writeFrame({ type: "extension_ui_response", id, cancelled: true });
     }
     // notify / setStatus / setWidget / setTitle / set_editor_text / open_url:
     // fire-and-forget UI hints, no response expected.
   }
 
-  private settleTermination(
-    status: "exited" | "error",
-    detail?: string,
-  ): void {
+  private settleTermination(status: "exited" | "error", detail?: string): void {
     if (this.terminated) return;
     this.terminated = true;
     if (!this.isReady) {

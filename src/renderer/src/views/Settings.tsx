@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import type { ModelInfo } from "@shared/domain";
 import {
   Boxes,
   Cpu,
@@ -8,11 +8,11 @@ import {
   RefreshCw,
   TriangleAlert,
 } from "lucide-react";
+import { useMemo } from "react";
 import { Badge, EmptyState, IconButton, Panel, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
-import type { ModelInfo } from "@shared/domain";
 
 const PATHS = [
   { label: "Agent directory", value: "~/.omp/agent" },
@@ -64,7 +64,9 @@ export default function Settings() {
                 <Cpu className="h-4 w-4 text-accent" />
                 Models
                 {models.data && (
-                  <Badge variant="muted">{formatNumber(models.data.length)}</Badge>
+                  <Badge variant="muted">
+                    {formatNumber(models.data.length)}
+                  </Badge>
                 )}
               </span>
             }
@@ -80,7 +82,10 @@ export default function Settings() {
                 hint={models.error}
               />
             ) : grouped.length === 0 ? (
-              <EmptyState icon={<Cpu className="h-6 w-6" />} title="No models available" />
+              <EmptyState
+                icon={<Cpu className="h-6 w-6" />}
+                title="No models available"
+              />
             ) : (
               <div className="space-y-4">
                 {grouped.map((group) => (
@@ -163,8 +168,12 @@ export default function Settings() {
                     <span className="text-xs text-ink-faint">
                       {formatNumber(provider.modelCount)} models
                     </span>
-                    <Badge variant={provider.authenticated ? "success" : "muted"}>
-                      {provider.authenticated ? "authenticated" : "not authenticated"}
+                    <Badge
+                      variant={provider.authenticated ? "success" : "muted"}
+                    >
+                      {provider.authenticated
+                        ? "authenticated"
+                        : "not authenticated"}
                     </Badge>
                   </div>
                 ))}

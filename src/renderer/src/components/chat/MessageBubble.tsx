@@ -2,9 +2,6 @@
 // messages render their content blocks in order (thinking / text / tool calls).
 // toolResult messages are folded into their ToolCallCard and render nothing here.
 
-import { Markdown } from "./Markdown";
-import { ThinkingBlock } from "./ThinkingBlock";
-import { ToolCallCard } from "./ToolCallCard";
 import type {
   ContentBlock,
   OmpMessage,
@@ -13,6 +10,9 @@ import type {
   ToolCallBlock,
   ToolResultMessage,
 } from "@shared/rpc";
+import { Markdown } from "./Markdown";
+import { ThinkingBlock } from "./ThinkingBlock";
+import { ToolCallCard } from "./ToolCallCard";
 
 interface Props {
   message: OmpMessage;
@@ -54,7 +54,9 @@ export function MessageBubble({ message, toolResults, streaming }: Props) {
             );
           }
           if (block.type === "text") {
-            return <Markdown key={`x${i}`}>{(block as TextBlock).text}</Markdown>;
+            return (
+              <Markdown key={`x${i}`}>{(block as TextBlock).text}</Markdown>
+            );
           }
           if (block.type === "toolCall") {
             const call = block as ToolCallBlock;

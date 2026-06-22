@@ -1,8 +1,7 @@
-import { dialog, shell } from "electron";
-import type { IpcMain } from "electron";
-import { CH } from "@shared/ipc";
 import type { DashboardData, ProjectSessions } from "@shared/domain";
-import { listSessions, readSession } from "../services/session-store";
+import { CH } from "@shared/ipc";
+import type { IpcMain } from "electron";
+import { dialog, shell } from "electron";
 import {
   listAgents,
   listMcpServers,
@@ -10,7 +9,13 @@ import {
   listProviders,
   listSkills,
 } from "../services/config-service";
-import { currentRepo, listIssues, listPrs, listRepos } from "../services/github";
+import {
+  currentRepo,
+  listIssues,
+  listPrs,
+  listRepos,
+} from "../services/github";
+import { listSessions, readSession } from "../services/session-store";
 
 async function buildDashboard(): Promise<DashboardData> {
   const [sessions, models, mcp, skills, agents, repo, issues, prs] =

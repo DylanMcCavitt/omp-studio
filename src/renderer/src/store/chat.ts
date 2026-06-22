@@ -2,12 +2,7 @@
 // subscribes to streamed RPC frames + lifecycle events, and reduces them into
 // render-ready state for the Chat view and its components.
 
-import { create } from "zustand";
-import { useAppStore } from "@/store/app";
-import type {
-  ChatCreateOptions,
-  ChatLifecycleEvent,
-} from "@shared/ipc";
+import type { ChatCreateOptions, ChatLifecycleEvent } from "@shared/ipc";
 import type {
   AssistantMessage,
   ContextUsage,
@@ -22,6 +17,8 @@ import type {
   ToolExecutionFrame,
   UserMessage,
 } from "@shared/rpc";
+import { create } from "zustand";
+import { useAppStore } from "@/store/app";
 
 export type ChatStatus = "idle" | "spawning" | "streaming" | "error";
 
@@ -220,7 +217,8 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     try {
       await window.omp.chat.setModel(sessionId, provider, id);
       const st = await window.omp.chat.getState(sessionId);
-      if (get().sessionId === sessionId) set({ model: st.model ?? get().model });
+      if (get().sessionId === sessionId)
+        set({ model: st.model ?? get().model });
     } catch (e) {
       set({ error: errorMessage(e) });
     }

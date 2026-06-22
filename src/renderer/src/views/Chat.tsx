@@ -3,23 +3,19 @@
 // transcript + composer on the left and model / thinking / plan / subagent rails
 // on the right, attaching the chat store to the bridge session on mount.
 
+import type { RpcModel, ThinkingLevel } from "@shared/rpc";
+import { FolderOpen, MessageSquarePlus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
-import {
-  FolderOpen,
-  MessageSquarePlus,
-  Sparkles,
-} from "lucide-react";
-import { Badge, Button, Panel, Spinner } from "@/components/ui";
-import { cn } from "@/lib/cn";
-import { useAsync } from "@/lib/useAsync";
-import { useAppStore } from "@/store/app";
-import { useChatStore } from "@/store/chat";
-import type { ChatStatus } from "@/store/chat";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
-import type { RpcModel, ThinkingLevel } from "@shared/rpc";
+import { Badge, Button, Panel, Spinner } from "@/components/ui";
+import { cn } from "@/lib/cn";
+import { useAsync } from "@/lib/useAsync";
+import { useAppStore } from "@/store/app";
+import type { ChatStatus } from "@/store/chat";
+import { useChatStore } from "@/store/chat";
 
 const THINKING_LEVELS: ThinkingLevel[] = [
   "off",
@@ -51,7 +47,8 @@ function StartPanel() {
   }, [models, model]);
 
   const spawning = status === "spawning";
-  const canStart = Boolean(selectedProject) && prompt.trim() !== "" && !spawning;
+  const canStart =
+    Boolean(selectedProject) && prompt.trim() !== "" && !spawning;
 
   const onStart = async () => {
     if (!selectedProject || prompt.trim() === "") return;
@@ -68,7 +65,9 @@ function StartPanel() {
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft text-accent">
             <Sparkles className="h-6 w-6" />
           </div>
-          <h1 className="text-xl font-semibold text-ink">Start a new session</h1>
+          <h1 className="text-xl font-semibold text-ink">
+            Start a new session
+          </h1>
           <p className="mt-1 text-sm text-ink-muted">
             Pick a project directory, choose a model, and describe the task.
           </p>
@@ -180,13 +179,17 @@ function ChatSession({ activeChatId }: { activeChatId: string }) {
     };
   }, [activeChatId, sessionId, attach]);
 
-  const modelName = model ? (model.name ?? `${model.provider}/${model.id}`) : "—";
+  const modelName = model
+    ? (model.name ?? `${model.provider}/${model.id}`)
+    : "—";
 
   return (
     <div className="flex h-full min-h-0">
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-3 border-b border-border-subtle px-4 py-2.5">
-          <span className="truncate font-mono text-sm text-ink">{modelName}</span>
+          <span className="truncate font-mono text-sm text-ink">
+            {modelName}
+          </span>
           <Badge variant="muted" className="capitalize">
             {thinkingLevel}
           </Badge>

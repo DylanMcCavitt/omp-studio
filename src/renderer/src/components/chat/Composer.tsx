@@ -2,8 +2,8 @@
 // idle it shows Send; while the agent streams it shows Steer + Stop. Disabled
 // until a session is active.
 
-import { useRef, useState } from "react";
 import { Navigation, Send, Square } from "lucide-react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { useChatStore } from "@/store/chat";
 
@@ -75,7 +75,11 @@ export function Composer() {
                 Steer
               </span>
             </Button>
-            <Button variant="danger" onClick={() => void abort()} disabled={disabled}>
+            <Button
+              variant="danger"
+              onClick={() => void abort()}
+              disabled={disabled}
+            >
               <span className="flex items-center gap-1.5">
                 <Square className="h-4 w-4" />
                 Stop

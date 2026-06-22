@@ -1,5 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
-import { CH } from "@shared/ipc";
+import type { SessionSearchOptions } from "@shared/domain";
 import type {
   ChatCreateOptions,
   ChatLifecycleEvent,
@@ -11,8 +10,9 @@ import type {
   PromptOptions,
   StudioSettingsV1,
 } from "@shared/ipc";
-import type { SessionSearchOptions } from "@shared/domain";
+import { CH } from "@shared/ipc";
 import type { ThinkingLevel } from "@shared/rpc";
+import { contextBridge, ipcRenderer } from "electron";
 
 const api: OmpApi = {
   getDashboard: () => ipcRenderer.invoke(CH.dashboard),
@@ -36,7 +36,8 @@ const api: OmpApi = {
   },
 
   chat: {
-    create: (opts: ChatCreateOptions) => ipcRenderer.invoke(CH.chatCreate, opts),
+    create: (opts: ChatCreateOptions) =>
+      ipcRenderer.invoke(CH.chatCreate, opts),
     prompt: (sessionId: string, message: string, opts?: PromptOptions) =>
       ipcRenderer.invoke(CH.chatPrompt, sessionId, message, opts),
     steer: (sessionId: string, message: string) =>
@@ -48,24 +49,28 @@ const api: OmpApi = {
       ipcRenderer.invoke(CH.chatSetModel, sessionId, provider, modelId),
     setThinking: (sessionId: string, level: ThinkingLevel) =>
       ipcRenderer.invoke(CH.chatSetThinking, sessionId, level),
-    getState: (sessionId: string) => ipcRenderer.invoke(CH.chatGetState, sessionId),
+    getState: (sessionId: string) =>
+      ipcRenderer.invoke(CH.chatGetState, sessionId),
     getMessages: (sessionId: string) =>
       ipcRenderer.invoke(CH.chatGetMessages, sessionId),
     getSubagents: (sessionId: string) =>
       ipcRenderer.invoke(CH.chatGetSubagents, sessionId),
-    dispose: (sessionId: string) => ipcRenderer.invoke(CH.chatDispose, sessionId),
+    dispose: (sessionId: string) =>
+      ipcRenderer.invoke(CH.chatDispose, sessionId),
     onEvent: (cb: (e: ChatRpcEvent) => void) => {
       const listener = (_e: unknown, payload: ChatRpcEvent) => cb(payload);
       ipcRenderer.on(CH.evtRpc, listener);
       return () => ipcRenderer.removeListener(CH.evtRpc, listener);
     },
     onLifecycle: (cb: (e: ChatLifecycleEvent) => void) => {
-      const listener = (_e: unknown, payload: ChatLifecycleEvent) => cb(payload);
+      const listener = (_e: unknown, payload: ChatLifecycleEvent) =>
+        cb(payload);
       ipcRenderer.on(CH.evtLifecycle, listener);
       return () => ipcRenderer.removeListener(CH.evtLifecycle, listener);
     },
     onUiRequest: (cb: (e: ChatUiRequestEvent) => void) => {
-      const listener = (_e: unknown, payload: ChatUiRequestEvent) => cb(payload);
+      const listener = (_e: unknown, payload: ChatUiRequestEvent) =>
+        cb(payload);
       ipcRenderer.on(CH.evtUiRequest, listener);
       return () => ipcRenderer.removeListener(CH.evtUiRequest, listener);
     },
@@ -91,11 +96,13 @@ const api: OmpApi = {
     rename: (path: string, title: string) =>
       ipcRenderer.invoke(CH.sessionRename, path, title),
     delete: (path: string) => ipcRenderer.invoke(CH.sessionDelete, path),
-    archive: (path: string) => ipcRenderer.invoke(CH.sessionArchive, path, true),
+    archive: (path: string) =>
+      ipcRenderer.invoke(CH.sessionArchive, path, true),
     unarchive: (path: string) =>
       ipcRenderer.invoke(CH.sessionArchive, path, false),
     reveal: (path: string) => ipcRenderer.invoke(CH.sessionReveal, path),
-    exportHtml: (path: string) => ipcRenderer.invoke(CH.sessionExportHtml, path),
+    exportHtml: (path: string) =>
+      ipcRenderer.invoke(CH.sessionExportHtml, path),
   },
 };
 

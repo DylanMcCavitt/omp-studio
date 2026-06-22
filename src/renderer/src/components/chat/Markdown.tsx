@@ -2,10 +2,10 @@
 // highlighting. Links are intercepted and opened in the OS browser via the
 // `window.omp.openExternal` bridge (never navigate the renderer away).
 
-import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import remarkGfm from "remark-gfm";
+import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/cn";
 
 const components: Components = {

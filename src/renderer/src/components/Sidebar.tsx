@@ -3,15 +3,15 @@ import {
   Github,
   History,
   LayoutDashboard,
+  type LucideIcon,
   MessagesSquare,
   Plug,
   Plus,
   Settings,
   Sparkles,
-  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useAppStore, type Route } from "@/store/app";
+import { type Route, useAppStore } from "@/store/app";
 
 interface NavItem {
   route: Route;

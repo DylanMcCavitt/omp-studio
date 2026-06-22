@@ -2,8 +2,8 @@
 // renderer uses to address a chat. Plain node, no electron.
 
 import { randomUUID } from "node:crypto";
-import { OmpRpcSession } from "./rpc-session";
 import type { RpcState, ThinkingLevel } from "@shared/rpc";
+import { OmpRpcSession } from "./rpc-session";
 
 export class SessionRegistry {
   private readonly sessions = new Map<string, OmpRpcSession>();

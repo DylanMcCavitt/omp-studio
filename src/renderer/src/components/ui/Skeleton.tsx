@@ -7,10 +7,7 @@ export interface SkeletonProps {
 export function Skeleton({ className }: SkeletonProps) {
   return (
     <div
-      className={cn(
-        "animate-pulse-slow rounded-md bg-bg-hover",
-        className,
-      )}
+      className={cn("animate-pulse-slow rounded-md bg-bg-hover", className)}
       aria-hidden
     />
   );

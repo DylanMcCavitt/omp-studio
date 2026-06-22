@@ -24,7 +24,11 @@ const VARIANTS: Record<BadgeVariant, string> = {
   muted: "border-border-subtle bg-bg-raised text-ink-muted",
 };
 
-export function Badge({ children, variant = "default", className }: BadgeProps) {
+export function Badge({
+  children,
+  variant = "default",
+  className,
+}: BadgeProps) {
   return (
     <span
       className={cn(

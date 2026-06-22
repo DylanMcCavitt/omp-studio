@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   CircleDot,
   GitBranch,
@@ -8,6 +7,7 @@ import {
   Star,
   TriangleAlert,
 } from "lucide-react";
+import { useState } from "react";
 import { Badge, EmptyState, IconButton, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatNumber, formatRelativeTime } from "@/lib/format";
@@ -25,13 +25,18 @@ const ROW =
   "flex w-full flex-col gap-1 rounded-md border border-border bg-bg-raised px-3 py-2 text-left transition hover:bg-bg-hover";
 
 function ReposTab() {
-  const { data, loading, error } = useAsync(() => window.omp.github.listRepos());
+  const { data, loading, error } = useAsync(() =>
+    window.omp.github.listRepos(),
+  );
   if (loading) return <Centered />;
   if (error) return <Failed hint={error} />;
   const repos = data ?? [];
   if (repos.length === 0) {
     return (
-      <EmptyState icon={<GitBranch className="h-6 w-6" />} title="No repositories" />
+      <EmptyState
+        icon={<GitBranch className="h-6 w-6" />}
+        title="No repositories"
+      />
     );
   }
   return (
@@ -67,7 +72,9 @@ function ReposTab() {
                 {formatNumber(repo.stargazerCount)}
               </span>
             )}
-            {repo.updatedAt && <span>{formatRelativeTime(repo.updatedAt)}</span>}
+            {repo.updatedAt && (
+              <span>{formatRelativeTime(repo.updatedAt)}</span>
+            )}
           </div>
         </button>
       ))}
@@ -76,12 +83,16 @@ function ReposTab() {
 }
 
 function IssuesTab() {
-  const { data, loading, error } = useAsync(() => window.omp.github.listIssues());
+  const { data, loading, error } = useAsync(() =>
+    window.omp.github.listIssues(),
+  );
   if (loading) return <Centered />;
   if (error) return <Failed hint={error} />;
   const issues = data ?? [];
   if (issues.length === 0) {
-    return <EmptyState icon={<Inbox className="h-6 w-6" />} title="No issues" />;
+    return (
+      <EmptyState icon={<Inbox className="h-6 w-6" />} title="No issues" />
+    );
   }
   return (
     <div className="space-y-2">
@@ -100,7 +111,9 @@ function IssuesTab() {
               {issue.title}
             </span>
             <Badge
-              variant={issue.state.toLowerCase() === "open" ? "success" : "muted"}
+              variant={
+                issue.state.toLowerCase() === "open" ? "success" : "muted"
+              }
             >
               {issue.state.toLowerCase()}
             </Badge>
@@ -130,7 +143,10 @@ function PrsTab() {
   const prs = data ?? [];
   if (prs.length === 0) {
     return (
-      <EmptyState icon={<GitPullRequest className="h-6 w-6" />} title="No pull requests" />
+      <EmptyState
+        icon={<GitPullRequest className="h-6 w-6" />}
+        title="No pull requests"
+      />
     );
   }
   return (
@@ -145,8 +161,12 @@ function PrsTab() {
           >
             <div className="flex items-center gap-2">
               <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-accent" />
-              <span className="font-mono text-xs text-ink-faint">#{pr.number}</span>
-              <span className="flex-1 truncate text-sm text-ink">{pr.title}</span>
+              <span className="font-mono text-xs text-ink-faint">
+                #{pr.number}
+              </span>
+              <span className="flex-1 truncate text-sm text-ink">
+                {pr.title}
+              </span>
               <Badge
                 variant={
                   pr.isDraft
@@ -253,10 +273,7 @@ export default function GitHub() {
             </>
           )}
         </div>
-        <IconButton
-          label="Reload"
-          onClick={() => setNonce((n) => n + 1)}
-        >
+        <IconButton label="Reload" onClick={() => setNonce((n) => n + 1)}>
           <RefreshCw className={cn("h-4 w-4", repoLoading && "animate-spin")} />
         </IconButton>
       </div>

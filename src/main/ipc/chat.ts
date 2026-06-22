@@ -3,8 +3,6 @@
 // over `ipcMain.handle`; frame + lifecycle streams are pushed to the renderer's
 // window over `evt:rpc` / `evt:lifecycle`.
 
-import type { BrowserWindow, IpcMain } from "electron";
-import { CH } from "@shared/ipc";
 import type {
   ChatCreateOptions,
   ChatCreateResult,
@@ -12,7 +10,9 @@ import type {
   ChatRpcEvent,
   PromptOptions,
 } from "@shared/ipc";
+import { CH } from "@shared/ipc";
 import type { RpcFrame, ThinkingLevel } from "@shared/rpc";
+import type { BrowserWindow, IpcMain } from "electron";
 import type { SessionRegistry } from "../omp/registry";
 
 export function registerChatIpc(

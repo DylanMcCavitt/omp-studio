@@ -110,11 +110,7 @@ export interface PromptOptions {
 }
 
 /** A bridge session lifecycle status pushed over `evt:lifecycle`. */
-export type ChatLifecycleStatus =
-  | "spawning"
-  | "ready"
-  | "exited"
-  | "error";
+export type ChatLifecycleStatus = "spawning" | "ready" | "exited" | "error";
 
 export interface ChatLifecycleEvent {
   sessionId: string;

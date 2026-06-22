@@ -1,4 +1,11 @@
-import { useMemo, useState } from "react";
+import type { SessionSummary } from "@shared/domain";
+import type {
+  ContentBlock,
+  OmpMessage,
+  TextBlock,
+  ThinkingBlock,
+  ToolCallBlock,
+} from "@shared/rpc";
 import {
   FolderGit2,
   Inbox,
@@ -7,6 +14,7 @@ import {
   Search,
   TriangleAlert,
 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Badge, EmptyState, IconButton, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
@@ -16,14 +24,6 @@ import {
   formatRelativeTime,
 } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
-import type { SessionSummary } from "@shared/domain";
-import type {
-  ContentBlock,
-  OmpMessage,
-  TextBlock,
-  ThinkingBlock,
-  ToolCallBlock,
-} from "@shared/rpc";
 
 interface SessionGroup {
   project: string;
@@ -76,7 +76,8 @@ function AssistantBlock({ block }: { block: ContentBlock }) {
       <div className="flex items-start gap-2">
         <Badge variant="warn">tool</Badge>
         <code className="break-words font-mono text-xs text-ink-muted">
-          {tc.name}(<span className="text-ink-faint">{argsPreview(tc.arguments)}</span>)
+          {tc.name}(
+          <span className="text-ink-faint">{argsPreview(tc.arguments)}</span>)
         </code>
       </div>
     );
@@ -98,12 +99,17 @@ function MessageBlock({ message }: { message: OmpMessage }) {
   }
   if (message.role === "toolResult") {
     const body = blocksText(message.content);
-    const shown = body.length > 2000 ? `${body.slice(0, 2000)}\n… (truncated)` : body;
+    const shown =
+      body.length > 2000 ? `${body.slice(0, 2000)}\n… (truncated)` : body;
     return (
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <Badge variant={message.isError ? "danger" : "muted"}>tool result</Badge>
-          <span className="font-mono text-xs text-ink-muted">{message.toolName}</span>
+          <Badge variant={message.isError ? "danger" : "muted"}>
+            tool result
+          </Badge>
+          <span className="font-mono text-xs text-ink-muted">
+            {message.toolName}
+          </span>
         </div>
         <pre className="scrollbar overflow-x-auto whitespace-pre-wrap break-words rounded-md bg-bg-panel p-2 font-mono text-xs text-ink-muted">
           {shown || "(no output)"}

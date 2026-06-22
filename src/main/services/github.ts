@@ -1,6 +1,6 @@
-import { runJson } from "./cli";
-import { ghBinary } from "../paths";
 import type { GhIssue, GhPr, GhRepo } from "@shared/domain";
+import { ghBinary } from "../paths";
+import { runJson } from "./cli";
 
 interface RawAuthor {
   login?: string;
@@ -91,7 +91,9 @@ export async function listIssues(repo?: string): Promise<GhIssue[]> {
   const args = ["issue", "list"];
   if (repo) args.push("--repo", repo);
   args.push("--json", ISSUE_FIELDS, "--limit", "30");
-  const raw = await runJson<RawIssue[]>(ghBinary(), args, { cwd: process.cwd() });
+  const raw = await runJson<RawIssue[]>(ghBinary(), args, {
+    cwd: process.cwd(),
+  });
   if (!raw) return [];
   return raw.map((i) => {
     const comments =
@@ -108,7 +110,9 @@ export async function listIssues(repo?: string): Promise<GhIssue[]> {
       author: i.author?.login ?? "",
       createdAt: i.createdAt ?? "",
       updatedAt: i.updatedAt ?? "",
-      labels: (i.labels ?? []).map((l) => l.name ?? "").filter((n) => n.length > 0),
+      labels: (i.labels ?? [])
+        .map((l) => l.name ?? "")
+        .filter((n) => n.length > 0),
       comments,
     };
   });
@@ -129,7 +133,9 @@ export async function listPrs(repo?: string): Promise<GhPr[]> {
     createdAt: p.createdAt ?? "",
     updatedAt: p.updatedAt ?? "",
     isDraft: p.isDraft ?? false,
-    labels: (p.labels ?? []).map((l) => l.name ?? "").filter((n) => n.length > 0),
+    labels: (p.labels ?? [])
+      .map((l) => l.name ?? "")
+      .filter((n) => n.length > 0),
     headRefName: p.headRefName,
     baseRefName: p.baseRefName,
   }));

@@ -20,8 +20,8 @@ import {
   Spinner,
   Stat,
 } from "@/components/ui";
-import { useAsync } from "@/lib/useAsync";
 import { formatNumber, formatRelativeTime } from "@/lib/format";
+import { useAsync } from "@/lib/useAsync";
 import { useAppStore } from "@/store/app";
 
 export default function Dashboard() {
@@ -216,9 +216,7 @@ export default function Dashboard() {
                               {formatRelativeTime(p.lastActive)}
                             </p>
                           </div>
-                          <Badge variant="muted">
-                            {formatNumber(p.count)}
-                          </Badge>
+                          <Badge variant="muted">{formatNumber(p.count)}</Badge>
                         </li>
                       ))}
                     </ul>

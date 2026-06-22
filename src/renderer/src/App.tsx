@@ -1,14 +1,14 @@
 import type { ComponentType } from "react";
 import { Layout } from "@/components/Layout";
-import { useAppStore, type Route } from "@/store/app";
-import Dashboard from "@/views/Dashboard";
-import Chat from "@/views/Chat";
-import Sessions from "@/views/Sessions";
-import Skills from "@/views/Skills";
-import Mcp from "@/views/Mcp";
+import { type Route, useAppStore } from "@/store/app";
 import Agents from "@/views/Agents";
+import Chat from "@/views/Chat";
+import Dashboard from "@/views/Dashboard";
 import GitHub from "@/views/GitHub";
+import Mcp from "@/views/Mcp";
+import Sessions from "@/views/Sessions";
 import Settings from "@/views/Settings";
+import Skills from "@/views/Skills";
 
 const VIEWS: Record<Route, ComponentType> = {
   dashboard: Dashboard,

@@ -1,10 +1,10 @@
 // A single tool invocation: collapsed header (name, one-line args preview,
 // status dot) expanding to full arguments and the matched result content.
 
-import { useState } from "react";
-import { ChevronRight, Wrench } from "lucide-react";
-import { cn } from "@/lib/cn";
 import type { TextBlock, ToolCallBlock, ToolResultMessage } from "@shared/rpc";
+import { ChevronRight, Wrench } from "lucide-react";
+import { useState } from "react";
+import { cn } from "@/lib/cn";
 
 export function ToolCallCard({
   call,

@@ -4,7 +4,9 @@ import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
 
 export default function Agents() {
-  const { data, loading, error, reload } = useAsync(() => window.omp.listAgents());
+  const { data, loading, error, reload } = useAsync(() =>
+    window.omp.listAgents(),
+  );
   const agents = data ?? [];
 
   return (
@@ -33,7 +35,10 @@ export default function Agents() {
             hint={error}
           />
         ) : agents.length === 0 ? (
-          <EmptyState icon={<Bot className="h-6 w-6" />} title="No agents found" />
+          <EmptyState
+            icon={<Bot className="h-6 w-6" />}
+            title="No agents found"
+          />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {agents.map((agent) => (

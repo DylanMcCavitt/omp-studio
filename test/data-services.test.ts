@@ -6,8 +6,8 @@ import {
   listProviders,
   listSkills,
 } from "../src/main/services/config-service";
-import { listSessions } from "../src/main/services/session-store";
 import { currentRepo } from "../src/main/services/github";
+import { listSessions } from "../src/main/services/session-store";
 
 // Real integration tests against the live omp install + on-disk agent state.
 

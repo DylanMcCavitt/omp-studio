@@ -1,9 +1,9 @@
+import type { Dirent, Stats } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { Dirent, Stats } from "node:fs";
-import { sessionsDir } from "../paths";
 import type { SessionSummary, SessionTranscript } from "@shared/domain";
 import type { OmpMessage } from "@shared/rpc";
+import { sessionsDir } from "../paths";
 
 interface SessionHeader {
   id?: string;
@@ -19,7 +19,10 @@ interface ParsedSession {
   messages: OmpMessage[];
 }
 
-function parseSession(content: string, collectMessages: boolean): ParsedSession {
+function parseSession(
+  content: string,
+  collectMessages: boolean,
+): ParsedSession {
   let header: SessionHeader | null = null;
   let messageCount = 0;
   let model: string | undefined;
@@ -131,9 +134,7 @@ export async function listSessions(): Promise<SessionSummary[]> {
   const results = await Promise.all(
     targets.map((t) => summarizeFile(t.path, t.project, t.file)),
   );
-  const summaries = results.filter(
-    (s): s is SessionSummary => s !== null,
-  );
+  const summaries = results.filter((s): s is SessionSummary => s !== null);
   summaries.sort((a, b) =>
     a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0,
   );
@@ -162,6 +163,12 @@ export async function readSession(path: string): Promise<SessionTranscript> {
   }
 
   const parsed = parseSession(content, true);
-  const summary = toSummary(path, basename(dirname(path)), basename(path), parsed, stats);
+  const summary = toSummary(
+    path,
+    basename(dirname(path)),
+    basename(path),
+    parsed,
+    stats,
+  );
   return { summary, messages: parsed.messages };
 }

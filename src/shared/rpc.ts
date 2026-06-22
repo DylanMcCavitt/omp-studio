@@ -270,10 +270,7 @@ export interface MessageUpdateFrame extends RpcFrame {
 }
 
 export interface ToolExecutionFrame extends RpcFrame {
-  type:
-    | "tool_execution_start"
-    | "tool_execution_update"
-    | "tool_execution_end";
+  type: "tool_execution_start" | "tool_execution_update" | "tool_execution_end";
   toolCallId?: string;
   toolName?: string;
   arguments?: unknown;

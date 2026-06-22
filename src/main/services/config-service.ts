@@ -1,9 +1,7 @@
+import type { Dirent } from "node:fs";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import type { Dirent } from "node:fs";
-import { runCli, runJson } from "./cli";
-import { agentDir, mcpConfigPath, ompBinary } from "../paths";
 import type {
   AgentInfo,
   McpServerInfo,
@@ -11,6 +9,8 @@ import type {
   ProviderInfo,
   SkillInfo,
 } from "@shared/domain";
+import { agentDir, mcpConfigPath, ompBinary } from "../paths";
+import { runCli, runJson } from "./cli";
 
 // ---------------------------------------------------------------------------
 // Frontmatter parsing (shared by skills + agents)
@@ -201,7 +201,12 @@ export async function listSkills(): Promise<SkillInfo[]> {
   // Lowest precedence first; later sources overwrite (project > user > builtin).
   await collectSkills(join(agentDir(), "workflow-kit"), "builtin", 6, byName);
   await collectSkills(join(homedir(), ".agents", "skills"), "user", 1, byName);
-  await collectSkills(join(process.cwd(), ".agents", "skills"), "project", 1, byName);
+  await collectSkills(
+    join(process.cwd(), ".agents", "skills"),
+    "project",
+    1,
+    byName,
+  );
   return [...byName.values()];
 }
 

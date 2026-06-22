@@ -2,11 +2,15 @@
 // a bubble per non-toolResult message, and appends a live streaming bubble while
 // the agent is responding. Auto-scrolls to the bottom unless the user scrolled up.
 
-import { useEffect, useRef } from "react";
+import type {
+  AssistantMessage,
+  ContentBlock,
+  ToolResultMessage,
+} from "@shared/rpc";
 import { Loader } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { useChatStore } from "@/store/chat";
 import { MessageBubble } from "./MessageBubble";
-import type { AssistantMessage, ContentBlock, ToolResultMessage } from "@shared/rpc";
 
 export function MessageList() {
   const messages = useChatStore((s) => s.messages);
