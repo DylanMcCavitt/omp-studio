@@ -1,4 +1,4 @@
-// A single live `omp --mode rpc` child process, driven over JSONL stdio.
+// A single live `omp --mode rpc-ui` child process, driven over JSONL stdio.
 //
 // This module must stay importable by PLAIN NODE via type-stripping, so it uses
 // only erasable TypeScript (no enums, namespaces, parameter-properties, or
@@ -6,17 +6,20 @@
 // erased at runtime; `../paths` is a plain-node runtime dependency.
 //
 // Emits:
-//  - "frame"     (frame: RpcFrame)                       — every non-response
-//                                                          stdout frame except
-//                                                          auto-answered
-//                                                          extension UI requests
-//  - "lifecycle" (status: "ready"|"exited"|"error", detail?: string)
-//  - "exit"      ()                                       — child process exited
+//  - "frame"      (frame: RpcFrame) — every non-response, non-ui-request frame
+//  - "ui-request" ({ request, responseRequired }) — an extension UI request the
+//                 host must answer via respondUi() when responseRequired is true
+//  - "lifecycle"  (status: "ready"|"exited"|"error", detail?: string)
+//  - "exit"       () — child process exited
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import type { PromptOptions } from "@shared/ipc";
 import type {
+  ApprovalMode,
+  ExtensionUiMethod,
+  ExtensionUiRequest,
+  ExtensionUiResponse,
   OmpMessage,
   RpcFrame,
   RpcState,
@@ -35,9 +38,29 @@ interface OutgoingCommand {
   [key: string]: unknown;
 }
 
+// Fail-closed backstop when an extension UI request omits its own timeout.
+const DEFAULT_UI_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
+
+// Methods that block the agent until the host replies with an
+// extension_ui_response. Everything else (notify/setStatus/setWidget/setTitle/
+// set_editor_text/open_url) is a fire-and-forget UI hint.
+const RESPONSE_REQUIRED_UI_METHODS = new Set<ExtensionUiMethod>([
+  "confirm",
+  "select",
+  "input",
+  "editor",
+  "cancel",
+]);
+
+interface PendingUiRequest {
+  method: ExtensionUiMethod;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 export class OmpRpcSession extends EventEmitter {
   private readonly child: ChildProcess;
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly pendingUi = new Map<string, PendingUiRequest>();
   private readonly initialThinkingLevel?: ThinkingLevel;
   private readonly readyPromise: Promise<void>;
   private readyResolve!: () => void;
@@ -53,12 +76,16 @@ export class OmpRpcSession extends EventEmitter {
     model?: string;
     thinkingLevel?: ThinkingLevel;
     binary?: string;
+    approvalMode?: ApprovalMode;
+    autoApprove?: boolean;
   }) {
     super();
     this.initialThinkingLevel = opts.thinkingLevel;
 
-    const args = ["--mode", "rpc", "--cwd", opts.cwd];
+    const args = ["--mode", "rpc-ui", "--cwd", opts.cwd];
     if (opts.model) args.push("--model", opts.model);
+    args.push("--approval-mode", opts.approvalMode ?? "always-ask");
+    if (opts.autoApprove === true) args.push("--auto-approve");
 
     this.child = spawn(opts.binary ?? ompBinary(), args, {
       cwd: opts.cwd,
@@ -86,6 +113,7 @@ export class OmpRpcSession extends EventEmitter {
     this.terminated = true;
     this.removeAllListeners();
     this.rejectAllPending(new Error("session disposed"));
+    this.clearPendingUi();
     const stdin = this.child.stdin;
     if (stdin && !stdin.destroyed) {
       try {
@@ -224,7 +252,7 @@ export class OmpRpcSession extends EventEmitter {
       return;
     }
     if (frame.type === "extension_ui_request") {
-      this.answerExtensionUi(frame);
+      this.handleExtensionUi(frame);
       return;
     }
     if (frame.type === "ready") this.markReady();
@@ -263,21 +291,64 @@ export class OmpRpcSession extends EventEmitter {
     }
   }
 
-  private answerExtensionUi(frame: RpcFrame): void {
+  // Forward an extension UI request to the host. Response-required methods are
+  // tracked with a fail-closed timeout; the host replies via respondUi(). Hint
+  // methods carry responseRequired=false and expect no reply.
+  private handleExtensionUi(frame: RpcFrame): void {
     const id = frame.id;
     if (typeof id !== "string") return;
-    const method = frame.method;
-    if (method === "confirm") {
-      this.writeFrame({ type: "extension_ui_response", id, confirmed: false });
-    } else if (
-      method === "select" ||
-      method === "input" ||
-      method === "editor"
-    ) {
-      this.writeFrame({ type: "extension_ui_response", id, cancelled: true });
+    const method = frame.method as ExtensionUiMethod;
+    const responseRequired = RESPONSE_REQUIRED_UI_METHODS.has(method);
+    if (responseRequired) {
+      const requested = frame.timeout;
+      const timeoutMs =
+        typeof requested === "number" && requested > 0
+          ? requested
+          : DEFAULT_UI_REQUEST_TIMEOUT_MS;
+      const timer = setTimeout(() => this.timeoutUi(id), timeoutMs);
+      // A dangling UI timeout must never keep the event loop (or app) alive.
+      timer.unref();
+      this.pendingUi.set(id, { method, timer });
     }
-    // notify / setStatus / setWidget / setTitle / set_editor_text / open_url:
-    // fire-and-forget UI hints, no response expected.
+    this.emit("ui-request", {
+      request: frame as ExtensionUiRequest,
+      responseRequired,
+    });
+  }
+
+  // Answer a response-required UI request by writing the extension_ui_response
+  // frame to the child. No-op when the id is already settled (answered, timed
+  // out, or cleared on exit), so double-answers and post-exit writes are safe.
+  respondUi(requestId: string, response: ExtensionUiResponse): void {
+    const pending = this.pendingUi.get(requestId);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingUi.delete(requestId);
+    this.writeFrame({
+      type: "extension_ui_response",
+      id: requestId,
+      ...response,
+    });
+  }
+
+  // Fail closed: an unanswered request declines (confirm) or cancels (others)
+  // so the agent never blocks forever on a silent host.
+  private timeoutUi(id: string): void {
+    const pending = this.pendingUi.get(id);
+    if (!pending) return;
+    this.pendingUi.delete(id);
+    const response =
+      pending.method === "confirm"
+        ? { confirmed: false, timedOut: true }
+        : { cancelled: true, timedOut: true };
+    this.writeFrame({ type: "extension_ui_response", id, ...response });
+  }
+
+  // Drop all tracked UI requests and their timers (child exit / dispose). The
+  // child is gone, so no fail-closed frame is written — we only stop the timers.
+  private clearPendingUi(): void {
+    for (const pending of this.pendingUi.values()) clearTimeout(pending.timer);
+    this.pendingUi.clear();
   }
 
   private settleTermination(status: "exited" | "error", detail?: string): void {
@@ -289,6 +360,7 @@ export class OmpRpcSession extends EventEmitter {
     }
     this.emit("lifecycle", status, detail);
     this.rejectAllPending(new Error(detail ?? `session ${status}`));
+    this.clearPendingUi();
   }
 
   private rejectAllPending(error: Error): void {
