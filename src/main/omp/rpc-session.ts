@@ -78,12 +78,15 @@ export class OmpRpcSession extends EventEmitter {
     binary?: string;
     approvalMode?: ApprovalMode;
     autoApprove?: boolean;
+    /** JSONL transcript path (preferred) or omp session id to resume. */
+    resume?: string;
   }) {
     super();
     this.initialThinkingLevel = opts.thinkingLevel;
 
     const args = ["--mode", "rpc-ui", "--cwd", opts.cwd];
     if (opts.model) args.push("--model", opts.model);
+    if (opts.resume) args.push("--resume", opts.resume);
     args.push("--approval-mode", opts.approvalMode ?? "always-ask");
     if (opts.autoApprove === true) args.push("--auto-approve");
 

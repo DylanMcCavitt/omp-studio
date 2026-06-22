@@ -11,12 +11,14 @@ import type {
   ChatRpcEvent,
   ChatUiRequestEvent,
   ChatUiRespondPayload,
+  OpenSessionDescriptor,
   PromptOptions,
 } from "@shared/ipc";
 import { CH } from "@shared/ipc";
 import type { ExtensionUiRequest, RpcFrame, ThinkingLevel } from "@shared/rpc";
 import type { BrowserWindow, IpcMain } from "electron";
 import type { SessionRegistry } from "../omp/registry";
+import type { OmpRpcSession } from "../omp/rpc-session";
 
 export function registerChatIpc(
   ipcMain: IpcMain,
@@ -43,16 +45,10 @@ export function registerChatIpc(
     return session;
   };
 
-  handle(CH.chatCreate, async (opts: ChatCreateOptions) => {
-    // Forward only the known create fields — never spread the raw renderer
-    // payload, so an extra prop (e.g. a `binary` override) can't reach the
-    // session spawn. registry.create has no other spawn-config sink.
-    const { id, session, state } = await registry.create({
-      cwd: opts.cwd,
-      model: opts.model,
-      thinkingLevel: opts.thinkingLevel,
-      approvalPolicy: opts.approvalPolicy,
-    });
+  // Push a session's frame / lifecycle / extension-UI-request streams to the
+  // renderer. Shared by create and resume so a resumed child streams exactly
+  // like a freshly created one.
+  const forward = (id: string, session: OmpRpcSession) => {
     session.on("frame", (frame: RpcFrame) =>
       getWindow()?.webContents.send(CH.evtRpc, {
         sessionId: id,
@@ -80,6 +76,19 @@ export function registerChatIpc(
           responseRequired: payload.responseRequired,
         } satisfies ChatUiRequestEvent),
     );
+  };
+
+  handle(CH.chatCreate, async (opts: ChatCreateOptions) => {
+    // Forward only the known create fields — never spread the raw renderer
+    // payload, so an extra prop (e.g. a `binary` override) can't reach the
+    // session spawn. registry.create has no other spawn-config sink.
+    const { id, session, state } = await registry.create({
+      cwd: opts.cwd,
+      model: opts.model,
+      thinkingLevel: opts.thinkingLevel,
+      approvalPolicy: opts.approvalPolicy,
+    });
+    forward(id, session);
     return { sessionId: id, state } satisfies ChatCreateResult;
   });
 
@@ -103,6 +112,15 @@ export function registerChatIpc(
   handle(CH.chatGetMessages, (id: string) => lookup(id).getMessages());
   handle(CH.chatGetSubagents, (id: string) => lookup(id).getSubagents());
   handle(CH.chatDispose, (id: string) => registry.dispose(id));
+  // E1: list persisted/open descriptors, resume a hibernated chat, and close
+  // (hibernate) a live chat. These sit alongside C2's ui-request handlers.
+  handle(CH.chatList, () => registry.descriptors());
+  handle(CH.chatResume, async (descriptor: OpenSessionDescriptor) => {
+    const { id, session, state } = await registry.resume(descriptor);
+    forward(id, session);
+    return { sessionId: id, state } satisfies ChatCreateResult;
+  });
+  handle(CH.chatClose, (id: string) => registry.hibernate(id));
   // Route a renderer UI-request response back to the originating child. Safe
   // no-op when the session is gone (disposed/exited) so a late or orphaned
   // reply never throws across IPC.
