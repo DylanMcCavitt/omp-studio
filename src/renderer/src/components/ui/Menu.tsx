@@ -5,13 +5,13 @@
 // replacement for hand-rolled action dropdowns.
 
 import {
+  type ButtonHTMLAttributes,
   createContext,
+  type ReactNode,
   useCallback,
   useContext,
   useEffect,
   useRef,
-  type ButtonHTMLAttributes,
-  type ReactNode,
 } from "react";
 import { cn } from "@/lib/cn";
 import { Popover, type PopoverRenderProps } from "./Popover";
@@ -124,8 +124,7 @@ function MenuList({
   );
 }
 
-export interface MenuItemProps
-  extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface MenuItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Optional leading icon. */
   icon?: ReactNode;
 }

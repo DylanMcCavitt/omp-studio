@@ -4,11 +4,11 @@
 // sanctioned base for Menu and Combobox — no new popover should re-roll this.
 
 import {
+  type ReactNode,
+  type RefObject,
   useCallback,
   useRef,
   useState,
-  type ReactNode,
-  type RefObject,
 } from "react";
 import { cn } from "@/lib/cn";
 import { useDismiss } from "./useDismiss";

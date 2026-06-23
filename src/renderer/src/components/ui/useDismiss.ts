@@ -4,7 +4,7 @@
 // return to the trigger on keyboard dismissal. Factored out so popovers stop
 // copy-pasting these listeners.
 
-import { useEffect, useRef, type RefObject } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 
 export interface UseDismissOptions {
   /** Only while open are the document listeners attached. */

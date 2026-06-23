@@ -58,7 +58,9 @@ it("filters the list as the query is typed", async () => {
   await user.click(screen.getByRole("combobox", { name: "Fruit" }));
   await user.type(screen.getByRole("combobox", { name: "Search…" }), "ban");
 
-  expect(screen.queryByRole("option", { name: /Apple/ })).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("option", { name: /Apple/ }),
+  ).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: /Banana/ })).toBeInTheDocument();
 });
 
@@ -80,7 +82,10 @@ it("selects the filtered option on Enter", async () => {
   render(<Harness onChange={onChange} />);
 
   await user.click(screen.getByRole("combobox", { name: "Fruit" }));
-  await user.type(screen.getByRole("combobox", { name: "Search…" }), "cher{Enter}");
+  await user.type(
+    screen.getByRole("combobox", { name: "Search…" }),
+    "cher{Enter}",
+  );
 
   expect(onChange).toHaveBeenCalledWith("c");
 });

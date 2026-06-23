@@ -5,7 +5,14 @@
 // selects and closes (returning focus to the trigger).
 
 import { Check, ChevronsUpDown, Search } from "lucide-react";
-import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { cn } from "@/lib/cn";
 import { clampIndex, moveIndex } from "@/lib/slash-commands";
 import { Popover } from "./Popover";
@@ -135,7 +142,10 @@ function ComboboxList({
     inputRef.current?.focus();
   }, []);
 
-  const filtered = useMemo(() => filterOptions(options, query), [options, query]);
+  const filtered = useMemo(
+    () => filterOptions(options, query),
+    [options, query],
+  );
   const active = clampIndex(activeIndex, filtered.length);
 
   // Reset the cursor to the top whenever the result set changes.
