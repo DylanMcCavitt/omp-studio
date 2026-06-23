@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A **draggable / rearrangeable shell layout** (feature 5). The sidebar|main
+  and chat transcript|right-rail splits are now resizable via
+  `react-resizable-panels` (`ResizeHandle` with double-click-to-reset);
+  controlled sizes come from `settings.layout` (`sidebarWidthPct`,
+  `chatRailWidthPct`), never the library's `autoSaveId`/localStorage. The chat
+  right rail collapses to an icon strip (`chatRailCollapsed`) and its panels
+  (Model/Thinking/Usage/Plan/Subagents) are reorderable (hand-rolled header
+  drag handle), collapsible (`Panel collapsible`), and hideable from a "⋯
+  Customize" menu (`chatRailPanels`). Sidebar nav entries reorder via drag and
+  hide into a "More" overflow (`navOrder`/`navHidden`), preserving the
+  WorkspaceSwitcher header and the Chat StartPanel WorkspaceSelect. Layout
+  writes funnel through a new debounced `setLayout` (~250 ms trailing,
+  coalescing drags) on the existing `settings:*` channels; Settings → Appearance
+  gains a **Reset layout** action (`resetLayout`). Adds `components/layout/`
+  (`ResizeHandle`, `usePersistedPanelLayout`, `useDragReorder`) and `lib/layout.ts`.
+
 - Live Playwright `_electron` end-to-end flows (`e2e/live.spec.ts`) gated behind
   `STUDIO_E2E_LIVE=1` (mirroring `RPC_LIVE=1`): a real chat turn, the D1 tool
   approval approve/deny/input-select round-trips, D3 restart-and-resume, and D2
