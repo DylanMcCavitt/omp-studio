@@ -218,7 +218,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
         aria-label="Close search"
         tabIndex={-1}
         onClick={onClose}
-        className="absolute inset-0 bg-black/50"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
       />
       <div
         ref={dialogRef}

@@ -37,7 +37,7 @@ export default function Dashboard() {
 
   return (
     <div className="scrollbar h-full overflow-y-auto">
-      <div className="mx-auto flex max-w-5xl flex-col gap-5 p-6">
+      <div className="mx-auto flex max-w-5xl flex-col gap-4 p-6">
         <header className="no-drag flex items-center justify-between gap-4">
           <div className="flex flex-col">
             <h1 className="text-xl font-semibold text-ink">Dashboard</h1>
@@ -70,7 +70,7 @@ export default function Dashboard() {
 
         {data && (
           <>
-            <section className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <section className="grid grid-cols-2 gap-3 auto-rows-fr">
               <Stat
                 label="Sessions"
                 value={formatNumber(data.sessions.total)}
@@ -106,10 +106,9 @@ export default function Dashboard() {
               />
             </section>
 
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+            <div className="flex flex-col gap-4">
               <Panel
                 title="Recent sessions"
-                className="lg:col-span-2"
                 bodyClassName="p-0"
                 actions={
                   <Button
@@ -128,7 +127,7 @@ export default function Dashboard() {
                     title="No sessions yet"
                     hint="Start a chat to create your first session."
                     action={
-                      <Button variant="primary" size="sm" onClick={newChat}>
+                      <Button variant="subtle" size="sm" onClick={newChat}>
                         <Plus size={14} />
                         Start a chat
                       </Button>
@@ -147,7 +146,7 @@ export default function Dashboard() {
                             <p className="truncate text-sm font-medium text-ink">
                               {s.title ?? "Untitled session"}
                             </p>
-                            <p className="truncate text-xs text-ink-faint">
+                            <p className="truncate text-xs text-ink-muted">
                               {s.project}
                             </p>
                           </div>
@@ -166,7 +165,7 @@ export default function Dashboard() {
                 )}
               </Panel>
 
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-4">
                 <Panel title="MCP servers" bodyClassName="p-0">
                   {data.mcp.length === 0 ? (
                     <EmptyState
@@ -185,7 +184,7 @@ export default function Dashboard() {
                             <p className="truncate text-sm font-medium text-ink">
                               {server.name}
                             </p>
-                            <p className="text-xs text-ink-faint">
+                            <p className="text-xs text-ink-muted">
                               {server.type}
                             </p>
                           </div>
@@ -216,7 +215,7 @@ export default function Dashboard() {
                             <p className="truncate text-sm font-medium text-ink">
                               {p.project}
                             </p>
-                            <p className="text-xs text-ink-faint">
+                            <p className="text-xs text-ink-muted">
                               {formatRelativeTime(p.lastActive)}
                             </p>
                           </div>
@@ -311,7 +310,7 @@ function MyLinearIssuesPanel() {
                   <p className="truncate text-sm font-medium text-ink">
                     {issue.title}
                   </p>
-                  <p className="truncate text-xs text-ink-faint">
+                  <p className="truncate text-xs text-ink-muted">
                     {issue.identifier}
                     {issue.team?.key ? ` · ${issue.team.key}` : ""}
                   </p>

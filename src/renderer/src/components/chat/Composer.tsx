@@ -56,28 +56,22 @@ export function Composer() {
             streaming ? (
               <>
                 <Button variant="subtle" onClick={submit} disabled={!canSubmit}>
-                  <span className="flex items-center gap-1.5">
-                    <Navigation className="h-4 w-4" />
-                    Steer
-                  </span>
+                  <Navigation className="h-4 w-4" />
+                  Steer
                 </Button>
                 <Button
                   variant="danger"
                   onClick={() => void abort()}
                   disabled={disabled}
                 >
-                  <span className="flex items-center gap-1.5">
-                    <Square className="h-4 w-4" />
-                    Stop
-                  </span>
+                  <Square className="h-4 w-4" />
+                  Stop
                 </Button>
               </>
             ) : (
               <Button variant="primary" onClick={submit} disabled={!canSubmit}>
-                <span className="flex items-center gap-1.5">
-                  <Send className="h-4 w-4" />
-                  Send
-                </span>
+                <Send className="h-4 w-4" />
+                Send
               </Button>
             )
           }

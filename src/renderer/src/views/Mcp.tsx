@@ -1,5 +1,12 @@
 import { Plug, RefreshCw, TriangleAlert } from "lucide-react";
-import { Badge, Card, EmptyState, IconButton, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  Spinner,
+} from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
@@ -15,9 +22,9 @@ export default function Mcp() {
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">MCP Servers</h1>
-          <p className="truncate text-sm text-ink-muted">
+          <p className="text-sm text-ink-muted">
             Configured in{" "}
-            <code className="font-mono text-ink-faint">
+            <code className="font-mono text-ink-muted">
               ~/.omp/agent/mcp.json
             </code>
           </p>
@@ -37,12 +44,24 @@ export default function Mcp() {
             icon={<TriangleAlert className="h-6 w-6" />}
             title="Failed to load MCP servers"
             hint={error}
+            action={
+              <Button variant="subtle" size="sm" onClick={reload}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Try again
+              </Button>
+            }
           />
         ) : servers.length === 0 ? (
           <EmptyState
             icon={<Plug className="h-6 w-6" />}
             title="No MCP servers configured"
-            hint="Add servers to ~/.omp/agent/mcp.json to see them here."
+            hint="Add servers to ~/.omp/agent/mcp.json, then reload to see them here."
+            action={
+              <Button variant="subtle" size="sm" onClick={reload}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reload
+              </Button>
+            }
           />
         ) : (
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -65,7 +84,7 @@ export default function Mcp() {
                       )}
                       title={server.enabled ? "enabled" : "disabled"}
                     />
-                    <span className="truncate font-mono text-sm text-ink">
+                    <span className="break-words font-mono text-sm text-ink">
                       {server.name}
                     </span>
                     <Badge variant="accent">{server.type}</Badge>
@@ -77,12 +96,12 @@ export default function Mcp() {
                     </Badge>
                   </div>
                   {target && (
-                    <code className="break-all font-mono text-xs text-ink-muted">
+                    <code className="break-words font-mono text-xs text-ink-muted">
                       {target}
                     </code>
                   )}
                   {typeof server.toolCount === "number" && (
-                    <span className="text-xs text-ink-faint">
+                    <span className="text-xs text-ink-muted">
                       {formatNumber(server.toolCount)} tools
                     </span>
                   )}

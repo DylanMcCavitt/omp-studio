@@ -1,5 +1,9 @@
 # OMP Studio
 
+> **Status: Active development** — OMP Studio is early, pre-1.0 software under
+> heavy iteration. Expect rapid changes, rough edges, and breaking churn: the
+> UI, internal APIs, and on-disk/settings formats are **not yet stable**.
+
 A sleek desktop cockpit for the [Oh My Pi (`omp`)](https://github.com/can1357/oh-my-pi)
 coding-agent harness — live agent chat, dashboards, and browsers for everything
 `omp` knows about, in one native window.

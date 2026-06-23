@@ -74,7 +74,7 @@ export function AddWorkspaceDialog({ onClose }: { onClose: () => void }) {
           >
             <FolderOpen className="h-4 w-4 shrink-0 text-ink-muted" />
             <span
-              className={cn("truncate", cwd ? "text-ink" : "text-ink-faint")}
+              className={cn("truncate", cwd ? "text-ink" : "text-ink-muted")}
             >
               {cwd ?? "Choose a project directory"}
             </span>

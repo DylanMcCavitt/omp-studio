@@ -110,7 +110,7 @@ export default function Linear() {
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">Linear</h1>
-          <p className="truncate text-sm text-ink-muted">
+          <p className="text-sm text-ink-muted">
             {authed && status?.viewer
               ? `Connected as ${status.viewer.name}`
               : "Browse issues, projects, and teams"}
