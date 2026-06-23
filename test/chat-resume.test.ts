@@ -50,7 +50,7 @@ function makeState(over: Partial<RpcState> = {}): RpcState {
   };
 }
 
-function makeSummary(path: string): SessionSummary {
+function makeSummary(path: string, sizeBytes = 128): SessionSummary {
   return {
     id: "sum",
     path,
@@ -60,7 +60,7 @@ function makeSummary(path: string): SessionSummary {
     createdAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
     messageCount: 0,
-    sizeBytes: 0,
+    sizeBytes,
   };
 }
 
@@ -306,15 +306,19 @@ test("a failed resume surfaces an error row and leaves no zombie transcript", as
   expect(s.hibernatedSessions.A?.resuming).toBeFalsy();
 });
 
-test("a missing JSONL surfaces an error row WITHOUT spawning a child", async () => {
+test("a missing JSONL (empty placeholder) surfaces an error row WITHOUT spawning", async () => {
   const A = descriptor({
     studioSessionId: "A",
     sessionFile: "/sessions/gone.jsonl",
   });
   useChatStore.setState({ hibernatedSessions: { A: { descriptor: A } } });
-  h.readSession = async () => {
-    throw new Error("ENOENT: no such file");
-  };
+  // main's readSession degrades to an EMPTY PLACEHOLDER (sizeBytes 0, no
+  // messages) for a deleted file instead of throwing — the resume flow must
+  // detect that and refuse to spawn a fabricated/empty session.
+  h.readSession = async (path) => ({
+    summary: makeSummary(path, 0),
+    messages: [],
+  });
   let resumeCalled = false;
   h.resume = async (d) => {
     resumeCalled = true;
@@ -327,7 +331,31 @@ test("a missing JSONL surfaces an error row WITHOUT spawning a child", async () 
   // No fabricated transcript: nothing went live and no spawn was attempted.
   expect(resumeCalled).toBe(false);
   expect(s.openSessions.A).toBeUndefined();
-  expect(s.hibernatedSessions.A?.error).toMatch(/ENOENT/);
+  expect(s.hibernatedSessions.A?.error).toMatch(/transcript not found/i);
+  expect(s.hibernatedSessions.A?.resuming).toBeFalsy();
+});
+
+test("a readSession throw surfaces an error row WITHOUT spawning", async () => {
+  const A = descriptor({
+    studioSessionId: "A",
+    sessionFile: "/sessions/locked.jsonl",
+  });
+  useChatStore.setState({ hibernatedSessions: { A: { descriptor: A } } });
+  h.readSession = async () => {
+    throw new Error("EACCES: permission denied");
+  };
+  let resumeCalled = false;
+  h.resume = async (d) => {
+    resumeCalled = true;
+    return { sessionId: d.studioSessionId, state: makeState() };
+  };
+
+  await useChatStore.getState().resumeSession("A");
+
+  const s = useChatStore.getState();
+  expect(resumeCalled).toBe(false);
+  expect(s.openSessions.A).toBeUndefined();
+  expect(s.hibernatedSessions.A?.error).toMatch(/EACCES/);
 });
 
 // --- remove ----------------------------------------------------------------

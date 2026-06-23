@@ -9,6 +9,7 @@
 // (subscriptions, IPC calls, optimistic appends) and feeds their results back as
 // studio control frames so there is exactly one place that mutates a slice.
 
+import type { SessionTranscript } from "@shared/domain";
 import type {
   ChatCreateOptions,
   ChatLifecycleEvent,
@@ -166,6 +167,16 @@ function errorMessage(e: unknown): string {
   return String(e);
 }
 
+// readSession degrades to an EMPTY PLACEHOLDER (sizeBytes 0, no messages)
+// instead of throwing when a JSONL is missing/unreadable, so a deleted
+// transcript must be detected from the result — otherwise resume would promote
+// an empty session and (via the ompSessionId fallback) spawn a child against a
+// transcript that no longer exists. A real session file always has bytes (at
+// least a header); only the placeholder reports zero.
+function transcriptIsMissing(t: SessionTranscript): boolean {
+  return t.summary.sizeBytes === 0 && t.messages.length === 0;
+}
+
 // Build the optimistic user message appended to the transcript before the prompt
 // round-trips. With attachments the content becomes ordered blocks (text first,
 // then images) so MessageBubble can render the image blocks; image-only prompts
@@ -303,23 +314,33 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }));
 
     // 1) Hydrate the transcript from JSONL FIRST (fast, local read) so history
-    //    is visible the instant the slice mounts. A missing/unreadable JSONL is
-    //    an honest failure: surface the error row and never spawn a child or
-    //    fabricate a transcript.
+    //    is visible the instant the slice mounts. readSession degrades to an
+    //    empty PLACEHOLDER (no throw) when the file is missing/unreadable, so a
+    //    deleted JSONL is detected from the result. Either failure is honest:
+    //    surface the error row, register NO optimistic slice, and do NOT spawn
+    //    (never fabricate a transcript).
     let hydrated: OmpMessage[] = [];
     if (descriptor.sessionFile) {
-      try {
-        const transcript = await window.omp.readSession(descriptor.sessionFile);
-        hydrated = transcript.messages;
-      } catch (e) {
+      const failResume = (message: string): void => {
         set((s) => ({
           hibernatedSessions: {
             ...s.hibernatedSessions,
-            [id]: { descriptor, error: errorMessage(e) },
+            [id]: { descriptor, error: message },
           },
         }));
+      };
+      let transcript: SessionTranscript;
+      try {
+        transcript = await window.omp.readSession(descriptor.sessionFile);
+      } catch (e) {
+        failResume(errorMessage(e));
         return;
       }
+      if (transcriptIsMissing(transcript)) {
+        failResume(`Session transcript not found: ${descriptor.sessionFile}`);
+        return;
+      }
+      hydrated = transcript.messages;
     }
 
     // 2) Show the hydrated history immediately: register an optimistic live
