@@ -242,16 +242,31 @@ export class BrowserViewManager {
 
   private wire(id: string, view: ManagedView): void {
     const wc = view.webContents;
-    // Block disallowed in-page navigations the loaded content itself initiates
-    // (loadURL is policed separately in load(); will-navigate does not fire for
-    // main-process loads).
-    wc.on("will-navigate", (...args) => {
-      const event = args[0] as { url: string; preventDefault(): void };
-      if (!isUrlAllowed(event.url, this.allowlist)) {
-        log.warn("blocked will-navigate", { id, url: event.url });
-        event.preventDefault();
-      }
-    });
+    // Police EVERY navigation the loaded content can trigger against the same
+    // scheme + allowlist gate, not just the user/page in-page navigation:
+    //   - will-navigate       — page- or user-initiated navigations
+    //   - will-redirect       — server-side 30x redirects (an allowlisted page
+    //                           could otherwise 302 the view to a blocked host)
+    //   - will-frame-navigate — subframe navigations (the allowlist must cover
+    //                           ALL loaded web content, frames included)
+    // loadURL is policed separately in load(); none of these fire for the
+    // main-process load() call itself.
+    const guard = (eventName: string): void => {
+      wc.on(eventName, (...args) => {
+        const event = args[0] as { url: string; preventDefault(): void };
+        if (!isUrlAllowed(event.url, this.allowlist)) {
+          log.warn("blocked navigation", {
+            id,
+            event: eventName,
+            url: event.url,
+          });
+          event.preventDefault();
+        }
+      });
+    };
+    guard("will-navigate");
+    guard("will-redirect");
+    guard("will-frame-navigate");
     // Deny every popup / new window inside the embedded view; open an allowed
     // target in the OS browser instead. The view never spawns child windows.
     wc.setWindowOpenHandler(({ url }) => {

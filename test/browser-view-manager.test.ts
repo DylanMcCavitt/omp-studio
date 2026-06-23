@@ -233,6 +233,43 @@ test("will-navigate is prevented for disallowed targets, allowed otherwise", () 
   expect(prevented).toBe(false);
 });
 
+test("will-redirect and will-frame-navigate are gated like will-navigate", () => {
+  const { manager, created } = harness(["example.com"]);
+  manager.create({ url: "https://example.com", bounds: BOUNDS });
+  const wc = wcOf(created[0]);
+
+  // A 30x redirect from an allowlisted page to a disallowed host is blocked.
+  let prevented = false;
+  wc.emit("will-redirect", {
+    url: "https://evil.com",
+    preventDefault: () => {
+      prevented = true;
+    },
+  });
+  expect(prevented).toBe(true);
+
+  // A subframe navigation to a disallowed host is blocked too.
+  prevented = false;
+  wc.emit("will-frame-navigate", {
+    url: "https://tracker.example.org",
+    isMainFrame: false,
+    preventDefault: () => {
+      prevented = true;
+    },
+  });
+  expect(prevented).toBe(true);
+
+  // An allowlisted redirect target passes through untouched.
+  prevented = false;
+  wc.emit("will-redirect", {
+    url: "https://example.com/after",
+    preventDefault: () => {
+      prevented = true;
+    },
+  });
+  expect(prevented).toBe(false);
+});
+
 test("setWindowOpenHandler always denies; opens allowed targets externally", () => {
   const { manager, created, openedExternally } = harness(["example.com"]);
   manager.create({ url: "https://example.com", bounds: BOUNDS });
