@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { resetWorkspaceFilesWithConfirm } from "@/store/files";
 import { useShellStore } from "@/store/shell";
 
 // Source of truth for the set of shell destinations. `lib/nav-registry.ts` keys
@@ -52,12 +53,16 @@ interface AppState {
   clearPendingComposerText: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>((set, get) => ({
   route: "dashboard",
   setRoute: (route) => set({ route }),
 
   selectedProject: null,
-  setSelectedProject: (selectedProject) => set({ selectedProject }),
+  setSelectedProject: (selectedProject) => {
+    if (get().selectedProject === selectedProject) return;
+    if (!resetWorkspaceFilesWithConfirm(selectedProject)) return;
+    set({ selectedProject });
+  },
 
   sessionFocus: null,
   focusSession: (sessionFocus) => {
