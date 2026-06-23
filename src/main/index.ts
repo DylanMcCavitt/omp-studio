@@ -4,11 +4,13 @@ import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { registerChatIpc } from "./ipc/chat";
 import { registerDataIpc } from "./ipc/data";
 import { registerSettingsIpc } from "./ipc/settings";
+import { scoped } from "./logger";
 import { SessionRegistry } from "./omp/registry";
 import { setSettingsDir } from "./services/settings-service";
 
 let mainWindow: BrowserWindow | null = null;
 const registry = new SessionRegistry();
+const log = scoped("main");
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -38,14 +40,14 @@ function createWindow(): void {
   // Production diagnostics: surface renderer crashes and error-level console
   // output to the main-process log (also used as a boot smoke-test signal).
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
-    console.error(`[renderer] process gone: ${details.reason}`);
+    log.error("renderer process gone", { reason: details.reason });
   });
   mainWindow.webContents.on("console-message", (_event, level, message) => {
-    if (level >= 2) console.error(`[renderer] ${message}`);
+    if (level >= 2) log.error(`renderer: ${message}`);
   });
   mainWindow.webContents.on("did-finish-load", () => {
-    console.log("[omp-studio] renderer loaded");
-    if (smoke) console.log("[omp-studio] smoke ok");
+    log.info("renderer loaded");
+    if (smoke) log.info("smoke ok");
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

@@ -19,8 +19,11 @@ import type {
   RpcState,
   ThinkingLevel,
 } from "@shared/rpc";
+import { scoped } from "../logger";
 import { updateSettings } from "../services/settings-service";
 import { OmpRpcSession } from "./rpc-session";
+
+const log = scoped("registry");
 
 /** The fully-resolved spawn config handed to the session factory. */
 export interface SpawnSessionOptions {
@@ -260,7 +263,7 @@ export class SessionRegistry {
       await this.store.save(this.descriptors());
     } catch (error) {
       // A settings-write failure must not tear down a live session.
-      console.warn("[registry] failed to persist open sessions:", error);
+      log.warn("failed to persist open sessions", { error });
     }
   }
 }
