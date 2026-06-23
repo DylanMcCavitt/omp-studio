@@ -90,6 +90,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const current = get().settings;
     if (!current) return;
     const base = current.workspaces ?? [];
+    const target = base.find((w) => w.id === id);
     const { pinned, ...fields } = patch;
     let workspaces =
       pinned === undefined ? base : pinWorkspace(base, id, pinned);
@@ -98,6 +99,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         w.id === id ? { ...w, ...fields } : w,
       );
     }
-    await get().update({ workspaces });
+    const settingsPatch: Partial<StudioSettings> = { workspaces };
+    // Re-pointing a workspace's cwd: keep cwd unique (drop any other entry that
+    // now collides) and carry the default with it so its badge + new-chat seed
+    // don't go stale against the old path.
+    if (patch.cwd !== undefined && target) {
+      settingsPatch.workspaces = workspaces.filter(
+        (w) => w.id === id || w.cwd !== patch.cwd,
+      );
+      if (current.defaultProject === target.cwd) {
+        settingsPatch.defaultProject = patch.cwd;
+      }
+    }
+    await get().update(settingsPatch);
   },
 }));

@@ -100,6 +100,35 @@ it("upsertWorkspace leaves sibling workspaces untouched on refresh", () => {
   expect(out.find((w) => w.id === "b")).toEqual(b);
 });
 
+it("upsertWorkspace heals duplicates: refreshing a cwd drops other entries sharing it", () => {
+  const a = ws({
+    id: "a",
+    cwd: "/dup",
+    label: "A",
+    lastUsedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const b = ws({
+    id: "b",
+    cwd: "/dup",
+    label: "B",
+    lastUsedAt: "2026-01-02T00:00:00.000Z",
+  });
+  const c = ws({
+    id: "c",
+    cwd: "/other",
+    lastUsedAt: "2026-01-03T00:00:00.000Z",
+  });
+  const out = upsertWorkspace([a, b, c], "/dup", {
+    now: "2026-05-01T00:00:00.000Z",
+  });
+  // The first /dup match is refreshed in place; the second is dropped; /other untouched.
+  expect(out.map((w) => w.id)).toEqual(["a", "c"]);
+  expect(out.find((w) => w.id === "a")?.lastUsedAt).toBe(
+    "2026-05-01T00:00:00.000Z",
+  );
+  expect(out.find((w) => w.id === "c")).toEqual(c);
+});
+
 it("pinWorkspace flips only the targeted id", () => {
   const a = ws({ id: "a", cwd: "/p/a", pinned: false });
   const b = ws({ id: "b", cwd: "/p/b", pinned: false });

@@ -39,9 +39,16 @@ export function upsertWorkspace(
   const label = opts.label?.trim();
   const existing = list.find((w) => w.cwd === cwd);
   if (existing) {
-    return list.map((w) =>
-      w === existing ? { ...w, lastUsedAt: now, label: label || w.label } : w,
-    );
+    const refreshed: Workspace = {
+      ...existing,
+      lastUsedAt: now,
+      label: label || existing.label,
+    };
+    // Keep exactly one entry per cwd: replace the matched workspace in place
+    // and drop any other entry that already shares this cwd (collision-healing).
+    return list
+      .filter((w) => w === existing || w.cwd !== cwd)
+      .map((w) => (w === existing ? refreshed : w));
   }
   const entry: Workspace = {
     id: opts.id ?? crypto.randomUUID(),

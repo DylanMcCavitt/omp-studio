@@ -63,6 +63,15 @@ test("round-trips save then load", async () => {
     recentProjects: [
       { cwd: "/work/app", label: "app", lastUsedAt: "2026-01-01T00:00:00Z" },
     ],
+    workspaces: [
+      {
+        id: "ws-1",
+        cwd: "/work/app",
+        label: "app",
+        pinned: true,
+        lastUsedAt: "2026-01-01T00:00:00Z",
+      },
+    ],
     openSessions: [
       {
         studioSessionId: "s1",
@@ -218,6 +227,44 @@ test("migrate upgrades a V1 object to V2: version bump, workspaces synthesised 1
   expect(migrated.linear).toBeUndefined();
   expect(migrated.terminal).toBeUndefined();
   expect(migrated.browser).toBeUndefined();
+});
+
+test("migrate synthesises workspaces for a v2 file written before the workspaces key existed", () => {
+  const migrated = migrate({
+    version: 2,
+    theme: "dark",
+    recentProjects: [
+      { cwd: "/a", label: "A", lastUsedAt: "t1" },
+      { cwd: "/b", label: "B", lastUsedAt: "t2" },
+    ],
+    // No `workspaces` key — the picker would otherwise load empty.
+  });
+  expect(migrated.version).toBe(2);
+  expect(migrated.workspaces).toEqual([
+    {
+      id: expect.any(String),
+      cwd: "/a",
+      label: "A",
+      pinned: false,
+      lastUsedAt: "t1",
+    },
+    {
+      id: expect.any(String),
+      cwd: "/b",
+      label: "B",
+      pinned: false,
+      lastUsedAt: "t2",
+    },
+  ]);
+});
+
+test("migrate honours an explicit empty workspaces array on a v2 file (no resynthesis)", () => {
+  const migrated = migrate({
+    version: 2,
+    recentProjects: [{ cwd: "/a", label: "A", lastUsedAt: "t1" }],
+    workspaces: [],
+  });
+  expect(migrated.workspaces).toEqual([]);
 });
 
 test("loadSettings reads a legacy V1 file from disk as V2", async () => {

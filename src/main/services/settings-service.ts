@@ -470,8 +470,16 @@ export function migrate(raw: unknown): StudioSettings {
   switch (raw.version) {
     case 1:
       return migrateV1(raw);
-    case 2:
-      return mergeKnown(defaultSettings(), raw);
+    case 2: {
+      const next = mergeKnown(defaultSettings(), raw);
+      // A v2 file written before workspaces existed carries recentProjects but
+      // no `workspaces` key — synthesize them 1:1 (as the v1 path does) so the
+      // picker isn't empty. An explicit `workspaces: []` is an honoured clear.
+      if (raw.workspaces === undefined && next.recentProjects.length > 0) {
+        next.workspaces = next.recentProjects.map(workspaceFromRecent);
+      }
+      return next;
+    }
     default:
       log.warn("unknown settings version; using defaults", {
         version: String(raw.version),

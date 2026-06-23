@@ -113,6 +113,38 @@ it("updateWorkspace merges editable fields (label + cwd) by id", async () => {
   });
 });
 
+it("updateWorkspace re-points the default workspace's cwd and carries defaultProject with it", async () => {
+  const a = ws({ id: "a", cwd: "/p/a" });
+  const update = seed({ ...BASE, workspaces: [a], defaultProject: "/p/a" });
+  await useSettingsStore.getState().updateWorkspace("a", { cwd: "/p/moved" });
+
+  const patch = update.mock.calls.at(-1)?.[0] as Partial<StudioSettings>;
+  expect(patch.workspaces?.[0]).toMatchObject({ id: "a", cwd: "/p/moved" });
+  expect(patch.defaultProject).toBe("/p/moved");
+});
+
+it("updateWorkspace leaves defaultProject untouched when re-pointing a non-default workspace", async () => {
+  const a = ws({ id: "a", cwd: "/p/a" });
+  const b = ws({ id: "b", cwd: "/p/b" });
+  const update = seed({ ...BASE, workspaces: [a, b], defaultProject: "/p/b" });
+  await useSettingsStore.getState().updateWorkspace("a", { cwd: "/p/moved" });
+
+  const patch = update.mock.calls.at(-1)?.[0] as Partial<StudioSettings>;
+  expect("defaultProject" in patch).toBe(false);
+});
+
+it("updateWorkspace re-pointing onto another workspace's cwd drops the collision", async () => {
+  const a = ws({ id: "a", cwd: "/p/a" });
+  const b = ws({ id: "b", cwd: "/p/b" });
+  const update = seed({ ...BASE, workspaces: [a, b] });
+  await useSettingsStore.getState().updateWorkspace("a", { cwd: "/p/b" });
+
+  const patch = update.mock.calls.at(-1)?.[0] as Partial<StudioSettings>;
+  // The edited workspace keeps its identity at the new cwd; "b" is dropped.
+  expect(patch.workspaces?.map((w) => w.id)).toEqual(["a"]);
+  expect(patch.workspaces?.[0]).toMatchObject({ id: "a", cwd: "/p/b" });
+});
+
 it("removeWorkspace drops by id and clears a default pointing at its cwd", async () => {
   const a = ws({ id: "a", cwd: "/p/a" });
   const b = ws({ id: "b", cwd: "/p/b" });
