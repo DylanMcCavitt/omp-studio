@@ -22,6 +22,7 @@
     "lint": "biome lint .",
     "check": "biome check .",
     "test:rpc": "bun test test/rpc-bridge.test.ts",
+    "test:ui": "vitest run",
     "test:e2e": "playwright test",
     "dist": "electron-vite build && electron-builder",
     "dist:dir": "electron-vite build && electron-builder --dir",
@@ -33,6 +34,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
     "@playwright/test": "^1.61.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22.10.2",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
@@ -42,6 +46,7 @@
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "jsdom": "^25.0.1",
     "lucide-react": "^0.468.0",
     "postcss": "^8.4.49",
     "react": "^18.3.1",
@@ -52,6 +57,7 @@
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
+    "vitest": "^2.1.9",
     "zustand": "^5.0.2"
   },
   "build": {
