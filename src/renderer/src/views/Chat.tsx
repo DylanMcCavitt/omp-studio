@@ -6,7 +6,7 @@
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
 import type { ImageContent, RpcModel, ThinkingLevel } from "@shared/rpc";
-import { FolderOpen, MessageSquarePlus, Sparkles } from "lucide-react";
+import { MessageSquarePlus, Plus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
@@ -20,8 +20,10 @@ import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
 import { Badge, Button, Combobox, Panel, Spinner } from "@/components/ui";
+import { AddWorkspaceDialog } from "@/components/workspace/AddWorkspaceDialog";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
+import { sortWorkspaces } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
 import { useActiveSession, useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
@@ -68,6 +70,8 @@ function StartPanel() {
   const send = useChatStore((s) => s.send);
   const { data: models, loading } = useAsync(() => window.omp.listModels(), []);
   const [model, setModel] = useState("");
+  const recordWorkspace = useSettingsStore((s) => s.recordWorkspace);
+  const [adding, setAdding] = useState(false);
 
   // Seed the project picker from the saved default the first time it is unset.
   useEffect(() => {
@@ -123,34 +127,44 @@ function StartPanel() {
             Start a new session
           </h1>
           <p className="mt-1 text-sm text-ink-muted">
-            Pick a project directory, choose a model, and describe the task.
+            Pick a workspace, choose a model, and describe the task.
           </p>
         </div>
 
         <Panel title="New session" bodyClassName="space-y-4">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-              Project directory
+              Workspace
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                void window.omp.pickDirectory().then((dir) => {
-                  if (dir) setSelectedProject(dir);
-                });
-              }}
-              className="flex w-full items-center gap-2 rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-left text-sm hover:bg-bg-hover"
-            >
-              <FolderOpen className="h-4 w-4 shrink-0 text-ink-muted" />
-              <span
-                className={cn(
-                  "truncate",
-                  selectedProject ? "text-ink" : "text-ink-faint",
-                )}
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <Combobox
+                  aria-label="Workspace"
+                  value={selectedProject ?? ""}
+                  onChange={(cwd) => {
+                    setSelectedProject(cwd);
+                    void recordWorkspace(cwd);
+                  }}
+                  placeholder="Select a workspace"
+                  searchPlaceholder="Search workspaces…"
+                  emptyText="No workspaces yet"
+                  options={sortWorkspaces(settings?.workspaces ?? []).map(
+                    (w) => ({
+                      value: w.cwd,
+                      label: w.label,
+                      description: w.cwd,
+                    }),
+                  )}
+                />
+              </div>
+              <Button
+                variant="subtle"
+                aria-label="Add workspace"
+                onClick={() => setAdding(true)}
               >
-                {selectedProject ?? "Choose a project directory"}
-              </span>
-            </button>
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
           <div>
@@ -201,6 +215,7 @@ function StartPanel() {
             />
           </div>
         </Panel>
+        {adding && <AddWorkspaceDialog onClose={() => setAdding(false)} />}
       </div>
     </div>
   );

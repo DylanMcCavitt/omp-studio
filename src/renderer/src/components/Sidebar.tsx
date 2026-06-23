@@ -1,4 +1,5 @@
 import { Plus } from "lucide-react";
+import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
 import { cn } from "@/lib/cn";
 import { NAV_ENTRIES, NAV_GROUP_ORDER } from "@/lib/nav-registry";
 import { useAppStore } from "@/store/app";
@@ -19,6 +20,10 @@ export function Sidebar() {
           <span className="text-sm font-semibold text-ink">OMP Studio</span>
           <span className="text-xs text-ink-faint">Oh My Pi cockpit</span>
         </div>
+      </div>
+
+      <div className="px-3 pb-3">
+        <WorkspaceSwitcher />
       </div>
 
       <div className="px-3 pb-2">

@@ -460,7 +460,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     set({ creating: true, createError: undefined });
     try {
       const { sessionId, state } = await window.omp.chat.create(opts);
-      void useSettingsStore.getState().recordProject(opts.cwd);
+      void useSettingsStore.getState().recordWorkspace(opts.cwd);
       // Record the spawn-time approval policy for the per-session approval
       // control (approval mode is fixed at spawn — there is no runtime setter).
       useApprovalStore

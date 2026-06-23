@@ -3,16 +3,19 @@ import type {
   ProviderAuthStatus,
   ProviderInfo,
 } from "@shared/domain";
-import type { StudioSettings, ThemeMode } from "@shared/ipc";
+import type { ThemeMode, Workspace } from "@shared/ipc";
 import type { ApprovalMode, ThinkingLevel } from "@shared/rpc";
 import {
   Boxes,
+  Check,
   Cpu,
   ExternalLink,
   FolderOpen,
   FolderTree,
   KeyRound,
   Palette,
+  Pencil,
+  Pin,
   Plus,
   RefreshCw,
   ShieldAlert,
@@ -20,6 +23,7 @@ import {
   Star,
   Trash2,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -32,10 +36,11 @@ import {
   Panel,
   Spinner,
 } from "@/components/ui";
+import { AddWorkspaceDialog } from "@/components/workspace/AddWorkspaceDialog";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
-import { upsertRecentProject } from "@/lib/recent-projects";
 import { type AsyncState, useAsync } from "@/lib/useAsync";
+import { sortWorkspaces } from "@/lib/workspaces";
 import { useSettingsStore } from "@/store/settings";
 
 const PATHS = [
@@ -99,7 +104,7 @@ export default function Settings() {
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">Settings</h1>
           <p className="truncate text-sm text-ink-muted">
-            Defaults, appearance, projects, providers, and harness paths
+            Defaults, appearance, workspaces, providers, and harness paths
           </p>
         </div>
         <IconButton
@@ -129,7 +134,7 @@ export default function Settings() {
             requestDanger={setDanger}
           />
           <AppearancePanel />
-          <ProjectsPanel />
+          <WorkspacesPanel />
           <ProvidersPanel state={providers} />
           <ModelsPanel state={models} />
           <PathsPanel />
@@ -345,26 +350,20 @@ function AppearancePanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Projects
+// Workspaces (first-class projects: pin / set-default / edit label / re-point / remove)
 // ---------------------------------------------------------------------------
 
-function ProjectsPanel() {
+function WorkspacesPanel() {
   const settings = useSettingsStore((s) => s.settings);
   const update = useSettingsStore((s) => s.update);
-
-  const onAdd = () => {
-    void window.omp.pickDirectory().then((dir) => {
-      if (!dir || !settings) return;
-      void update({
-        recentProjects: upsertRecentProject(settings.recentProjects, dir),
-      });
-    });
-  };
+  const updateWorkspace = useSettingsStore((s) => s.updateWorkspace);
+  const removeWorkspace = useSettingsStore((s) => s.removeWorkspace);
+  const [adding, setAdding] = useState(false);
 
   const title = (
     <span className="flex items-center gap-2">
       <FolderOpen className="h-4 w-4 text-accent" />
-      Projects
+      Workspaces
     </span>
   );
 
@@ -378,75 +377,190 @@ function ProjectsPanel() {
     );
   }
 
-  const { recentProjects, defaultProject } = settings;
+  const workspaces = sortWorkspaces(settings.workspaces ?? []);
+  const { defaultProject } = settings;
 
   return (
     <Panel
       title={title}
       actions={
-        <Button size="sm" onClick={onAdd}>
+        <Button size="sm" onClick={() => setAdding(true)}>
           <Plus className="h-3.5 w-3.5" />
           Add
         </Button>
       }
     >
-      {recentProjects.length === 0 ? (
+      {workspaces.length === 0 ? (
         <EmptyState
           icon={<FolderOpen className="h-6 w-6" />}
-          title="No recent projects"
+          title="No workspaces yet"
           hint="Add a project directory to start sessions from it quickly."
         />
       ) : (
         <div className="space-y-0.5">
-          {recentProjects.map((project) => {
-            const isDefault = project.cwd === defaultProject;
-            return (
-              <div key={project.cwd} className="flex items-center gap-2 py-1">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm text-ink">
-                      {project.label}
-                    </span>
-                    {isDefault && <Badge variant="accent">default</Badge>}
-                  </div>
-                  <span className="block truncate font-mono text-xs text-ink-faint">
-                    {project.cwd}
-                  </span>
-                </div>
-                <IconButton
-                  label={isDefault ? "Default project" : "Set as default"}
-                  disabled={isDefault}
-                  onClick={() => void update({ defaultProject: project.cwd })}
-                >
-                  <Star
-                    className={cn(
-                      "h-4 w-4",
-                      isDefault ? "fill-accent text-accent" : "text-ink-faint",
-                    )}
-                  />
-                </IconButton>
-                <IconButton
-                  label="Remove project"
-                  onClick={() => {
-                    const patch: Partial<StudioSettings> = {
-                      recentProjects: recentProjects.filter(
-                        (p) => p.cwd !== project.cwd,
-                      ),
-                    };
-                    if (defaultProject === project.cwd) {
-                      patch.defaultProject = null;
-                    }
-                    void update(patch);
-                  }}
-                >
-                  <Trash2 className="h-4 w-4 text-ink-faint" />
-                </IconButton>
-              </div>
-            );
-          })}
+          {workspaces.map((workspace) => (
+            <WorkspaceRow
+              key={workspace.id}
+              workspace={workspace}
+              isDefault={workspace.cwd === defaultProject}
+              onSetDefault={() =>
+                void update({ defaultProject: workspace.cwd })
+              }
+              onTogglePin={() =>
+                void updateWorkspace(workspace.id, {
+                  pinned: !workspace.pinned,
+                })
+              }
+              onRename={(label) =>
+                void updateWorkspace(workspace.id, { label })
+              }
+              onRepoint={(cwd) => void updateWorkspace(workspace.id, { cwd })}
+              onRemove={() => void removeWorkspace(workspace.id)}
+            />
+          ))}
         </div>
       )}
+      {adding && <AddWorkspaceDialog onClose={() => setAdding(false)} />}
     </Panel>
+  );
+}
+
+function WorkspaceRow({
+  workspace,
+  isDefault,
+  onSetDefault,
+  onTogglePin,
+  onRename,
+  onRepoint,
+  onRemove,
+}: {
+  workspace: Workspace;
+  isDefault: boolean;
+  onSetDefault: () => void;
+  onTogglePin: () => void;
+  onRename: (label: string) => void;
+  onRepoint: (cwd: string) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(workspace.label);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Focus + select the label text whenever the row enters edit mode.
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (next && next !== workspace.label) onRename(next);
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    setDraft(workspace.label);
+    setEditing(false);
+  };
+
+  const repoint = () => {
+    void window.omp.pickDirectory().then((dir) => {
+      if (dir && dir !== workspace.cwd) onRepoint(dir);
+    });
+  };
+
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <div className="min-w-0 flex-1">
+        {editing ? (
+          <input
+            ref={inputRef}
+            value={draft}
+            aria-label="Workspace label"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            className="w-full rounded-md border border-border-subtle bg-bg-raised px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none"
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm text-ink">{workspace.label}</span>
+            {workspace.pinned && <Badge variant="muted">pinned</Badge>}
+            {isDefault && <Badge variant="accent">default</Badge>}
+          </div>
+        )}
+        <span className="block truncate font-mono text-xs text-ink-faint">
+          {workspace.cwd}
+        </span>
+      </div>
+
+      {editing ? (
+        <>
+          <IconButton
+            label="Save label"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={commit}
+          >
+            <Check className="h-4 w-4 text-ink-faint" />
+          </IconButton>
+          <IconButton
+            label="Cancel edit"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={cancel}
+          >
+            <X className="h-4 w-4 text-ink-faint" />
+          </IconButton>
+        </>
+      ) : (
+        <>
+          <IconButton
+            label={workspace.pinned ? "Unpin workspace" : "Pin workspace"}
+            onClick={onTogglePin}
+          >
+            <Pin
+              className={cn(
+                "h-4 w-4",
+                workspace.pinned ? "fill-accent text-accent" : "text-ink-faint",
+              )}
+            />
+          </IconButton>
+          <IconButton
+            label={isDefault ? "Default workspace" : "Set as default"}
+            disabled={isDefault}
+            onClick={onSetDefault}
+          >
+            <Star
+              className={cn(
+                "h-4 w-4",
+                isDefault ? "fill-accent text-accent" : "text-ink-faint",
+              )}
+            />
+          </IconButton>
+          <IconButton
+            label="Edit label"
+            onClick={() => {
+              setDraft(workspace.label);
+              setEditing(true);
+            }}
+          >
+            <Pencil className="h-4 w-4 text-ink-faint" />
+          </IconButton>
+          <IconButton label="Re-point directory" onClick={repoint}>
+            <FolderOpen className="h-4 w-4 text-ink-faint" />
+          </IconButton>
+          <IconButton label="Remove workspace" onClick={onRemove}>
+            <Trash2 className="h-4 w-4 text-ink-faint" />
+          </IconButton>
+        </>
+      )}
+    </div>
   );
 }
 

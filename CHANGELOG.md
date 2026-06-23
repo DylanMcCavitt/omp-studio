@@ -14,6 +14,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   approval approve/deny/input-select round-trips, D3 restart-and-resume, and D2
   two-session concurrency. They are skipped by default so `npm run test:e2e` and
   CI stay non-live, and run against the installed `omp` only when the flag is set.
+- First-class project **workspaces** (feature 1): a sidebar `WorkspaceSwitcher`
+  (Menu popover — pinned, recents, then Add/Manage), an `AddWorkspaceDialog`
+  (directory pick + optional label override), and a Settings **Workspaces**
+  panel (pin, set-default, edit label, re-point cwd, remove). Selecting a
+  workspace points new chats at its cwd and bumps recency; live sessions are
+  untouched and selecting/adding spawns nothing. Persists to
+  `settings.workspaces` (`{id,cwd,label,pinned,lastUsedAt}`) over the existing
+  `settings:*` channels — no new IPC.
 
 ### Changed
 
@@ -32,6 +40,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are tagged `claude`/`managed`. The skills/MCP/agents reads and the dashboard
   now thread the active workspace cwd (falling back to the most-recently-active
   chat session's cwd) instead of the wrong `process.cwd()` project root.
+- Renderer project handling cuts over from `recentProjects` to
+  `settings.workspaces`. `lib/recent-projects.ts` is replaced by
+  `lib/workspaces.ts` (`projectLabel`, `upsertWorkspace`, `pinWorkspace`,
+  `sortWorkspaces`); the Chat start panel's directory picker becomes a
+  `WorkspaceSelect` combobox, Settings' `ProjectsPanel` becomes
+  `WorkspacesPanel`, and the settings store gains
+  `recordWorkspace`/`addWorkspace`/`removeWorkspace`/`updateWorkspace` wrappers
+  over the pessimistic `update`.
 
 ## [0.1.0] - 2026-06-19
 

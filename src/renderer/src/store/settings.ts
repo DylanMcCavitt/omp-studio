@@ -3,9 +3,9 @@
 // pessimistic — it persists through the bridge and adopts the canonical
 // settings the main process returns, so the UI never drifts from disk.
 
-import type { StudioSettings } from "@shared/ipc";
+import type { StudioSettings, Workspace } from "@shared/ipc";
 import { create } from "zustand";
-import { upsertRecentProject } from "@/lib/recent-projects";
+import { pinWorkspace, upsertWorkspace } from "@/lib/workspaces";
 
 interface SettingsState {
   settings: StudioSettings | null;
@@ -15,8 +15,17 @@ interface SettingsState {
   load(): Promise<void>;
   /** Persist a patch and adopt the returned canonical settings. */
   update(patch: Partial<StudioSettings>): Promise<void>;
-  /** Bump a project to the front of the recents list (best-effort). */
-  recordProject(cwd: string): Promise<void>;
+  /** Bump (or create) the workspace for `cwd` to "now" recency (best-effort). */
+  recordWorkspace(cwd: string): Promise<void>;
+  /** Add a workspace from a picked directory, with an optional label override. */
+  addWorkspace(cwd: string, label?: string): Promise<void>;
+  /** Remove the workspace `id`; clears defaultProject if it pointed at its cwd. */
+  removeWorkspace(id: string): Promise<void>;
+  /** Patch a workspace's mutable fields (label / cwd / pinned) by id. */
+  updateWorkspace(
+    id: string,
+    patch: Partial<Pick<Workspace, "label" | "cwd" | "pinned">>,
+  ): Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -46,11 +55,49 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     }
   },
 
-  async recordProject(cwd) {
+  async recordWorkspace(cwd) {
     const current = get().settings;
     if (!current) return;
     await get().update({
-      recentProjects: upsertRecentProject(current.recentProjects, cwd),
+      workspaces: upsertWorkspace(current.workspaces ?? [], cwd),
     });
+  },
+
+  async addWorkspace(cwd, label) {
+    const current = get().settings;
+    if (!current) return;
+    await get().update({
+      workspaces: upsertWorkspace(current.workspaces ?? [], cwd, { label }),
+    });
+  },
+
+  async removeWorkspace(id) {
+    const current = get().settings;
+    if (!current) return;
+    const workspaces = current.workspaces ?? [];
+    const removed = workspaces.find((w) => w.id === id);
+    const patch: Partial<StudioSettings> = {
+      workspaces: workspaces.filter((w) => w.id !== id),
+    };
+    // A removed workspace can no longer be the default target for new chats.
+    if (removed && current.defaultProject === removed.cwd) {
+      patch.defaultProject = null;
+    }
+    await get().update(patch);
+  },
+
+  async updateWorkspace(id, patch) {
+    const current = get().settings;
+    if (!current) return;
+    const base = current.workspaces ?? [];
+    const { pinned, ...fields } = patch;
+    let workspaces =
+      pinned === undefined ? base : pinWorkspace(base, id, pinned);
+    if (Object.keys(fields).length > 0) {
+      workspaces = workspaces.map((w) =>
+        w.id === id ? { ...w, ...fields } : w,
+      );
+    }
+    await get().update({ workspaces });
   },
 }));
