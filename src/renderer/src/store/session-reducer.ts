@@ -23,6 +23,7 @@ import type {
   RpcFrame,
   RpcModel,
   RpcState,
+  SessionStats,
   SubagentInfo,
   ThinkingLevel,
   TodoPhase,
@@ -51,6 +52,13 @@ export interface LiveSessionState {
   lastActivityAt: number;
   /** True while omp is compacting this session's context (Compacting badge). */
   isCompacting: boolean;
+  /**
+   * True while a *manual* compaction (CompactDialog) is in flight. Distinct from
+   * `isCompacting`, which tracks omp's auto-compaction frames — the manual
+   * `compact` command resolves on completion and emits no auto_compaction_*
+   * frames, so the store drives this flag around the in-flight call.
+   */
+  compacting: boolean;
   /** Authoritative transcript (reconciled from get_messages on turn end). */
   messages: OmpMessage[];
   /** In-progress assistant text delta accumulator for the streaming bubble. */
@@ -62,6 +70,8 @@ export interface LiveSessionState {
   model: RpcModel | null;
   thinkingLevel: ThinkingLevel;
   contextUsage?: ContextUsage;
+  /** Latest `get_session_stats` snapshot (tokens/cost/context + future keys). */
+  stats?: SessionStats;
   /** Number of messages queued behind the current turn (steer/follow-up). */
   queuedCount: number;
   /** Name of the tool currently executing, for the activity indicator. */
@@ -85,6 +95,7 @@ export function createSession(
     sessionName: undefined,
     lastActivityAt: 0,
     isCompacting: false,
+    compacting: false,
     messages: [],
     liveText: "",
     liveThinking: "",
@@ -93,6 +104,7 @@ export function createSession(
     model: null,
     thinkingLevel: "medium",
     contextUsage: undefined,
+    stats: undefined,
     queuedCount: 0,
     activeTool: null,
     availableCommands: [],
@@ -129,6 +141,7 @@ const CONTROL = {
   subagents: "studio/subagents",
   userMessage: "studio/user-message",
   uiRequest: "studio/ui-request",
+  stats: "studio/stats",
   uiResolved: "studio/ui-resolved",
 } as const;
 
@@ -140,6 +153,8 @@ const CONTROL = {
 export const studioFrame = {
   /** Apply an authoritative `get_state` snapshot (model/thinking/todos/context). */
   state: (state: RpcState): RpcFrame => ({ type: CONTROL.state, state }),
+  /** Apply a `get_session_stats` snapshot (tokens/cost/context + future keys). */
+  stats: (stats: SessionStats): RpcFrame => ({ type: CONTROL.stats, stats }),
   /** Replace the transcript with an authoritative `get_messages` snapshot. */
   messages: (messages: OmpMessage[]): RpcFrame => ({
     type: CONTROL.messages,
@@ -272,6 +287,18 @@ export function reduceSession(
         queuedCount: rpc.queuedMessageCount ?? state.queuedCount,
         sessionName: rpc.sessionName ?? state.sessionName,
         isCompacting: rpc.isCompacting ?? state.isCompacting,
+      };
+    }
+
+    case CONTROL.stats: {
+      const stats = (frame as { stats?: SessionStats }).stats;
+      if (!stats) return state;
+      // Keep the slice's contextUsage in sync when stats carry a fresher value
+      // (compaction shrinks it), but never clobber a known value with nothing.
+      return {
+        ...state,
+        stats,
+        contextUsage: stats.contextUsage ?? state.contextUsage,
       };
     }
 

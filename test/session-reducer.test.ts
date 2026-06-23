@@ -351,3 +351,37 @@ test("auto_compaction_end clears a seeded compacting flag", () => {
   const ended = reduceSession(seeded, { type: "auto_compaction_end" });
   expect(ended.isCompacting).toBe(false);
 });
+
+test("a stats snapshot stores the permissive stats bag", () => {
+  const stats = {
+    tokens: 1234,
+    cost: 0.05,
+    inputTokens: 1000,
+    outputTokens: 234,
+  } as never;
+  const s = reduceSession(createSession("s1"), studioFrame.stats(stats));
+  expect(s.stats).toBe(stats);
+});
+
+test("a stats snapshot with contextUsage syncs the slice contextUsage", () => {
+  const usage = { tokens: 8000, contextWindow: 200000, percent: 4 };
+  const s = reduceSession(
+    createSession("s1"),
+    studioFrame.stats({ contextUsage: usage } as never),
+  );
+  expect(s.contextUsage).toBe(usage);
+});
+
+test("a stats snapshot without contextUsage keeps the prior value", () => {
+  const usage = { tokens: 100, contextWindow: 1000, percent: 10 };
+  const seeded = createSession("s1", { contextUsage: usage });
+  const s = reduceSession(seeded, studioFrame.stats({ tokens: 42 } as never));
+  expect(s.stats).toEqual({ tokens: 42 });
+  expect(s.contextUsage).toBe(usage);
+});
+
+test("a stats snapshot with no payload is a no-op", () => {
+  const seeded = createSession("s1", { stats: { tokens: 1 } });
+  const s = reduceSession(seeded, { type: "studio/stats" });
+  expect(s).toBe(seeded);
+});

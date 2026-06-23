@@ -5,16 +5,21 @@
 // normalized multi-session store.
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
-import type { RpcModel, ThinkingLevel } from "@shared/rpc";
+import type { ImageContent, RpcModel, ThinkingLevel } from "@shared/rpc";
 import { FolderOpen, MessageSquarePlus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
+import { PromptComposer } from "@/components/chat/PromptComposer";
 import {
   closeSessionWithConfirm,
   SessionRail,
   SessionStatusBadge,
 } from "@/components/chat/SessionRail";
+import {
+  ContextMeterChip,
+  SessionStatsPanel,
+} from "@/components/chat/SessionStatsPanel";
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
@@ -79,10 +84,8 @@ function StartPanel() {
   const settingsLoading = useSettingsStore((s) => s.loading);
   const start = useChatStore((s) => s.start);
   const send = useChatStore((s) => s.send);
-  const creating = useChatStore((s) => s.creating);
   const { data: models, loading } = useAsync(() => window.omp.listModels(), []);
   const [model, setModel] = useState("");
-  const [prompt, setPrompt] = useState("");
 
   // Seed the project picker from the saved default the first time it is unset.
   useEffect(() => {
@@ -105,15 +108,12 @@ function StartPanel() {
     setModel(preferred);
   }, [models, model, settingsLoading, settings?.defaultModel]);
 
-  const spawning = creating;
-  const canStart =
-    Boolean(selectedProject) && prompt.trim() !== "" && !spawning;
-
-  const onStart = async () => {
-    if (!selectedProject || prompt.trim() === "") return;
-    const text = prompt;
-    setPrompt("");
-    await start({
+  const handleStart = async (
+    text: string,
+    images: ImageContent[],
+  ): Promise<boolean> => {
+    if (!selectedProject) return false;
+    const ok = await start({
       cwd: selectedProject,
       model: model || undefined,
       thinkingLevel: settings?.defaultThinkingLevel,
@@ -124,7 +124,10 @@ function StartPanel() {
           }
         : undefined,
     });
-    await send(text);
+    if (!ok) return false;
+    // Return the prompt's acceptance: if session creation succeeds but the
+    // initial send is rejected, the composer keeps text + attachments to retry.
+    return await send(text, images);
   };
 
   return (
@@ -191,30 +194,31 @@ function StartPanel() {
             <label className="mb-1.5 block text-xs font-medium text-ink-muted">
               Prompt
             </label>
-            <textarea
-              value={prompt}
+            <PromptComposer
               rows={5}
+              submitOnEnter={false}
               placeholder="Describe what you want the agent to do…"
-              onChange={(e) => setPrompt(e.target.value)}
-              className="scrollbar w-full resize-none rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              onSubmit={handleStart}
+              actionsPlacement="below"
+              renderActions={({ submit, canSubmit, busy }) => (
+                <Button
+                  variant="primary"
+                  onClick={submit}
+                  disabled={!canSubmit || !selectedProject}
+                  className="w-full justify-center"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    {busy ? (
+                      <Spinner size={14} />
+                    ) : (
+                      <MessageSquarePlus className="h-4 w-4" />
+                    )}
+                    Start session
+                  </span>
+                </Button>
+              )}
             />
           </div>
-
-          <Button
-            variant="primary"
-            onClick={() => void onStart()}
-            disabled={!canStart}
-            className="w-full justify-center"
-          >
-            <span className="flex items-center justify-center gap-1.5">
-              {spawning ? (
-                <Spinner size={14} />
-              ) : (
-                <MessageSquarePlus className="h-4 w-4" />
-              )}
-              Start session
-            </span>
-          </Button>
         </Panel>
       </div>
     </div>
@@ -227,7 +231,6 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const status = useActiveSession((s) => s?.status ?? "idle");
   const model = useActiveSession((s) => s?.model ?? null);
   const thinkingLevel = useActiveSession((s) => s?.thinkingLevel ?? "medium");
-  const contextUsage = useActiveSession((s) => s?.contextUsage);
   const setModel = useChatStore((s) => s.setModel);
   const setThinking = useChatStore((s) => s.setThinking);
   const error = useActiveSession((s) => s?.error);
@@ -272,11 +275,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
             uiRequests={uiRequests}
             isCompacting={isCompacting}
           />
-          {contextUsage && (
-            <span className="ml-auto text-xs text-ink-faint">
-              {Math.round(contextUsage.percent)}% context
-            </span>
-          )}
+          <ContextMeterChip />
         </header>
         {error && status === "error" && (
           <div className="border-b border-danger/30 bg-danger/10 px-4 py-1.5 text-xs text-danger">
@@ -290,6 +289,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
       <aside className="scrollbar w-80 shrink-0 space-y-4 overflow-y-auto border-l border-border-subtle bg-bg-panel/40 p-4">
         <ModelPanel model={model} onChange={setModel} />
         <ThinkingPanel level={thinkingLevel} onChange={setThinking} />
+        <SessionStatsPanel sessionId={sessionId} />
         <TodoPanel />
         <SubagentTree />
       </aside>

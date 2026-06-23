@@ -14,8 +14,11 @@ import type {
   ChatLifecycleEvent,
   ChatUiRequestEvent,
   ChatUiRespondPayload,
+  PromptOptions,
 } from "@shared/ipc";
 import type {
+  ContentBlock,
+  ImageContent,
   RpcFrame,
   RpcState,
   ThinkingLevel,
@@ -68,13 +71,20 @@ interface ChatActions {
     state: RpcState,
     init?: Partial<LiveSessionState>,
   ): Promise<void>;
-  /** Spawn a new rpc-ui session, register it, and make it active. */
-  start(opts: ChatCreateOptions): Promise<void>;
+  /**
+   * Spawn a new rpc-ui session, register it, and make it active. Resolves
+   * `true` on success, `false` if the spawn failed (createError is set).
+   */
+  start(opts: ChatCreateOptions): Promise<boolean>;
 
-  /** Prompt the active session (steers/follow-ups while it streams). */
-  send(text: string): Promise<void>;
-  /** Steer the active session mid-turn. */
-  steer(text: string): Promise<void>;
+  /**
+   * Prompt the active session, optionally with image attachments (follows up
+   * while it streams). Resolves `true` once the prompt is accepted by the
+   * bridge, `false` if there was nothing to send or the IPC call failed.
+   */
+  send(text: string, images?: ImageContent[]): Promise<boolean>;
+  /** Steer the active session mid-turn, optionally with image attachments. */
+  steer(text: string, images?: ImageContent[]): Promise<boolean>;
   /** Abort the active session's current turn. */
   abort(): Promise<void>;
   setModel(provider: string, modelId: string): Promise<void>;
@@ -87,6 +97,14 @@ interface ChatActions {
    * timeout) where the bridge either expects no reply or has already settled.
    */
   dismissUiRequest(sessionId: string, requestId: string): void;
+  /** Pull a fresh `get_session_stats` snapshot into the session slice. */
+  refreshStats(sessionId: string): Promise<void>;
+  /**
+   * Compact a session's context (optionally steering the summary). Marks the
+   * slice compacting for the duration, then refreshes state + stats once omp
+   * reports completion. Compaction changes context only — the JSONL is untouched.
+   */
+  compact(sessionId: string, instructions?: string): Promise<void>;
 
   _handleFrame(sessionId: string, frame: RpcFrame): void;
   _handleLifecycle(e: ChatLifecycleEvent): void;
@@ -105,6 +123,22 @@ export type ChatStore = ChatState & ChatActions;
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+// Build the optimistic user message appended to the transcript before the prompt
+// round-trips. With attachments the content becomes ordered blocks (text first,
+// then images) so MessageBubble can render the image blocks; image-only prompts
+// omit the text block entirely.
+function buildUserMessage(text: string, images?: ImageContent[]): UserMessage {
+  if (!images || images.length === 0) {
+    return { role: "user", content: text, timestamp: Date.now() };
+  }
+  const content: ContentBlock[] = [];
+  if (text.trim() !== "") content.push({ type: "text", text });
+  for (const image of images) {
+    content.push({ type: "image", data: image.data, mimeType: image.mimeType });
+  }
+  return { role: "user", content, timestamp: Date.now() };
 }
 
 export const useChatStore = create<ChatStore>()((set, get) => ({
@@ -206,6 +240,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     } catch {
       // subagents are best-effort
     }
+
+    // Populate stats for an already-running session (e.g. resumed mid-chat) so
+    // the panel/meter show usage immediately rather than waiting for a turn end.
+    void get().refreshStats(sessionId);
   },
 
   async start(opts) {
@@ -226,52 +264,61 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       // Register + activate before hydrating so the new pane shows instantly.
       get().openChat(sessionId);
       await get().openSession(sessionId, state, { cwd: opts.cwd });
+      return true;
     } catch (e) {
       set({ creating: false, createError: errorMessage(e) });
+      return false;
     }
   },
 
-  async send(text) {
+  async send(text, images) {
     const id = get().activeSessionId;
-    const trimmed = text.trim();
-    if (!id || !trimmed) return;
-    const userMsg: UserMessage = {
-      role: "user",
-      content: text,
-      timestamp: Date.now(),
-    };
-    get()._patch(id, (s) => reduceSession(s, studioFrame.userMessage(userMsg)));
+    const hasImages = Boolean(images && images.length > 0);
+    if (!id || (text.trim() === "" && !hasImages)) return false;
+    get()._patch(id, (s) =>
+      reduceSession(s, studioFrame.userMessage(buildUserMessage(text, images))),
+    );
     try {
-      if (get().openSessions[id]?.status === "streaming") {
-        await window.omp.chat.prompt(id, text, {
-          streamingBehavior: "followUp",
-        });
-      } else {
-        await window.omp.chat.prompt(id, text);
-      }
+      const streaming = get().openSessions[id]?.status === "streaming";
+      const promptOpts: PromptOptions | undefined = streaming
+        ? { streamingBehavior: "followUp", images }
+        : hasImages
+          ? { images }
+          : undefined;
+      await window.omp.chat.prompt(id, text, promptOpts);
+      return true;
     } catch (e) {
       get()._patch(id, (s) => ({
         ...s,
         status: "error",
         error: errorMessage(e),
       }));
+      return false;
     }
   },
 
-  async steer(text) {
+  async steer(text, images) {
     const id = get().activeSessionId;
-    const trimmed = text.trim();
-    if (!id || !trimmed) return;
-    const userMsg: UserMessage = {
-      role: "user",
-      content: text,
-      timestamp: Date.now(),
-    };
-    get()._patch(id, (s) => reduceSession(s, studioFrame.userMessage(userMsg)));
+    const hasImages = Boolean(images && images.length > 0);
+    if (!id || (text.trim() === "" && !hasImages)) return false;
+    get()._patch(id, (s) =>
+      reduceSession(s, studioFrame.userMessage(buildUserMessage(text, images))),
+    );
     try {
-      await window.omp.chat.steer(id, text);
+      if (hasImages) {
+        // chat.steer carries no images; the prompt command with a "steer"
+        // streamingBehavior is the image-capable steer path.
+        await window.omp.chat.prompt(id, text, {
+          streamingBehavior: "steer",
+          images,
+        });
+      } else {
+        await window.omp.chat.steer(id, text);
+      }
+      return true;
     } catch (e) {
       get()._patch(id, (s) => ({ ...s, error: errorMessage(e) }));
+      return false;
     }
   },
 
@@ -335,6 +382,35 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     );
   },
 
+  async refreshStats(sessionId) {
+    if (!get().openSessions[sessionId]) return;
+    try {
+      const stats = await window.omp.chat.getSessionStats(sessionId);
+      get()._patch(sessionId, (s) =>
+        reduceSession(s, studioFrame.stats(stats)),
+      );
+    } catch {
+      // Stats are best-effort (the bridge degrades to {} on older omp builds);
+      // leave the prior slice untouched on a transient failure.
+    }
+  },
+
+  async compact(sessionId, instructions) {
+    if (!get().openSessions[sessionId]) return;
+    get()._patch(sessionId, (s) => ({ ...s, compacting: true }));
+    try {
+      await window.omp.chat.compact(sessionId, instructions);
+    } catch (e) {
+      get()._patch(sessionId, (s) => ({ ...s, error: errorMessage(e) }));
+    } finally {
+      get()._patch(sessionId, (s) => ({ ...s, compacting: false }));
+      // Compaction shrinks context + may change token accounting; pull fresh
+      // state and stats so the panel/meter reflect the post-compaction window.
+      await get()._refreshState(sessionId);
+      await get().refreshStats(sessionId);
+    }
+  },
+
   _handleFrame(sessionId, frame) {
     if (!get().openSessions[sessionId]) return;
     get()._patch(sessionId, (s) => reduceSession(s, frame));
@@ -344,6 +420,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       case "agent_end":
       case "turn_end":
         void get()._refresh(sessionId);
+        // Stats settle at turn end (tokens/cost/context); pull a fresh snapshot.
+        // Event-driven, not polled — one fetch per turn boundary.
+        void get().refreshStats(sessionId);
         break;
       case "todo_reminder":
       case "todo_auto_clear":
