@@ -7,6 +7,7 @@ import type {
   ToolCallBlock,
 } from "@shared/rpc";
 import {
+  Archive,
   FolderGit2,
   Inbox,
   MessagesSquare,
@@ -16,6 +17,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Highlight } from "@/components/search/Highlight";
+import {
+  type SessionActionResult,
+  SessionActionsMenu,
+} from "@/components/session/SessionActionsMenu";
 import { Badge, EmptyState, IconButton, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
@@ -133,9 +138,11 @@ function MessageBlock({ message }: { message: OmpMessage }) {
 function SessionDetail({
   path,
   focusIndex,
+  onChanged,
 }: {
   path: string;
   focusIndex: number | null;
+  onChanged?: (result: SessionActionResult) => void;
 }) {
   const { data, loading, error } = useAsync(
     () => window.omp.readSession(path),
@@ -181,23 +188,35 @@ function SessionDetail({
   const { summary, messages } = data;
   return (
     <div ref={containerRef} className="p-6">
-      <div className="mb-4 border-b border-border pb-3">
-        <h2 className="text-base font-semibold text-ink">
-          {summary.title || "(untitled)"}
-        </h2>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
-          <span>{summary.project}</span>
-          <span>·</span>
-          <span>{formatDateTime(summary.updatedAt)}</span>
-          <span>·</span>
-          <span>{formatNumber(summary.messageCount)} messages</span>
-          {summary.model && (
-            <>
-              <span>·</span>
-              <Badge variant="muted">{summary.model}</Badge>
-            </>
-          )}
+      <div className="mb-4 flex items-start justify-between gap-3 border-b border-border pb-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-ink">
+            {summary.title || "(untitled)"}
+          </h2>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
+            {summary.archived && <Badge variant="muted">Archived</Badge>}
+            <span>{summary.project}</span>
+            <span>·</span>
+            <span>{formatDateTime(summary.updatedAt)}</span>
+            <span>·</span>
+            <span>{formatNumber(summary.messageCount)} messages</span>
+            {summary.model && (
+              <>
+                <span>·</span>
+                <Badge variant="muted">{summary.model}</Badge>
+              </>
+            )}
+          </div>
         </div>
+        <SessionActionsMenu
+          target={{
+            path: summary.path,
+            title: summary.title,
+            archived: Boolean(summary.archived),
+          }}
+          onChanged={onChanged}
+          className="h-8 w-8 shrink-0"
+        />
       </div>
       {messages.length === 0 ? (
         <EmptyState
@@ -225,8 +244,11 @@ function SessionDetail({
 }
 
 export default function Sessions() {
-  const { data, loading, error, reload } = useAsync(() =>
-    window.omp.listSessions(),
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [detailRefresh, setDetailRefresh] = useState(0);
+  const { data, loading, error, reload } = useAsync(
+    () => window.omp.listSessions({ includeArchived }),
+    [includeArchived],
   );
   const [query, setQuery] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -255,9 +277,11 @@ export default function Sessions() {
     hits: SessionSearchHit[];
   }>(async () => {
     const q = debouncedQuery;
-    const hits = q.trim() ? await window.omp.searchSessions(q) : [];
+    const hits = q.trim()
+      ? await window.omp.searchSessions(q, { includeArchived })
+      : [];
     return { query: q, hits };
-  }, [debouncedQuery]);
+  }, [debouncedQuery, includeArchived]);
   // useAsync keeps the previous data while a new query loads; bind hits to the
   // query that produced them so a stale result set is never shown or clicked.
   const hitGroups = useMemo(() => {
@@ -285,6 +309,17 @@ export default function Sessions() {
   const openSummary = (path: string) => {
     setSelectedPath(path);
     setFocusIndex(null);
+  };
+
+  const handleSessionChanged = (result: SessionActionResult) => {
+    void reload();
+    if (result.kind === "renamed") {
+      setDetailRefresh((n) => n + 1);
+    } else {
+      // deleted / archived / unarchived: the file moved or is gone.
+      setSelectedPath(null);
+      setFocusIndex(null);
+    }
   };
 
   const groups = useMemo<SessionGroup[]>(() => {
@@ -319,7 +354,7 @@ export default function Sessions() {
 
       <div className="flex min-h-0 flex-1">
         <div className="flex w-[22rem] shrink-0 flex-col border-r border-border">
-          <div className="shrink-0 p-3">
+          <div className="shrink-0 space-y-2 p-3">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
               <input
@@ -329,6 +364,20 @@ export default function Sessions() {
                 className="w-full rounded-md border border-border bg-bg-raised py-1.5 pl-8 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
               />
             </div>
+            <button
+              type="button"
+              aria-pressed={includeArchived}
+              onClick={() => setIncludeArchived((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                includeArchived
+                  ? "border-accent/50 bg-accent-soft text-accent"
+                  : "border-border text-ink-muted hover:bg-bg-hover hover:text-ink",
+              )}
+            >
+              <Archive className="h-3.5 w-3.5" />
+              Show archived
+            </button>
           </div>
           <div className="scrollbar min-h-0 flex-1 overflow-auto px-2 pb-3">
             {searchMode ? (
@@ -357,6 +406,9 @@ export default function Sessions() {
                         {group.session.title || "(untitled)"}
                       </span>
                       <Badge variant="muted">{group.hits.length}</Badge>
+                      {group.session.archived && (
+                        <Badge variant="muted">Archived</Badge>
+                      )}
                     </div>
                     <div className="truncate px-3 pb-1 text-xs text-ink-faint">
                       {group.session.project} ·{" "}
@@ -425,6 +477,7 @@ export default function Sessions() {
                         {s.title || "(untitled)"}
                       </span>
                       <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
+                        {s.archived && <Badge variant="muted">Archived</Badge>}
                         <span>{formatRelativeTime(s.updatedAt)}</span>
                         <span>·</span>
                         <span>{formatNumber(s.messageCount)} msgs</span>
@@ -447,7 +500,12 @@ export default function Sessions() {
 
         <div className="scrollbar min-h-0 flex-1 overflow-auto">
           {selectedPath ? (
-            <SessionDetail path={selectedPath} focusIndex={focusIndex} />
+            <SessionDetail
+              key={`${selectedPath}:${detailRefresh}`}
+              path={selectedPath}
+              focusIndex={focusIndex}
+              onChanged={handleSessionChanged}
+            />
           ) : (
             <div className="flex h-full items-center justify-center p-8">
               <EmptyState

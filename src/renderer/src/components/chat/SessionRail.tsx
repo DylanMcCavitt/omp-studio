@@ -7,6 +7,7 @@
 
 import { MessageSquarePlus, Plus, X } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
+import { SessionActionsMenu } from "@/components/session/SessionActionsMenu";
 import { Badge, type BadgeVariant, EmptyState, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
@@ -58,6 +59,7 @@ function basename(p: string): string {
 }
 
 function rowTitle(s: LiveSessionState): string {
+  if (s.alias && s.alias.trim() !== "") return s.alias;
   if (s.sessionName && s.sessionName.trim() !== "") return s.sessionName;
   if (s.cwd) return basename(s.cwd);
   return "Untitled session";
@@ -155,6 +157,7 @@ function SessionRailRow({
 }) {
   const session = useChatStore((s) => s.openSessions[sessionId]);
   const setActiveSession = useChatStore((s) => s.setActiveSession);
+  const patch = useChatStore((s) => s._patch);
   if (!session) return null;
 
   const percent = session.contextUsage
@@ -177,7 +180,7 @@ function SessionRailRow({
       >
         <span
           className={cn(
-            "block truncate pr-6 text-sm font-medium",
+            "block truncate pr-14 text-sm font-medium",
             active ? "text-accent" : "text-ink",
           )}
         >
@@ -206,15 +209,35 @@ function SessionRailRow({
         </span>
       </button>
 
-      <button
-        type="button"
-        aria-label="Close session"
-        title="Close session (⌘W)"
-        onClick={() => closeSessionWithConfirm(sessionId)}
-        className="absolute right-2 top-2 rounded p-0.5 text-ink-faint opacity-0 transition-opacity hover:bg-bg-hover hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
-      >
-        <X size={14} />
-      </button>
+      <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <SessionActionsMenu
+          target={{
+            path: session.sessionFile,
+            title: session.alias ?? session.sessionName ?? null,
+            archived: false,
+            liveSessionId: sessionId,
+          }}
+          onClose={() => closeSessionWithConfirm(sessionId)}
+          onChanged={(r) => {
+            if (r.kind === "renamed") {
+              patch(sessionId, (s) => ({
+                ...s,
+                alias: r.title || undefined,
+              }));
+            }
+          }}
+          className="h-6 w-6"
+        />
+        <button
+          type="button"
+          aria-label="Close session"
+          title="Close session (⌘W)"
+          onClick={() => closeSessionWithConfirm(sessionId)}
+          className="flex h-6 w-6 items-center justify-center rounded text-ink-faint hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        >
+          <X size={14} />
+        </button>
+      </div>
     </div>
   );
 }

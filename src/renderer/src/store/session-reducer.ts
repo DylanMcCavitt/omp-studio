@@ -48,6 +48,18 @@ export interface LiveSessionState {
   cwd?: string;
   /** omp session name from get_state (preferred rail title). */
   sessionName?: string;
+  /**
+   * Absolute path to this session's JSONL file (from `get_state`). The session
+   * actions menu operates on this path (rename/delete/archive/reveal/export).
+   */
+  sessionFile?: string;
+  /**
+   * Studio display-name override set when the user renames a live session. The
+   * persisted alias is keyed by `sessionFile` on disk (shown in the Sessions
+   * history view); this mirrors it onto the live slice so the rail row updates
+   * immediately. `get_state` never clobbers it (omp owns `sessionName`).
+   */
+  alias?: string;
   /** Epoch ms of the last slice change; the store stamps it (rail "last activity"). */
   lastActivityAt: number;
   /** True while omp is compacting this session's context (Compacting badge). */
@@ -93,6 +105,8 @@ export function createSession(
     status: "idle",
     cwd: undefined,
     sessionName: undefined,
+    sessionFile: undefined,
+    alias: undefined,
     lastActivityAt: 0,
     isCompacting: false,
     compacting: false,
@@ -127,6 +141,7 @@ export function sessionFromState(
     contextUsage: state.contextUsage,
     queuedCount: state.queuedMessageCount ?? 0,
     sessionName: state.sessionName,
+    sessionFile: state.sessionFile,
     isCompacting: state.isCompacting,
   });
 }
@@ -286,6 +301,7 @@ export function reduceSession(
         contextUsage: rpc.contextUsage ?? state.contextUsage,
         queuedCount: rpc.queuedMessageCount ?? state.queuedCount,
         sessionName: rpc.sessionName ?? state.sessionName,
+        sessionFile: rpc.sessionFile ?? state.sessionFile,
         isCompacting: rpc.isCompacting ?? state.isCompacting,
       };
     }

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Toaster } from "@/components/ui";
 import { Sidebar } from "./Sidebar";
 
 export interface LayoutProps {
@@ -18,6 +19,7 @@ export function Layout({ children }: LayoutProps) {
         <Sidebar />
         <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
       </div>
+      <Toaster />
     </div>
   );
 }
