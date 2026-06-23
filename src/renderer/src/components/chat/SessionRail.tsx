@@ -316,6 +316,7 @@ function SessionRailRow({
 
       <div className="absolute right-1.5 top-1.5 flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         <SessionActionsMenu
+          triggerTabIndex={-1}
           target={{
             path: session.sessionFile,
             title: session.alias ?? session.sessionName ?? null,
@@ -335,6 +336,7 @@ function SessionRailRow({
         />
         <button
           type="button"
+          tabIndex={-1}
           aria-label="Close session"
           title="Close session (⌘W)"
           onClick={() => closeSessionWithConfirm(sessionId)}
@@ -396,6 +398,7 @@ function HibernatedRailRow({
           </button>
           <button
             type="button"
+            tabIndex={-1}
             onClick={() => void removeHibernated(sessionId)}
             className="rounded px-2 py-1 text-xs font-medium text-ink-muted hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
@@ -452,6 +455,7 @@ function HibernatedRailRow({
         <div className="absolute right-1.5 top-1.5 flex items-center opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
           <button
             type="button"
+            tabIndex={-1}
             aria-label="Remove session from list"
             title="Remove from list"
             onClick={() => void removeHibernated(sessionId)}

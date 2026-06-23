@@ -4,8 +4,7 @@
 // that a blocking modal suppresses the session-mutating chords. Keydown is fired
 // straight at window (where the single listener lives) so there is no double-fire.
 
-import { render } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
@@ -115,5 +114,22 @@ describe("useShortcuts", () => {
     press("t", { metaKey: true });
     expect(newChat).not.toHaveBeenCalled();
     document.body.removeChild(modal);
+  });
+
+  it("suppresses chords while typing in a field but still allows Esc", () => {
+    useUiStore.setState({ searchOpen: true });
+    const newChat = vi.spyOn(useChatStore.getState(), "newChat");
+    render(
+      <>
+        <Harness />
+        <input data-testid="field" />
+      </>,
+    );
+    screen.getByTestId("field").focus();
+    press("t", { metaKey: true });
+    expect(newChat).not.toHaveBeenCalled();
+    // Esc still closes the topmost overlay even from a focused field.
+    press("Escape");
+    expect(useUiStore.getState().searchOpen).toBe(false);
   });
 });

@@ -72,6 +72,12 @@ export interface SessionActionsMenuProps {
   onClose?: () => void;
   /** Sizing/positioning classes for the trigger button. */
   className?: string;
+  /**
+   * Tab-order index for the trigger. The rail passes -1 so the row is a single
+   * roving Tab stop (the trigger stays mouse-clickable and focusable on demand);
+   * other callers leave it in the natural tab order.
+   */
+  triggerTabIndex?: number;
 }
 
 interface MenuItem {
@@ -91,6 +97,7 @@ export function SessionActionsMenu({
   onChanged,
   onClose,
   className,
+  triggerTabIndex,
 }: SessionActionsMenuProps) {
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -378,6 +385,7 @@ export function SessionActionsMenu({
       <button
         ref={triggerRef}
         type="button"
+        tabIndex={triggerTabIndex}
         aria-label="Session actions"
         aria-haspopup="menu"
         aria-expanded={open}

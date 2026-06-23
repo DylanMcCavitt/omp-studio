@@ -12,11 +12,12 @@
 //   Cmd/Ctrl+Shift+P   toggle the slash-command palette
 //   Esc                close the topmost soft overlay (global search)
 //
-// Every chord is modified, so it is one of the "documented shortcuts" that fire
-// even while typing in an input (mirroring native Cmd+K/Cmd+W behaviour); we
-// never bind a bare key that would clash with text entry. While a *blocking*
-// modal (approval/compact/rename/confirm/danger) owns the screen the chords are
-// suppressed so a reflexive press never mutates sessions behind a safety prompt.
+// While focus is in a text-entry field (input/textarea/contenteditable) the app
+// chords are suppressed so a chord pressed mid-draft (Cmd+W, Cmd+T, …) never
+// discards the user's typing — only Esc acts from a field, closing the topmost
+// overlay. Likewise, while a *blocking* modal (approval/compact/rename/confirm/
+// danger) owns the screen the chords are suppressed so a reflexive press never
+// mutates sessions behind a safety prompt.
 
 import { useEffect } from "react";
 import { closeSessionWithConfirm } from "@/components/chat/SessionRail";
@@ -35,6 +36,17 @@ function blockingModalOpen(): boolean {
   );
 }
 
+/**
+ * Focus is in a text-entry control. App chords are suppressed here so a chord
+ * pressed mid-draft (Cmd+W, Cmd+T, etc.) never discards the user's typing — only
+ * Esc (handled before this check) acts from a field, to close the topmost overlay.
+ */
+function isEditableTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+}
+
 export function useShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -49,6 +61,7 @@ export function useShortcuts(): void {
       }
 
       if (!(e.metaKey || e.ctrlKey)) return; // bare keys are typing, not chords
+      if (isEditableTarget(document.activeElement)) return; // typing — only Esc
       if (blockingModalOpen()) return; // the modal owns the keyboard
 
       const chat = useChatStore.getState();

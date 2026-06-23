@@ -171,4 +171,25 @@ describe("keyboard nav (G2)", () => {
     fireEvent.keyDown(railItem("b"), { key: "ArrowUp" });
     expect(railItem("a")).toHaveFocus();
   });
+
+  it("keeps row accessory buttons out of the Tab order (single tab stop)", () => {
+    seed(
+      {
+        a: createSession("a", {
+          sessionName: "Alpha",
+          status: "idle",
+          sessionFile: "/work/a.jsonl",
+        }),
+      },
+      "a",
+    );
+    render(<SessionRail />);
+    // Accessory controls stay mouse-clickable but are not Tab stops.
+    expect(screen.getByRole("button", { name: "Close session" }).tabIndex).toBe(
+      -1,
+    );
+    expect(
+      screen.getByRole("button", { name: "Session actions" }).tabIndex,
+    ).toBe(-1);
+  });
 });
