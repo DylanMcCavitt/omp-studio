@@ -187,6 +187,7 @@ export function PromptComposer({
     const files: File[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
+      if (!item) continue;
       if (item.kind === "file" && item.type.startsWith("image/")) {
         const file = item.getAsFile();
         if (file) files.push(file);

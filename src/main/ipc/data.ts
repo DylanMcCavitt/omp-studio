@@ -59,9 +59,12 @@ async function buildDashboard(): Promise<DashboardData> {
       });
     } else {
       const group = byProject[at];
-      group.count += 1;
-      if (session.updatedAt > group.lastActive) {
-        group.lastActive = session.updatedAt;
+      // `at` was set when this group was pushed, so it always resolves.
+      if (group) {
+        group.count += 1;
+        if (session.updatedAt > group.lastActive) {
+          group.lastActive = session.updatedAt;
+        }
       }
     }
   }
