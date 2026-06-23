@@ -1,16 +1,22 @@
 import { join } from "node:path";
 import { electronApp, is, optimizer } from "@electron-toolkit/utils";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { BrowserViewManager } from "./browser/view-manager";
+import { registerBrowserIpc } from "./ipc/browser";
 import { registerChatIpc } from "./ipc/chat";
 import { registerDataIpc } from "./ipc/data";
 import { registerLinearIpc } from "./ipc/linear";
 import { registerSettingsIpc } from "./ipc/settings";
+import { registerTerminalIpc } from "./ipc/terminal";
 import { scoped } from "./logger";
 import { SessionRegistry } from "./omp/registry";
 import { loadSettings, setSettingsDir } from "./services/settings-service";
+import { TerminalRegistry } from "./terminal/registry";
 
 let mainWindow: BrowserWindow | null = null;
 const registry = new SessionRegistry();
+const terminals = new TerminalRegistry();
+const browsers = new BrowserViewManager(() => mainWindow);
 const log = scoped("main");
 
 // The project root for skills/mcp/agents discovery (feat 6a/§4.4). In a packaged
@@ -70,6 +76,17 @@ function createWindow(): void {
     return { action: "deny" };
   });
 
+  // Harden against in-app navigation: the privileged main renderer must never
+  // leave its local bundle. Any navigation attempt is denied and routed to the
+  // OS browser. (The embedded browser feature is a separate, sandboxed
+  // WebContentsView, not this window.)
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    const rendererUrl = process.env["ELECTRON_RENDERER_URL"];
+    if (is.dev && rendererUrl && url.startsWith(rendererUrl)) return;
+    event.preventDefault();
+    void shell.openExternal(url);
+  });
+
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
   if (is.dev && devUrl) {
     void mainWindow.loadURL(devUrl);
@@ -94,6 +111,8 @@ void app.whenReady().then(async () => {
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);
   registerLinearIpc(ipcMain);
+  registerTerminalIpc(ipcMain, terminals, () => mainWindow);
+  registerBrowserIpc(ipcMain, browsers, () => mainWindow);
 
   createWindow();
 
@@ -104,9 +123,13 @@ void app.whenReady().then(async () => {
 
 app.on("window-all-closed", () => {
   registry.disposeAll();
+  terminals.disposeAll();
+  browsers.destroyAll();
   if (process.platform !== "darwin") app.quit();
 });
 
 app.on("before-quit", () => {
   registry.disposeAll();
+  terminals.disposeAll();
+  browsers.destroyAll();
 });
