@@ -100,15 +100,20 @@ export function isAllowed(
 // danger styling, Always-allow) while keeping every OTHER select on the generic
 // SelectRequestDialog.
 //
-// Detection keys on the STRUCTURED option set — exactly one Approve-like + one
-// Deny-like option — never the prose title, consistent with the rest of this
-// module (which never classifies a request by prose). Mapping the chosen
-// affordance back to a {value} response needs an unambiguous approve/deny pair,
-// so a select is "approval-shaped" only when both resolve.
+// Detection requires BOTH of omp's signals: the canonical `Allow tool:` title
+// prefix (the marker formatApprovalPrompt always emits) AND a two-option
+// Approve/Deny set. The option pair alone is too weak — a generic interactive
+// select could legitimately offer Approve/Deny; routing THAT to the rich dialog
+// would expose Always-allow and a title-keyed rule that then auto-approves
+// unrelated prompts sharing the title. The `Allow tool:` prefix is a deliberate
+// protocol marker (not arbitrary prose), so gating on it is precise, not the
+// generic title-guessing approvalKey rightly refuses. The Approve/Deny pair is
+// still needed to resolve the exact option strings the {value} response echoes.
 // ---------------------------------------------------------------------------
 
 const APPROVE_OPTION = /^approve$/i;
 const DENY_OPTION = /^deny$/i;
+const ALLOW_TOOL_TITLE = /^allow tool:/i;
 
 export interface ApprovalSelectShape {
   /** The exact option string that approves (echoed back verbatim as {value}). */
@@ -121,6 +126,10 @@ export function approvalSelectShape(
   req: ExtensionUiRequest,
 ): ApprovalSelectShape | null {
   if (req.method !== "select") return null;
+  // The `Allow tool:` marker gates the whole approval path: no marker → generic
+  // select (never routed to the rich dialog, never allowlistable).
+  const title = asString(req.title);
+  if (!title || !ALLOW_TOOL_TITLE.test(title.trim())) return null;
   const options = Array.isArray(req.options)
     ? req.options.filter((o): o is string => typeof o === "string")
     : [];

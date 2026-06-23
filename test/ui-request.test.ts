@@ -219,7 +219,9 @@ describe("asString", () => {
 
 // omp surfaces a tool approval as a `select` (title `Allow tool: …`, options
 // ["Approve","Deny"]) — verified against the agent runtime — not a `confirm`.
-// These cover the detection + key derivation that route it to the rich dialog.
+// Detection requires BOTH signals: a real `Allow tool:` title marker AND the
+// Approve/Deny pair, so a generic Approve/Deny select is never misclassified as
+// an approval (and so never allowlistable).
 
 // The canonical omp approval-select frame: only method/title/options, no
 // structured tool identity.
@@ -227,7 +229,7 @@ const approvalReq = (title = "Allow tool: write\nPath: a.txt\nContent: ok") =>
   req("select", { title, options: ["Approve", "Deny"] });
 
 describe("approvalSelectShape", () => {
-  test("resolves the canonical Approve/Deny select", () => {
+  test("resolves the canonical Allow-tool Approve/Deny select", () => {
     expect(approvalSelectShape(approvalReq())).toEqual({
       approve: "Approve",
       deny: "Deny",
@@ -236,44 +238,79 @@ describe("approvalSelectShape", () => {
 
   test("is order-independent (Deny listed first)", () => {
     expect(
-      approvalSelectShape(req("select", { options: ["Deny", "Approve"] })),
+      approvalSelectShape(
+        req("select", { title: "Allow tool: x", options: ["Deny", "Approve"] }),
+      ),
     ).toEqual({ approve: "Approve", deny: "Deny" });
   });
 
-  test("matches option labels case-insensitively, echoing the EXACT strings", () => {
+  test("matches the title marker and option labels case-insensitively, echoing EXACT option strings", () => {
     // The response must echo omp's own option string verbatim, so the resolved
     // approve/deny keep their original casing even when matched loosely.
     expect(
-      approvalSelectShape(req("select", { options: ["approve", "DENY"] })),
+      approvalSelectShape(
+        req("select", { title: "allow TOOL: x", options: ["approve", "DENY"] }),
+      ),
     ).toEqual({ approve: "approve", deny: "DENY" });
+  });
+
+  test("is NOT an approval without the `Allow tool:` marker (the must-fix)", () => {
+    // A generic interactive select that merely offers Approve/Deny must stay
+    // generic — never routed to the rich dialog, never allowlistable.
+    expect(
+      approvalSelectShape(
+        req("select", {
+          title: "Approve the merge?",
+          options: ["Approve", "Deny"],
+        }),
+      ),
+    ).toBeNull();
+    // No title at all is likewise not an approval.
+    expect(
+      approvalSelectShape(req("select", { options: ["Approve", "Deny"] })),
+    ).toBeNull();
   });
 
   test("is null for a generic (non-approval) select", () => {
     expect(
-      approvalSelectShape(req("select", { options: ["alpha", "beta"] })),
-    ).toBeNull();
-  });
-
-  test("is null for a 3+ option select even if it contains Approve/Deny", () => {
-    // A richer multi-choice must stay generic so its extra option is never
-    // dropped behind a two-button approval dialog.
-    expect(
       approvalSelectShape(
-        req("select", { options: ["Approve", "Deny", "Maybe"] }),
+        req("select", { title: "Pick one", options: ["alpha", "beta"] }),
       ),
     ).toBeNull();
   });
 
-  test("is null when options are missing or not a string array", () => {
-    expect(approvalSelectShape(req("select", {}))).toBeNull();
+  test("is null for a 3+ option Allow-tool select even if it contains Approve/Deny", () => {
+    // A richer multi-choice must stay generic so its extra option is never
+    // dropped behind a two-button approval dialog.
     expect(
-      approvalSelectShape(req("select", { options: "Approve" })),
+      approvalSelectShape(
+        req("select", {
+          title: "Allow tool: x",
+          options: ["Approve", "Deny", "Maybe"],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  test("is null for an Allow-tool select whose two options are not Approve/Deny", () => {
+    expect(
+      approvalSelectShape(req("select", { title: "Allow tool: x" })),
+    ).toBeNull();
+    expect(
+      approvalSelectShape(
+        req("select", { title: "Allow tool: x", options: "Approve" }),
+      ),
     ).toBeNull();
   });
 
   test("is null for a non-select method", () => {
     expect(
-      approvalSelectShape(req("confirm", { options: ["Approve", "Deny"] })),
+      approvalSelectShape(
+        req("confirm", {
+          title: "Allow tool: x",
+          options: ["Approve", "Deny"],
+        }),
+      ),
     ).toBeNull();
   });
 });
@@ -305,15 +342,20 @@ describe("approvalSelectKey", () => {
     ).toBe('tool:bash:{"cmd":"ls"}');
   });
 
-  test("is null for a non-approval select", () => {
+  test("is NOT keyable without the `Allow tool:` marker (no allowlisting generic selects)", () => {
     expect(
-      approvalSelectKey(req("select", { title: "Pick", options: ["a", "b"] })),
+      approvalSelectKey(
+        req("select", {
+          title: "Approve the merge?",
+          options: ["Approve", "Deny"],
+        }),
+      ),
     ).toBeNull();
   });
 
-  test("is null for an approval-select with no title to key on", () => {
+  test("is null for a generic select", () => {
     expect(
-      approvalSelectKey(req("select", { options: ["Approve", "Deny"] })),
+      approvalSelectKey(req("select", { title: "Pick", options: ["a", "b"] })),
     ).toBeNull();
   });
 });
@@ -339,9 +381,27 @@ describe("isSelectApprovalAllowed", () => {
     ).toBe(false);
   });
 
+  test("never auto-approves a marker-less Approve/Deny select, even on a title collision", () => {
+    // Defense in depth: a generic select sharing a title with an allow rule key
+    // must not be auto-approved, because it is not an approval at all.
+    const colliding = new Set(["approval-select:Approve the merge?"]);
+    expect(
+      isSelectApprovalAllowed(
+        colliding,
+        req("select", {
+          title: "Approve the merge?",
+          options: ["Approve", "Deny"],
+        }),
+      ),
+    ).toBe(false);
+  });
+
   test("never auto-approves a generic select", () => {
     expect(
-      isSelectApprovalAllowed(keys, req("select", { options: ["a", "b"] })),
+      isSelectApprovalAllowed(
+        keys,
+        req("select", { title: "Pick", options: ["a", "b"] }),
+      ),
     ).toBe(false);
   });
 });

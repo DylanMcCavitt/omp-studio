@@ -126,6 +126,22 @@ describe("UiRequestLayer — approval-select routing", () => {
     });
   });
 
+  it("keeps a marker-less Approve/Deny select GENERIC (no rich dialog, no Always-allow)", async () => {
+    // The must-fix: a generic interactive select that merely offers Approve/Deny
+    // (no `Allow tool:` marker) must NOT be routed to the rich approval dialog,
+    // so it can never expose Always-allow nor be allowlisted.
+    seed([uiEvent(selectReq("r1", "Approve the merge?", ["Approve", "Deny"]))]);
+    render(<UiRequestLayer />);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("listbox")).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Approval required"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByRole("button", { name: "Always allow" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("Always allow records the session rule (title key) and approves", async () => {
     const user = userEvent.setup();
     const { respondUi } = seed([
