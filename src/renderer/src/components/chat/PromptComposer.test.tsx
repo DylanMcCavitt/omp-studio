@@ -144,6 +144,7 @@ it("restores text AND attachments after a failed submit so they can be retried",
 
   // The failed call carried the full payload (text + one image)...
   const failedCall = onSubmit.mock.calls[0];
+  if (!failedCall) throw new Error("expected onSubmit to have been called");
   expect(failedCall[0]).toBe("retry me");
   expect(failedCall[1]).toHaveLength(1);
   expect(failedCall[1][0]).toMatchObject({
@@ -155,6 +156,7 @@ it("restores text AND attachments after a failed submit so they can be retried",
   await user.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
   const retryCall = onSubmit.mock.calls[1];
+  if (!retryCall) throw new Error("expected onSubmit retry call");
   expect(retryCall[0]).toBe("retry me");
   expect(retryCall[1]).toHaveLength(1);
   expect(retryCall[1][0]).toMatchObject({
@@ -182,7 +184,9 @@ it("submits attachments alongside text", async () => {
   await user.click(screen.getByRole("button", { name: "Send" }));
 
   await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
-  const [text, images] = onSubmit.mock.calls[0];
+  const call = onSubmit.mock.calls[0];
+  if (!call) throw new Error("expected onSubmit to have been called");
+  const [text, images] = call;
   expect(text).toBe("look");
   expect(images).toHaveLength(1);
   expect(images[0]).toMatchObject({ type: "image", mimeType: "image/png" });

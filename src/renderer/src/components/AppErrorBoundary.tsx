@@ -33,7 +33,7 @@ export class AppErrorBoundary extends Component<
   AppErrorBoundaryProps,
   AppErrorBoundaryState
 > {
-  state: AppErrorBoundaryState = {
+  override state: AppErrorBoundaryState = {
     error: null,
     componentStack: null,
     copied: false,
@@ -45,12 +45,12 @@ export class AppErrorBoundary extends Component<
     return { error };
   }
 
-  componentDidCatch(_error: Error, info: ErrorInfo): void {
+  override componentDidCatch(_error: Error, info: ErrorInfo): void {
     // Keep the component stack for the Copy-error payload.
     this.setState({ componentStack: info.componentStack ?? null });
   }
 
-  componentDidUpdate(prev: AppErrorBoundaryProps): void {
+  override componentDidUpdate(prev: AppErrorBoundaryProps): void {
     if (prev.resetKey !== this.props.resetKey && this.state.error) {
       this.setState({ error: null, componentStack: null, copied: false });
     }
@@ -79,7 +79,7 @@ export class AppErrorBoundary extends Component<
     );
   };
 
-  render(): ReactNode {
+  override render(): ReactNode {
     const { error, copied } = this.state;
     if (!error) return this.props.children;
     return (

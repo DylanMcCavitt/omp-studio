@@ -30,7 +30,7 @@ function parseFrontmatter(text: string): Frontmatter {
   if (lines[0]?.trim() !== "---") return {};
   let end = -1;
   for (let i = 1; i < lines.length; i += 1) {
-    if (lines[i].trim() === "---") {
+    if (lines[i]?.trim() === "---") {
       end = i;
       break;
     }
@@ -39,23 +39,28 @@ function parseFrontmatter(text: string): Frontmatter {
 
   const result: Frontmatter = {};
   for (let i = 1; i < end; i += 1) {
-    const match = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(lines[i]);
+    const line = lines[i];
+    if (line === undefined) continue;
+    const match = /^([A-Za-z_][\w-]*):\s*(.*)$/.exec(line);
     if (!match) continue;
-    let value = match[2].trim();
+    const key = match[1];
+    if (key === undefined) continue;
+    let value = (match[2] ?? "").trim();
     if (!value) {
       for (let j = i + 1; j < end; j += 1) {
         const next = lines[j];
+        if (next === undefined) break;
         if (/^\S/.test(next)) break;
         const item = /^\s*-\s*(.*)$/.exec(next);
         if (item) {
-          value = item[1].trim();
+          value = (item[1] ?? "").trim();
           break;
         }
         if (next.trim() === "") continue;
         break;
       }
     }
-    result[match[1]] = value.replace(/^(["'])(.*)\1$/, "$2");
+    result[key] = value.replace(/^(["'])(.*)\1$/, "$2");
   }
   return result;
 }

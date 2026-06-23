@@ -160,19 +160,20 @@ export function SessionRail() {
   const onItemKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     const currentId = e.currentTarget.getAttribute("data-rail-item");
     const idx = currentId ? order.indexOf(currentId) : -1;
-    if (idx < 0) return;
+    const current = idx >= 0 ? order[idx] : undefined;
+    if (current === undefined) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      focusItem(order[Math.min(idx + 1, order.length - 1)] ?? order[idx]);
+      focusItem(order[Math.min(idx + 1, order.length - 1)] ?? current);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      focusItem(order[Math.max(idx - 1, 0)] ?? order[idx]);
+      focusItem(order[Math.max(idx - 1, 0)] ?? current);
     } else if (e.key === "Home") {
       e.preventDefault();
-      focusItem(order[0] ?? order[idx]);
+      focusItem(order[0] ?? current);
     } else if (e.key === "End") {
       e.preventDefault();
-      focusItem(order[order.length - 1] ?? order[idx]);
+      focusItem(order[order.length - 1] ?? current);
     }
   };
 
