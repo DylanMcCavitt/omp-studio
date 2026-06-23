@@ -13,6 +13,14 @@ export const DEFAULT_SIDEBAR_WIDTH_PCT = 18;
 export const SIDEBAR_MIN_PCT = 12;
 export const SIDEBAR_MAX_PCT = 32;
 
+/** Default right icon-rail expandable panel width (% of the shell). */
+export const DEFAULT_RIGHT_PANEL_WIDTH_PCT = 30;
+/** Min/max right-rail panel width (%) the resize handle is clamped to. */
+export const RIGHT_PANEL_MIN_PCT = 18;
+export const RIGHT_PANEL_MAX_PCT = 50;
+/** Minimum center main width (%) so it never collapses behind the rail panel. */
+export const MAIN_MIN_PCT = 30;
+
 /** Default chat right-rail width (% of the chat pane) — mirrors `w-80`. */
 export const DEFAULT_CHAT_RAIL_WIDTH_PCT = 26;
 /** Min/max chat right-rail width (%). */

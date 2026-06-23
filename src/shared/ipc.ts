@@ -250,6 +250,10 @@ export interface LayoutSettings {
   navHidden?: string[];
   /** Chat right-rail panels: order + per-panel visibility. */
   chatRailPanels?: { id: string; visible: boolean }[];
+  /** Right icon-rail: the last-open destination route id (null/absent = collapsed). */
+  rightPanelId?: string | null;
+  /** Right icon-rail expandable panel width (% of the shell). */
+  rightPanelWidthPct?: number;
 }
 
 /** Misc renderer UI preferences (features 3 & 6). */

@@ -317,6 +317,15 @@ function coerceLayout(value: unknown): LayoutSettings | undefined {
       out.chatRailPanels = panels;
     }
   }
+  if (typeof value.rightPanelId === "string" && isSafeId(value.rightPanelId)) {
+    out.rightPanelId = value.rightPanelId;
+  }
+  if (
+    typeof value.rightPanelWidthPct === "number" &&
+    Number.isFinite(value.rightPanelWidthPct)
+  ) {
+    out.rightPanelWidthPct = value.rightPanelWidthPct;
+  }
   // An object-shaped patch with no accepted field is malformed → preserve prior
   // (returning `{}` here would clobber the existing layout via mergeKnown).
   return Object.keys(out).length === 0 ? undefined : out;
