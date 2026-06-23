@@ -458,6 +458,30 @@ test("persists right-rail layout fields and drops invalid/secret-shaped ones (AG
   });
 });
 
+test("a {rightPanelId: null} patch clears a previously-set rightPanelId (AGE-630)", async () => {
+  // Open then resize: layout carries an id alongside other fields.
+  await updateSettings({
+    layout: { rightPanelId: "skills", rightPanelWidthPct: 30 },
+  });
+  expect((await loadSettings()).layout?.rightPanelId).toBe("skills");
+
+  // Collapse: the renderer sends the full merged layout with a null id. The
+  // closed state must persist (null cleared), keeping the other fields intact.
+  await updateSettings({
+    layout: { rightPanelId: null, rightPanelWidthPct: 30 },
+  });
+  let loaded = await loadSettings();
+  expect(loaded.layout?.rightPanelId ?? null).toBeNull();
+  expect(loaded.layout?.rightPanelWidthPct).toBe(30);
+
+  // Case B: id as the ONLY layout field still clears (would otherwise reopen).
+  await updateSettings({ layout: { rightPanelId: "mcp" } });
+  expect((await loadSettings()).layout?.rightPanelId).toBe("mcp");
+  await updateSettings({ layout: { rightPanelId: null } });
+  loaded = await loadSettings();
+  expect(loaded.layout?.rightPanelId ?? null).toBeNull();
+});
+
 test("a malformed object-shaped namespace patch preserves the prior value (no empty-clobber)", async () => {
   await updateSettings({
     layout: { sidebarWidthPct: 30 },

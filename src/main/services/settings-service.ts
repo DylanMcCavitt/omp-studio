@@ -317,8 +317,14 @@ function coerceLayout(value: unknown): LayoutSettings | undefined {
       out.chatRailPanels = panels;
     }
   }
+  // `null` is an explicit cleared value (the rail collapsed): persist it so the
+  // closed state survives a restart. Under mergeKnown's whole-object replace,
+  // omitting it on null would let a stale prior id (Case B: the only layout
+  // field) reopen the panel — so set null rather than drop the key.
   if (typeof value.rightPanelId === "string" && isSafeId(value.rightPanelId)) {
     out.rightPanelId = value.rightPanelId;
+  } else if (value.rightPanelId === null) {
+    out.rightPanelId = null;
   }
   if (
     typeof value.rightPanelWidthPct === "number" &&
