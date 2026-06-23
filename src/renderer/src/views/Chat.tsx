@@ -117,8 +117,9 @@ function StartPanel() {
         : undefined,
     });
     if (!ok) return false;
-    await send(text, images);
-    return true;
+    // Return the prompt's acceptance: if session creation succeeds but the
+    // initial send is rejected, the composer keeps text + attachments to retry.
+    return await send(text, images);
   };
 
   return (
