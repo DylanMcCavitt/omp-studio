@@ -17,10 +17,16 @@ you can run, inspect, and manage agent work without living in a terminal.
 - **Live agent chat** — full agent turns over the `omp` RPC protocol, with
   streaming assistant text, thinking blocks, live tool-call rendering, steering,
   and follow-ups, each session backed by its own `omp` child process.
+- **Workspaces** — first-class project workspaces with a sidebar switcher, an
+  add-workspace dialog, and pinning. Selecting a workspace points new chats at
+  its directory; live sessions keep their own working directory.
+- **Subagent drill-in** — expand a session's subagent workflow tree and open any
+  node in an inspector to follow its live progress, tool calls, and transcript.
 - **Sessions browser** — browse and replay past session transcripts read
   directly from the on-disk `omp` session log.
-- **Skills** — discover project, user, and bundled skills with their
-  descriptions.
+- **Skills & Commands** — discover project, user, and bundled skills, browse the
+  active session's available slash commands (pin favorites, drop them into a
+  chat), and view a reference of TUI-only commands.
 - **MCP servers** — inspect the Model Context Protocol servers configured for
   your user and project.
 - **Bundled agents** — explore the task agents shipped with `omp`, including
@@ -29,6 +35,15 @@ you can run, inspect, and manage agent work without living in a terminal.
   authenticated.
 - **GitHub** — view the current repository, its issues and pull requests, and
   your owned repositories.
+- **Linear** — connect a Linear API key (stored in the OS keychain, never in
+  settings) to browse your teams, projects, and issues; the key and all HTTP
+  stay in the main process.
+- **Terminal** — an opt-in embedded terminal running a real shell in the active
+  workspace via `node-pty` (off by default).
+- **Browser** — an opt-in embedded web browser rendered in a separate, sandboxed
+  view isolated from the privileged app window (off by default).
+- **Draggable layout** — resizable sidebar and chat panels, with reorderable,
+  collapsible, and hideable rail panels and nav items, persisted across launches.
 
 ## Requirements
 

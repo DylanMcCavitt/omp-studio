@@ -13,7 +13,7 @@ processes it controls.
 ```mermaid
 flowchart TB
   subgraph R["Renderer process (Chromium + React)"]
-    Views["Views: Dashboard, Chat, Sessions, Skills, Mcp, Agents, GitHub, Settings"]
+    Views["Views: Dashboard, Chat, Sessions, Skills & Commands, MCP, Agents, GitHub, Linear, Terminal, Browser, Settings"]
     Store["Zustand store"]
     Omp["window.omp (OmpApi)"]
   end
@@ -55,12 +55,17 @@ flowchart TB
   a single frozen `OmpApi` implementation on `window.omp`. Every method is a thin
   forwarder to `ipcRenderer.invoke` (request/response) or `ipcRenderer.on`
   (event subscriptions), keyed by the channel constants in `CH`.
-- **Main** — `src/main/index.ts` creates the `BrowserWindow`, registers the data
-  and chat IPC handlers, and owns the `SessionRegistry`. It is the only process
-  that touches the filesystem, spawns child processes, or talks to `gh`.
+- **Main** — `src/main/index.ts` creates the `BrowserWindow`, registers the data,
+  chat, settings, Linear, terminal, and browser IPC handlers, and owns the
+  `SessionRegistry`, `TerminalRegistry`, and `BrowserViewManager`. It is the only
+  process that touches the filesystem, spawns child processes (`omp`, `gh`, and
+  pty shells), talks to `gh` and the Linear API, and hosts the embedded
+  `WebContentsView` browser. All three registries are disposed on
+  `window-all-closed` and `before-quit`.
 - **External** — the `omp` binary (run as a long-lived `--mode rpc` child for
   chat, and one-shot for `omp models` / `omp agents unpack`), the on-disk `omp`
-  agent state, and the `gh` CLI.
+  agent state, the `gh` CLI, the Linear GraphQL API over HTTPS, per-terminal pty
+  shells, and the sandboxed embedded browser's remote content.
 
 `src/main/paths.ts` centralizes process boundaries with the host: `ompBinary()`
 and `ghBinary()` probe common install locations (and honor the `OMP_BINARY`
@@ -83,7 +88,9 @@ The protocol is newline-delimited JSON (JSONL) over the child's stdio:
 - **Commands (bridge → child, on stdin).** Each command is one JSON object with
   an optional `id`, for example `prompt` `{message, images?, streamingBehavior?}`,
   `steer`, `follow_up`, `abort`, `get_state`, `get_messages`, `set_model`
-  `{provider, modelId}`, `set_thinking_level` `{level}`, and `get_subagents`.
+  `{provider, modelId}`, `set_thinking_level` `{level}`, `get_subagents`,
+  `get_subagent_messages`, `set_subagent_subscription`, and
+  `get_available_commands`.
 - **Responses (child → bridge, on stdout).** A frame with `type:"response"`
   echoes the originating command `id` and carries `success` plus `data` or
   `error`. The bridge matches responses to pending commands by `id`.
@@ -93,6 +100,14 @@ The protocol is newline-delimited JSON (JSONL) over the child's stdio:
   `update`/`end`, `subagent_lifecycle`/`progress`/`event`,
   `available_commands_update`, and others. `message_update` carries both
   incremental `assistantMessageEvent` deltas and a full `message` snapshot.
+- **Subagent telemetry is on by default.** At `ready` the bridge sends
+  `set_subagent_subscription {level:"events"}`, so `subagent_lifecycle`,
+  `subagent_progress`, and `subagent_event` frames stream for every session with
+  no further request. The renderer reduces them per session into the subagent
+  drill-in tree and inspector; `get_subagent_messages {sessionFile, fromByte}`
+  tails a live subagent's transcript incrementally (`{entries, messages,
+  nextByte, reset}`), and `set_subagent_subscription` is an optional per-session
+  cost-control knob.
 - **A `prompt` is asynchronous.** It is acknowledged immediately with
   `success:true`; the turn finishes later with an `agent_end` event. While a turn
   is streaming, a further `prompt` must specify `streamingBehavior` of `"steer"`
@@ -157,11 +172,12 @@ throwing across IPC) when a source is missing.
 | Dashboard | aggregate of the services below | `DashboardData` |
 | Sessions | `~/.omp/agent/sessions/<slug>/<ts>_<uuid>.jsonl` | `SessionSummary[]`, `SessionTranscript` |
 | MCP servers | `~/.omp/agent/mcp.json` + project `./.mcp.json` | `McpServerInfo[]` |
-| Skills | `./.agents/skills/*/SKILL.md`, `~/.agents/skills/*/SKILL.md`, workflow-kit skills | `SkillInfo[]` |
+| Skills | project + user `.agents`/`.agent`/`.claude` skill dirs, the bundled workflow-kit, and `~/.omp/agent/managed-skills` | `SkillInfo[]` |
 | Agents | `omp agents unpack --json` (temp dir) + user/project `*.md` | `AgentInfo[]` |
 | Models | `omp models --json` (parsed from the first `{`) | `ModelInfo[]` |
 | Providers | grouped from the model catalog | `ProviderInfo[]` |
 | GitHub | `gh repo/issue/pr/repo list --json ...` | `GhRepo`, `GhIssue[]`, `GhPr[]` |
+| Linear | Linear GraphQL API over HTTPS (main process only) | `LinearStatusInfo`, `LinearTeam[]`, `LinearProjectInfo[]`, `LinearIssue[]` |
 
 Session JSONL is line-oriented: the first line is a `{type:"session", ...}`
 header, followed by `{type:"message", message:OmpMessage}` records and metadata
@@ -170,6 +186,51 @@ records such as `model_change` and `thinking_level_change`. Model output from
 seeks the first `{` before decoding. Agent discovery unpacks bundled agents to a
 temporary directory, reads their `---` frontmatter (`name`, `description`,
 `model`, `spawns`), and cleans the directory up.
+
+### Stateful main-process subsystems (v2)
+
+Beyond the read-only data services, the main process owns three stateful v2
+subsystems and a secret store. Like the data services, they live entirely in
+main, are reached only over typed IPC, and degrade instead of throwing.
+
+| Module | Backing | Notes |
+| --- | --- | --- |
+| `services/secret-store.ts` | Electron `safeStorage` (OS keychain; no `keytar`) | Generic get/set/clear; writes ciphertext to `<userData>/secrets/<name>.bin` (0600). When OS encryption is unavailable it keeps the value in memory for the session only — never plaintext on disk. Backs the Linear API key. |
+| `terminal/` | `node-pty` (`TerminalRegistry` + `PtySession`) | One `IPty` per terminal id; cross-platform login shell; concurrency-capped; off by default. `node-pty` loads lazily, so a missing native addon never breaks startup. Mirrors `SessionRegistry`; `disposeAll()` on quit. |
+| `browser/` | Electron `WebContentsView` (`BrowserViewManager`) | One isolated `WebContents` per browser tab, positioned by main over a renderer-reported rect; off by default. `destroyAll()` on quit. |
+
+The Linear service (`services/linear.ts`) performs all HTTP from main over
+Node's global `fetch` against `https://api.linear.app/graphql` (10 s timeout, no
+retry); the renderer never touches the network or the API key. The key reaches
+the plain-node service through an injected getter so the service never imports
+Electron; the `safeStorage`-backed secret store is wired only in
+`ipc/linear.ts`.
+
+## Settings, workspaces, and project root
+
+Studio settings are owned by `services/settings-service.ts`, persisted under
+`<userData>` and exposed over `settings:get` / `settings:update`. The schema is
+versioned: **v2** is an additive bump over v1 (`migrate()` upgrades a v1 file by
+filling defaults). Every new field is optional so a v1 file and any partial
+patch stay valid: `workspaces`, `layout`, `ui`, plus `linear`, `terminal`, and
+`browser` blocks. Defaults are secure — `terminal.enabled`, `browser.enabled`,
+and `linear.writesEnabled` are all `false`. `mergeKnown()` copies only known
+keys and explicitly drops token-shaped data, so the **Linear API key never lands
+in settings JSON** (it lives in the keychain via `secret-store.ts`); `linear`
+here holds non-secret metadata only (`writesEnabled`, `defaultTeamId`).
+
+**Workspaces** are the v2 first-class project model that supersedes the v1
+`recentProjects` log: `settings.workspaces` is a list of
+`{id, cwd, label, pinned, lastUsedAt}` entries the renderer manages (switcher,
+add dialog, Settings panel). Selecting a workspace only re-targets new chats at
+its `cwd`; live sessions keep their own `cwd`, and switching spawns nothing.
+
+The active workspace `cwd` also fixes a v1 bug: project-scoped discovery
+(`listSkills`, `listMcpServers`, `listAgents`, and the dashboard aggregate) used
+`process.cwd()`, which in a packaged app is the launch directory (often `/`),
+not the user's project. These reads now take an optional `cwd` threaded from the
+active workspace, falling back to the most-recently-active chat session's `cwd`
+when no workspace is set (`activeSessionCwd()` in `index.ts`).
 
 ## The shared type contract
 
@@ -180,14 +241,24 @@ treated as frozen:
   message/content-block model (`OmpMessage`, `ContentBlock`, `TextBlock`,
   `ThinkingBlock`, `ToolCallBlock`), `RpcState`, `RpcFrame` and its refinements
   (`MessageUpdateFrame`, `ToolExecutionFrame`, `AgentEndFrame`), `AvailableModel`,
-  `SubagentInfo`, and todo types.
+  `SubagentInfo`, and todo types. v2 adds typed subagent telemetry
+  (`SubagentSubscriptionLevel`, `AgentProgress`, `SubagentSnapshot`, the
+  `SubagentLifecycle`/`Progress`/`Event` frame refinements,
+  `SubagentMessagesResult`) and the commands-palette types
+  (`AvailableSlashCommand`, `AvailableCommandSource`).
 - **`domain.ts`** — app-level read-only types surfaced in the browsers:
-  `SessionSummary`, `SessionTranscript`, `McpServerInfo`, `SkillInfo`,
-  `AgentInfo`, `ProviderInfo`, `ModelInfo`, the GitHub types, and the
-  `DashboardData` aggregate.
+  `SessionSummary`, `SessionTranscript`, `McpServerInfo`, `SkillInfo` (whose
+  `source` now also covers `claude` and `managed` skills), `AgentInfo`,
+  `ProviderInfo`, `ModelInfo`, the GitHub types, and the `DashboardData`
+  aggregate, plus the v2 integration types (`LinearStatusInfo`, `LinearViewer`,
+  `LinearTeam`, `LinearProjectInfo`, `LinearIssue`, `TerminalInfo`,
+  `BrowserViewState`).
 - **`ipc.ts`** — the channel map `CH` and the `OmpApi` interface that the preload
   implements and the renderer consumes, plus the chat payload types
-  (`ChatCreateOptions`, `PromptOptions`, `ChatRpcEvent`, `ChatLifecycleEvent`).
+  (`ChatCreateOptions`, `PromptOptions`, `ChatRpcEvent`, `ChatLifecycleEvent`) and
+  the persisted settings shapes (`StudioSettingsV1`, the additive
+  `StudioSettingsV2` with `Workspace`/`LayoutSettings`/`UiPrefs`, and the
+  `StudioSettings` alias).
 
 Because the preload, main handlers, and renderer all import the same definitions,
 the IPC surface stays in lockstep and is checked by `npm run typecheck` (separate
@@ -247,6 +318,9 @@ into request/response channels (handled with `ipcMain.handle` /
 | `chatRespondUi` | `chat:uiRespond` | Renderer reply to a UI request |
 | `chatGetSessionStats` | `chat:getSessionStats` | Token/cost/context stats |
 | `chatCompact` | `chat:compact` | Compact the transcript |
+| `chatSetSubagentSubscription` | `chat:setSubagentSubscription` | Set per-session subagent telemetry level |
+| `chatGetSubagentMessages` | `chat:getSubagentMessages` | Tail a live subagent's transcript |
+| `chatGetAvailableCommands` | `chat:getAvailableCommands` | Snapshot available slash commands |
 
 **Session actions (`data:sessions:*`, mutating)**
 
@@ -265,6 +339,43 @@ into request/response channels (handled with `ipcMain.handle` /
 | `settingsGet` | `settings:get` | Read persisted studio settings |
 | `settingsUpdate` | `settings:update` | Merge a settings patch |
 
+**Linear (`linear:*`)** — all HTTP happens in the main process
+
+| `CH` key | Channel | Purpose |
+| --- | --- | --- |
+| `linearStatus` | `linear:status` | Auth status + viewer |
+| `linearSetApiKey` | `linear:setApiKey` | Validate + store the API key |
+| `linearClearApiKey` | `linear:clearApiKey` | Delete the stored key |
+| `linearListTeams` | `linear:teams` | Teams |
+| `linearListProjects` | `linear:projects` | Projects |
+| `linearListIssues` | `linear:issues` | Issues |
+| `linearGetIssue` | `linear:issue` | One issue |
+| `linearCreateIssue` | `linear:createIssue` | Create an issue (gated by `writesEnabled`) |
+| `linearUpdateIssue` | `linear:updateIssue` | Update an issue (gated by `writesEnabled`) |
+| `linearCreateComment` | `linear:createComment` | Comment on an issue (gated by `writesEnabled`) |
+
+**Terminal (`terminal:*`)** — disabled by default
+
+| `CH` key | Channel | Purpose |
+| --- | --- | --- |
+| `terminalCreate` | `terminal:create` | Spawn a pty shell |
+| `terminalWrite` | `terminal:write` | Write input to a pty |
+| `terminalResize` | `terminal:resize` | Resize a pty |
+| `terminalKill` | `terminal:kill` | Kill a pty |
+| `terminalList` | `terminal:list` | List live terminals |
+
+**Embedded browser (`browser:*`)** — disabled by default
+
+| `CH` key | Channel | Purpose |
+| --- | --- | --- |
+| `browserCreate` | `browser:create` | Create an isolated browser view |
+| `browserNavigate` | `browser:navigate` | Navigate to a URL |
+| `browserGoBack` | `browser:goBack` | Go back |
+| `browserGoForward` | `browser:goForward` | Go forward |
+| `browserReload` | `browser:reload` | Reload |
+| `browserSetBounds` | `browser:setBounds` | Position the view over the renderer rect |
+| `browserDestroy` | `browser:destroy` | Destroy the view |
+
 **Events (main → renderer)**
 
 | `CH` key | Channel | Payload |
@@ -272,6 +383,9 @@ into request/response channels (handled with `ipcMain.handle` /
 | `evtRpc` | `evt:rpc` | `{sessionId, frame}` — forwarded RPC frames |
 | `evtLifecycle` | `evt:lifecycle` | `{sessionId, status, detail?}` |
 | `evtUiRequest` | `evt:ui-request` | `{sessionId, request, responseRequired}` |
+| `evtTerminalData` | `evt:terminal-data` | `{id, data}` — pty output |
+| `evtTerminalExit` | `evt:terminal-exit` | `{id, code}` — pty exit |
+| `evtBrowserState` | `evt:browser-state` | `BrowserViewState` — embedded view state |
 
 ## Security notes
 
@@ -291,5 +405,34 @@ into request/response channels (handled with `ipcMain.handle` /
   spawning (`omp`, `gh`), and shell commands all live in the main process behind
   the typed IPC surface. Data services never throw across the IPC boundary;
   missing tools or unauthenticated CLIs degrade to empty/null results.
-- **Child-process hygiene.** RPC sessions are tracked in `SessionRegistry` and
-  disposed on window close and quit, so no `omp` child outlives the app.
+- **Child-process hygiene.** RPC sessions (`SessionRegistry`), pty terminals
+  (`TerminalRegistry`), and embedded browser views (`BrowserViewManager`) are all
+  tracked and disposed on `window-all-closed` and `before-quit`, so no `omp`
+  child, shell, or remote-content view outlives the app.
+- **Secrets stay out of settings.** The Linear API key is stored as OS-keychain
+  ciphertext via Electron `safeStorage` (`secret-store.ts`), never in the
+  settings JSON. All Linear HTTP runs in the main process, so the renderer's
+  `connect-src 'self'` is never relaxed and the renderer never sees the key or
+  the network; issue/comment writes are off by default
+  (`settings.linear.writesEnabled`).
+- **The terminal is a real shell, off by default.** When
+  `settings.terminal.enabled` is set, `terminal:create` spawns a pty
+  (`node-pty`) running the user's login shell at full user privilege — the
+  largest capability in the app. Input reaches a pty only from the local
+  terminal view; agent output, RPC frames, and remote content are never written
+  to a pty. The pty is main-owned (the renderer holds no process handle),
+  concurrency-capped, spawned only in a validated `cwd`, and killed on quit. The
+  UI never claims the terminal is "safe" — enabling it means the app can run
+  anything the user can.
+- **The embedded browser is isolated, off by default.** When
+  `settings.browser.enabled` is set, each browser tab is a separate
+  `WebContentsView` with its own `WebContents` — `sandbox:true`,
+  `contextIsolation:true`, `nodeIntegration:false`, and **no preload** — so
+  remote content cannot reach `window.omp`, `ipcRenderer`, or Node. It uses an
+  ephemeral in-memory session partition by default (cookies/cache discarded on
+  exit; a persisted partition is an explicit opt-in), main polices navigation
+  (`http`/`https` only, `window.open` denied or routed to `openExternal`, with an
+  optional host allowlist), and the view has no IPC bridge. Crucially, **the main
+  renderer's CSP is unchanged** (`default-src`/`script-src`/`connect-src
+  'self'`); the embedded browser is a distinct, deliberately-permissive web
+  context, not the privileged renderer.
