@@ -16,6 +16,8 @@ const ALL_ROUTES = [
   "skills",
   "mcp",
   "agents",
+  "terminal",
+  "browser",
   "github",
   "linear",
   "settings",

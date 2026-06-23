@@ -12,6 +12,8 @@ export type Route =
   | "agents"
   | "github"
   | "linear"
+  | "terminal"
+  | "browser"
   | "settings";
 
 /** A request to open a specific session transcript scrolled to a message. */
