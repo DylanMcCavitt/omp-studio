@@ -17,7 +17,7 @@ import {
   SIDEBAR_MIN_PCT,
 } from "@/lib/layout";
 import { isRailRoute } from "@/lib/nav-registry";
-import type { Route } from "@/store/app";
+import { type Route, useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
 import { useShellStore } from "@/store/shell";
 import { Sidebar } from "./Sidebar";
@@ -34,6 +34,15 @@ export function Layout({ children }: LayoutProps) {
   const openPanelId = useShellStore((s) => s.openPanelId);
   const hydrate = useShellStore((s) => s.hydrate);
   const panelOpen = openPanelId != null && isRailRoute(openPanelId);
+  // Ambient location for the titlebar: the active workspace's label (falls back
+  // to its path basename, then the product name) instead of a dead brand label.
+  const selectedProject = useAppStore((s) => s.selectedProject);
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
+  const titleLabel = selectedProject
+    ? (workspaces?.find((w) => w.cwd === selectedProject)?.label ??
+      selectedProject.split("/").filter(Boolean).pop() ??
+      "OMP Studio")
+    : "OMP Studio";
 
   // Restore the persisted open rail panel once, after settings finish loading.
   // Guarded so a panel the user opened during boot is never clobbered.
@@ -51,8 +60,8 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="flex h-screen flex-col bg-bg text-ink">
       <header className="titlebar flex h-7 shrink-0 items-center border-b border-border-subtle bg-bg-raised pl-[72px]">
-        <span className="flex-1 text-center text-xs font-medium tracking-wide text-ink-faint">
-          OMP Studio
+        <span className="flex-1 truncate px-3 text-center text-xs font-medium text-ink-muted">
+          {titleLabel}
         </span>
         <span className="w-[72px]" />
       </header>

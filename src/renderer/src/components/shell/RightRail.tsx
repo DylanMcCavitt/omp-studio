@@ -12,34 +12,49 @@ export function RightRail() {
   const openPanelId = useShellStore((s) => s.openPanelId);
   const togglePanel = useShellStore((s) => s.togglePanel);
 
+  const renderItem = (entry: (typeof RAIL_ENTRIES)[number]) => {
+    const { icon: Icon, label, route } = entry;
+    const active = openPanelId === route;
+    return (
+      <button
+        key={route}
+        type="button"
+        onClick={() => togglePanel(route)}
+        aria-label={label}
+        title={label}
+        aria-pressed={active}
+        className={cn(
+          "relative inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+          active
+            ? "bg-accent-soft text-accent"
+            : "text-ink-muted hover:bg-bg-hover hover:text-ink",
+        )}
+      >
+        {active && (
+          <span
+            aria-hidden
+            className="absolute left-[-6px] h-5 w-0.5 rounded-r-full bg-accent"
+          />
+        )}
+        <Icon size={16} className="shrink-0" />
+      </button>
+    );
+  };
+
+  // Settings is pinned to the bottom of the rail; everything else stacks at the
+  // top, separated by a flexible spacer.
+  const primary = RAIL_ENTRIES.filter((e) => e.route !== "settings");
+  const footer = RAIL_ENTRIES.filter((e) => e.route === "settings");
+
   return (
     <nav
       aria-label="Tools"
       className="no-drag flex h-full w-12 shrink-0 flex-col items-center gap-1 border-l border-border bg-bg-raised py-2"
     >
-      {RAIL_ENTRIES.map((entry) => {
-        const { icon: Icon, label, route } = entry;
-        const active = openPanelId === route;
-        return (
-          <button
-            key={route}
-            type="button"
-            onClick={() => togglePanel(route)}
-            aria-label={label}
-            title={label}
-            aria-pressed={active}
-            className={cn(
-              "inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-              active
-                ? "bg-accent-soft text-accent"
-                : "text-ink-muted hover:bg-bg-hover hover:text-ink",
-            )}
-          >
-            <Icon size={16} className="shrink-0" />
-          </button>
-        );
-      })}
+      {primary.map(renderItem)}
+      <div className="flex-1" />
+      {footer.map(renderItem)}
     </nav>
   );
 }

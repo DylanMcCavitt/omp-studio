@@ -41,10 +41,7 @@ export function RailPanelHost({ openPanelId }: { openPanelId: Route }) {
       aria-label={`${label} panel`}
       className="flex h-full min-h-0 w-full flex-col border-l border-border bg-bg"
     >
-      <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-3">
-        <span className="truncate text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          {label}
-        </span>
+      <header className="flex h-9 shrink-0 items-center justify-end border-b border-border-subtle px-2">
         <IconButton
           label={`Close ${label}`}
           onClick={closePanel}
