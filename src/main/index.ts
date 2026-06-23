@@ -3,6 +3,7 @@ import { electronApp, is, optimizer } from "@electron-toolkit/utils";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { registerChatIpc } from "./ipc/chat";
 import { registerDataIpc } from "./ipc/data";
+import { registerLinearIpc } from "./ipc/linear";
 import { registerSettingsIpc } from "./ipc/settings";
 import { scoped } from "./logger";
 import { SessionRegistry } from "./omp/registry";
@@ -78,6 +79,7 @@ void app.whenReady().then(async () => {
   registerDataIpc(ipcMain);
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);
+  registerLinearIpc(ipcMain);
 
   createWindow();
 
