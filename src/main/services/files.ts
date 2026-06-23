@@ -16,6 +16,7 @@ import { realpathSync } from "node:fs";
 import {
   readFile as fsReadFile,
   writeFile as fsWriteFile,
+  lstat,
   mkdir,
   readdir,
   rename,
@@ -72,10 +73,13 @@ export function createFilesService(getRoot: GetRoot): FilesService {
 
 /**
  * Resolve `relPath` under `root` to its canonical absolute path, or `null` when
- * it escapes the root. The check is on the symlink-RESOLVED paths of BOTH the
- * root and the candidate: a `..` traversal escapes via `relative()`, and a
- * symlink (leaf or ancestor) pointing outside the root is unmasked by
- * `realpathSync` before the relative check. An unresolvable root yields `null`.
+ * it escapes the root. Defense is layered: (1) a SYNTACTIC pre-check rejects an
+ * absolute path or any `..` segment in the renderer-supplied `relPath` before
+ * any fs access, so a traversal/absolute path can never probe (realpath/stat)
+ * outside the root; (2) the resolved join is canonicalized so a symlink (leaf
+ * or ancestor) under the root pointing outside it is unmasked; (3) a final
+ * `relative()` check rejects anything still outside. An unresolvable root or a
+ * missing root both yield `null`.
  */
 export function containedPath(root: string, relPath: string): string | null {
   return resolveContained(root, relPath)?.abs ?? null;
@@ -86,16 +90,24 @@ function resolveContained(
   relPath: string,
 ): { realRoot: string; abs: string } | null {
   if (!root) return null;
+  // (1) Syntactic rejection BEFORE touching the fs: the renderer must supply a
+  // workspace-relative descent. An absolute path (which `resolve` would honour
+  // verbatim, even one crafted to land back inside) or any `..` segment is
+  // hostile/malformed and is refused without a single syscall.
+  if (isAbsolute(relPath) || relPath.split(/[/\\]/).includes("..")) {
+    return null;
+  }
   let realRoot: string;
   try {
     realRoot = realpathSync(root);
   } catch {
     return null;
   }
+  // (2) Canonicalize the resolved join so an in-root symlink pointing outside is
+  // unmasked, then (3) reject if the canonical path still escapes. `rel === ""`
+  // means the target IS the root (valid for listing root).
   const abs = canonicalize(resolve(realRoot, relPath));
   const rel = relative(realRoot, abs);
-  // `rel === ""` means the target IS the root (valid for listing root); only a
-  // `..` prefix or an absolute remainder indicates an escape.
   if (rel.startsWith("..") || isAbsolute(rel)) return null;
   return { realRoot, abs };
 }
@@ -167,14 +179,15 @@ async function readDir(
   });
   const capped = entries.slice(0, MAX_ENTRIES);
 
-  // Stat only the survivors for size — bounds syscalls to <=MAX_ENTRIES on a
-  // huge directory. Symlinks (kind "file" but not a regular file) are left
-  // size-less so we never follow a link out of tree just to report a byte count.
+  // lstat (not stat) only the survivors for size — bounds syscalls to
+  // <=MAX_ENTRIES on a huge directory AND never follows a symlink: a regular
+  // file reports its size, while a symlink (lstat → isFile() false) is left
+  // size-less so a `link -> /outside/secret` can't leak the target's byte size.
   await Promise.all(
     capped.map(async (entry) => {
       if (entry.kind !== "file") return;
       try {
-        const st = await stat(join(abs, entry.name));
+        const st = await lstat(join(abs, entry.name));
         if (st.isFile()) entry.size = st.size;
       } catch {
         // Unreadable/dangling entry — omit size, keep the entry listed.
@@ -234,18 +247,33 @@ async function writeFile(
   if (!resolved) {
     return { ok: false, error: "path escapes the workspace root" };
   }
-  const { abs } = resolved;
+  const { realRoot, abs } = resolved;
 
-  // Atomic replace: write a unique sibling tmp (same dir → contained) then
-  // rename over the target. 0600-ish perms; tmp is cleaned up on any failure.
-  const tmp = `${abs}.${randomUUID()}.tmp`;
+  const base = basename(abs);
+  const tmpName = `.${base}.${randomUUID()}.tmp`;
   try {
     await mkdir(dirname(abs), { recursive: true });
-    await fsWriteFile(tmp, text, { encoding: "utf8", mode: 0o600 });
-    await rename(tmp, abs);
-    return { ok: true };
+    // TOCTOU defense: the parent passed containment at validation, but a local
+    // process could swap it for a symlink between then and now. Re-resolve the
+    // parent's REAL path AFTER creating it and re-verify containment, then bind
+    // the tmp write + rename to that resolved directory — so even a swapped
+    // symlink parent cannot redirect the write outside the workspace root.
+    const realParent = realpathSync(dirname(abs));
+    const relParent = relative(realRoot, realParent);
+    if (relParent.startsWith("..") || isAbsolute(relParent)) {
+      return { ok: false, error: "path escapes the workspace root" };
+    }
+    const target = join(realParent, base);
+    const tmp = join(realParent, tmpName);
+    try {
+      await fsWriteFile(tmp, text, { encoding: "utf8", mode: 0o600 });
+      await rename(tmp, target);
+      return { ok: true };
+    } catch (err) {
+      await rm(tmp, { force: true }).catch(() => undefined);
+      return { ok: false, error: (err as Error).message };
+    }
   } catch (err) {
-    await rm(tmp, { force: true }).catch(() => undefined);
     return { ok: false, error: (err as Error).message };
   }
 }

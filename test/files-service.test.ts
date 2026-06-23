@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -186,4 +187,57 @@ test("no workspace root resolves to a safe refusal everywhere", async () => {
   expect((await svc.writeFile("x.txt", "y")).ok).toBe(false);
   // A root that does not exist on disk is likewise refused (unresolvable).
   expect(containedPath(join(outside, "does-not-exist"), "x")).toBeNull();
+});
+
+test("absolute paths and `..` segments are rejected syntactically (pre-canonicalize)", async () => {
+  // An absolute path is refused even when it points BACK INSIDE the root: the
+  // renderer contract is workspace-relative, and `resolve` would honour an
+  // absolute arg verbatim, so it must never be accepted.
+  const insideAbs = join(realpathSync(root), "inside.txt");
+  writeFileSync(insideAbs, "data");
+  expect(containedPath(root, insideAbs)).toBeNull();
+  expect(containedPath(root, "/etc/passwd")).toBeNull();
+
+  // A `..` anywhere in the path is refused before any fs access — a deep
+  // traversal toward a real outside target never resolves/probes it.
+  writeFileSync(join(outside, "secret.txt"), "leak");
+  expect(containedPath(root, "../secret.txt")).toBeNull();
+  expect(containedPath(root, "a/../../b")).toBeNull();
+  expect(containedPath(root, "../../../../../../etc/passwd")).toBeNull();
+
+  // Every operation honours the syntactic rejection.
+  expect(await service().readFile(insideAbs)).toBeNull();
+  expect(await service().readDir("..")).toEqual([]);
+  expect((await service().writeFile("/tmp/evil.txt", "x")).ok).toBe(false);
+  expect((await service().writeFile("../evil.txt", "x")).ok).toBe(false);
+});
+
+test("readDir leaves symlink entries size-less (never follows the link)", async () => {
+  // A real file gets its real size; a symlink to an outside file is listed but
+  // carries NO size, so the outside target's byte length never leaks.
+  writeFileSync(join(root, "real.txt"), "1234567890");
+  writeFileSync(join(outside, "secret.txt"), "supersecretpayload");
+  symlinkSync(join(outside, "secret.txt"), join(root, "link.txt"));
+  symlinkSync(outside, join(root, "linkdir"));
+
+  const entries = await service().readDir();
+  expect(entries.find((e) => e.name === "real.txt")?.size).toBe(10);
+  expect(entries.find((e) => e.name === "link.txt")?.size).toBeUndefined();
+  expect(entries.find((e) => e.name === "linkdir")?.size).toBeUndefined();
+});
+
+test("writeFile stays contained against a symlinked parent and binds to the real dir", async () => {
+  // A symlinked parent directory pointing outside the root is refused, and the
+  // outside target is never written through.
+  symlinkSync(outside, join(root, "sub"));
+  const res = await service().writeFile("sub/x.txt", "tampered");
+  expect(res.ok).toBe(false);
+  expect(readdirSync(outside)).not.toContain("x.txt");
+
+  // A normal deep write creates real parents and lands strictly under the root
+  // (the write/rename are bound to the realpath'd parent, not a path string).
+  expect((await service().writeFile("deep/nested/ok.txt", "ok")).ok).toBe(true);
+  const written = realpathSync(join(root, "deep", "nested", "ok.txt"));
+  expect(written.startsWith(realpathSync(root))).toBe(true);
+  expect((await service().readFile("deep/nested/ok.txt"))?.text).toBe("ok");
 });
