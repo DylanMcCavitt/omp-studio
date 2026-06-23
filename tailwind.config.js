@@ -20,37 +20,39 @@ export default {
           "monospace",
         ],
       },
+      // Semantic tokens are backed by CSS variables (space-separated RGB
+      // channels) defined in styles.css, so `bg-bg`, `text-ink`, `bg-accent/10`,
+      // etc. resolve through the active theme. `:root` = light, `.dark` = dark.
       colors: {
-        // Sleek dark cockpit palette.
         bg: {
-          DEFAULT: "#0b0d12",
-          raised: "#11141b",
-          panel: "#151925",
-          hover: "#1b2030",
+          DEFAULT: "rgb(var(--c-bg) / <alpha-value>)",
+          raised: "rgb(var(--c-bg-raised) / <alpha-value>)",
+          panel: "rgb(var(--c-bg-panel) / <alpha-value>)",
+          hover: "rgb(var(--c-bg-hover) / <alpha-value>)",
         },
         border: {
-          DEFAULT: "#222838",
-          subtle: "#1a1f2c",
-          strong: "#2c3346",
+          DEFAULT: "rgb(var(--c-border) / <alpha-value>)",
+          subtle: "rgb(var(--c-border-subtle) / <alpha-value>)",
+          strong: "rgb(var(--c-border-strong) / <alpha-value>)",
         },
         ink: {
-          DEFAULT: "#e6e9f0",
-          muted: "#9aa3b8",
-          faint: "#6b7488",
+          DEFAULT: "rgb(var(--c-ink) / <alpha-value>)",
+          muted: "rgb(var(--c-ink-muted) / <alpha-value>)",
+          faint: "rgb(var(--c-ink-faint) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "#6d8cff",
-          hover: "#84a0ff",
-          soft: "#1c2438",
+          DEFAULT: "rgb(var(--c-accent) / <alpha-value>)",
+          hover: "rgb(var(--c-accent-hover) / <alpha-value>)",
+          soft: "rgb(var(--c-accent-soft) / <alpha-value>)",
         },
-        success: "#4ade80",
-        warn: "#fbbf24",
-        danger: "#f87171",
-        thinking: "#a78bfa",
+        success: "rgb(var(--c-success) / <alpha-value>)",
+        warn: "rgb(var(--c-warn) / <alpha-value>)",
+        danger: "rgb(var(--c-danger) / <alpha-value>)",
+        thinking: "rgb(var(--c-thinking) / <alpha-value>)",
       },
       boxShadow: {
-        panel: "0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.25)",
-        glow: "0 0 0 1px rgba(109,140,255,0.35), 0 8px 30px rgba(109,140,255,0.15)",
+        panel: "var(--shadow-panel)",
+        glow: "var(--shadow-glow)",
       },
       keyframes: {
         "fade-in": {

@@ -1,10 +1,99 @@
-@import "highlight.js/styles/github-dark.css";
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Theming. Every Tailwind semantic color token (bg-*, text-ink, border-*,
+ * accent, status colors) is backed by a CSS variable holding space-separated
+ * RGB channels, so Tailwind's `/<alpha>` opacity modifiers keep working
+ * (`rgb(var(--c-x) / <alpha-value>)`). `:root` is the light palette; `.dark`
+ * overrides it with the dark cockpit palette. lib/useTheme toggles the `.dark`
+ * class from settings.theme (following the OS when "system"). Code-block syntax
+ * colors are variable-driven too — they replace the dark-only highlight.js
+ * stylesheet so light mode stays legible instead of washed-out.
+ */
 @layer base {
+  :root {
+    /* Light palette (channels: R G B). */
+    --c-bg: 244 245 247;
+    --c-bg-raised: 255 255 255;
+    --c-bg-panel: 251 252 254;
+    --c-bg-hover: 233 235 241;
+    --c-border: 214 218 227;
+    --c-border-subtle: 230 233 240;
+    --c-border-strong: 192 198 210;
+    --c-ink: 18 22 31;
+    --c-ink-muted: 81 90 107;
+    --c-ink-faint: 104 111 130;
+    --c-accent: 58 91 217;
+    --c-accent-hover: 44 73 191;
+    --c-accent-soft: 231 237 253;
+    --c-success: 26 127 55;
+    --c-warn: 180 83 9;
+    --c-danger: 207 34 46;
+    --c-thinking: 124 58 237;
+
+    --shadow-panel:
+      0 1px 2px rgb(16 24 40 / 0.06), 0 8px 24px rgb(16 24 40 / 0.08);
+    --shadow-glow:
+      0 0 0 1px rgb(58 91 217 / 0.35), 0 8px 30px rgb(58 91 217 / 0.18);
+
+    /* highlight.js token colors — GitHub light. */
+    --hljs-keyword: #d73a49;
+    --hljs-entity: #6f42c1;
+    --hljs-constant: #005cc5;
+    --hljs-string: #032f62;
+    --hljs-variable: #e36209;
+    --hljs-comment: #6a737d;
+    --hljs-tag: #22863a;
+    --hljs-heading: #005cc5;
+    --hljs-bullet: #735c0f;
+    --hljs-addition: #22863a;
+    --hljs-addition-bg: #f0fff4;
+    --hljs-deletion: #b31d28;
+    --hljs-deletion-bg: #ffeef0;
+  }
+
+  .dark {
+    /* Dark cockpit palette (channels: R G B). */
+    --c-bg: 11 13 18;
+    --c-bg-raised: 17 20 27;
+    --c-bg-panel: 21 25 37;
+    --c-bg-hover: 27 32 48;
+    --c-border: 34 40 56;
+    --c-border-subtle: 26 31 44;
+    --c-border-strong: 44 51 70;
+    --c-ink: 230 233 240;
+    --c-ink-muted: 154 163 184;
+    --c-ink-faint: 107 116 136;
+    --c-accent: 109 140 255;
+    --c-accent-hover: 132 160 255;
+    --c-accent-soft: 28 36 56;
+    --c-success: 74 222 128;
+    --c-warn: 251 191 36;
+    --c-danger: 248 113 113;
+    --c-thinking: 167 139 250;
+
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
+    --shadow-glow:
+      0 0 0 1px rgb(109 140 255 / 0.35), 0 8px 30px rgb(109 140 255 / 0.15);
+
+    /* highlight.js token colors — GitHub dark. */
+    --hljs-keyword: #ff7b72;
+    --hljs-entity: #d2a8ff;
+    --hljs-constant: #79c0ff;
+    --hljs-string: #a5d6ff;
+    --hljs-variable: #ffa657;
+    --hljs-comment: #8b949e;
+    --hljs-tag: #7ee787;
+    --hljs-heading: #1f6feb;
+    --hljs-bullet: #f2cc60;
+    --hljs-addition: #aff5b4;
+    --hljs-addition-bg: #033a16;
+    --hljs-deletion: #ffdcd7;
+    --hljs-deletion-bg: #67060c;
+  }
+
   html,
   body {
     height: 100%;
@@ -32,7 +121,7 @@
   /* Thin, theme-tinted scrollbar for scroll containers. */
   .scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: theme("colors.border.strong") transparent;
+    scrollbar-color: rgb(var(--c-border-strong)) transparent;
   }
 
   .scrollbar::-webkit-scrollbar {
@@ -46,22 +135,106 @@
 
   .scrollbar::-webkit-scrollbar-thumb {
     border-radius: 9999px;
-    background-color: theme("colors.border.strong");
+    background-color: rgb(var(--c-border-strong));
     border: 2px solid transparent;
     background-clip: content-box;
   }
 
   .scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: theme("colors.ink.faint");
+    background-color: rgb(var(--c-ink-faint));
   }
 
-  /* Highlighted code regions (highlight.js theme imported above). */
-  .hl pre,
+  /* Code blocks (rehype-highlight). Structure + theme-driven syntax colors. */
+  .hl pre {
+    @apply my-2 overflow-x-auto rounded-lg bg-bg-raised;
+  }
+
   .hl pre code.hljs {
-    @apply rounded-lg bg-bg-raised text-sm;
+    @apply block bg-transparent p-3 font-mono text-sm;
   }
 
   .hl code {
     @apply font-mono;
+  }
+
+  .hljs-doctag,
+  .hljs-keyword,
+  .hljs-meta .hljs-keyword,
+  .hljs-template-tag,
+  .hljs-template-variable,
+  .hljs-type,
+  .hljs-variable.language_ {
+    color: var(--hljs-keyword);
+  }
+
+  .hljs-title,
+  .hljs-title.class_,
+  .hljs-title.class_.inherited__,
+  .hljs-title.function_ {
+    color: var(--hljs-entity);
+  }
+
+  .hljs-attr,
+  .hljs-attribute,
+  .hljs-literal,
+  .hljs-meta,
+  .hljs-number,
+  .hljs-operator,
+  .hljs-variable,
+  .hljs-selector-attr,
+  .hljs-selector-class,
+  .hljs-selector-id {
+    color: var(--hljs-constant);
+  }
+
+  .hljs-regexp,
+  .hljs-string,
+  .hljs-meta .hljs-string {
+    color: var(--hljs-string);
+  }
+
+  .hljs-built_in,
+  .hljs-symbol {
+    color: var(--hljs-variable);
+  }
+
+  .hljs-comment,
+  .hljs-code,
+  .hljs-formula {
+    color: var(--hljs-comment);
+  }
+
+  .hljs-name,
+  .hljs-quote,
+  .hljs-selector-tag,
+  .hljs-selector-pseudo {
+    color: var(--hljs-tag);
+  }
+
+  .hljs-section {
+    color: var(--hljs-heading);
+    font-weight: 600;
+  }
+
+  .hljs-bullet {
+    color: var(--hljs-bullet);
+  }
+
+  .hljs-emphasis {
+    font-style: italic;
+  }
+
+  .hljs-strong {
+    font-weight: 600;
+  }
+
+  .hljs-addition {
+    color: var(--hljs-addition);
+    background-color: var(--hljs-addition-bg);
+  }
+
+  .hljs-deletion {
+    color: var(--hljs-deletion);
+    background-color: var(--hljs-deletion-bg);
   }
 }

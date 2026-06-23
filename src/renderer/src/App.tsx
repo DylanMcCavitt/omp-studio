@@ -1,5 +1,6 @@
 import { type ComponentType, useEffect } from "react";
 import { Layout } from "@/components/Layout";
+import { useTheme } from "@/lib/useTheme";
 import { type Route, useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
@@ -27,6 +28,8 @@ export default function App() {
   const route = useAppStore((s) => s.route);
   const loadSettings = useSettingsStore((s) => s.load);
   const ensureSubscribed = useChatStore((s) => s.ensureSubscribed);
+  // Apply the persisted theme to the document (follows the OS when "system").
+  useTheme();
   // Bootstrap once: load persisted settings and open the single global bridge
   // subscription that routes every session's frames into the chat store.
   useEffect(() => {
