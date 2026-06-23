@@ -14,9 +14,7 @@ This contract binds the OMP Native Zed workstream to Linear and GitHub delivery.
 | Field | Value |
 | --- | --- |
 | Team | `dmcc` / key `AGE` |
-| Team id | `e513928d-f3e5-4a7c-955a-786a47287d02` |
 | Project | `OMP Native Zed` |
-| Project id | `03a4635b-5765-483c-aab7-ff97e24ca742` |
 | Project URL | https://linear.app/dylanmccavitt/project/omp-native-zed-8ded4620e7fd |
 | Project state | `Planned` |
 | Initiative | `OMP Studio` |

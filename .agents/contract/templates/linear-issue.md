@@ -1,4 +1,4 @@
-# [ZED-##] Slice title
+# AGE-### — slice title
 
 ## Goal
 

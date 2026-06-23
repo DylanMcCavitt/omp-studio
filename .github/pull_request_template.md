@@ -1,30 +1,33 @@
+# AGE-### — slice title
+
+This PR belongs to the OMP Native Zed track. The branch name carries the Linear issue id so Linear links the PR and merge closes the issue through the GitHub bridge.
+
+Fixes AGE-###
+
 ## Summary
 
-Briefly describe what this pull request changes and why.
+One short paragraph: what changed, why it belongs in this slice, and which repo it touches (`omp-studio` planning repo or Zed fork).
 
-## Related issues
+## Changes
 
-Closes #
+- Change 1.
+- Change 2.
 
-## Type of change
+## Acceptance criteria
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Refactor
-- [ ] Documentation
-- [ ] Build / CI
+Map every Linear acceptance criterion to the implementation or artifact that satisfies it.
 
-## Checklist
+- [ ] Criterion — evidence/location.
 
-- [ ] `npm run check` passes (Biome lint + format)
-- [ ] `npm run typecheck` passes
-- [ ] `bun test` passes (non-live; do not set `RPC_LIVE`)
-- [ ] `npm run build` succeeds
-- [ ] `npm run test:e2e` passes (Playwright `_electron` smoke; non-live)
-- [ ] Updated `CHANGELOG.md` under `## [Unreleased]`
-- [ ] Documentation updated where relevant
+## Proof
 
-## Notes for reviewers
+List targeted checks and observed evidence. Mark any unrun check with the blocker, not a vague excuse.
 
-Anything reviewers should pay particular attention to (screenshots, trade-offs,
-follow-ups).
+## HITL / AFK
+
+- Mode: AFK or HITL.
+- If HITL: name the exact human-gated action, credential, paid turn, browser/terminal action, or external write.
+
+## Review notes
+
+Risks, tradeoffs, and the review lens requested. Security-boundary or credential work must call that out here.
