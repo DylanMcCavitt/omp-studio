@@ -20,7 +20,7 @@ export function Sidebar() {
 
   return (
     <nav className="no-drag flex h-full w-full min-w-0 flex-col border-r border-border bg-bg-raised">
-      <div className="flex items-center gap-2.5 px-4 pb-3 pt-2">
+      <div className="flex items-center gap-2.5 px-3 pb-3 pt-2">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-bg shadow-glow">
           ω
         </div>
@@ -44,7 +44,7 @@ export function Sidebar() {
 
       {mode === "chats" ? <ChatsPane onNewChat={newChat} /> : <FileTree />}
 
-      <div className="border-t border-border-subtle px-4 py-3">
+      <div className="border-t border-border-subtle px-3 py-3">
         <span className="text-xs text-ink-faint">omp harness</span>
       </div>
     </nav>

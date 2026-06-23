@@ -51,7 +51,7 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="flex h-screen flex-col bg-bg text-ink">
       <header className="titlebar flex h-7 shrink-0 items-center border-b border-border-subtle bg-bg-raised pl-[72px]">
-        <span className="flex-1 text-center text-xs font-medium text-ink-faint">
+        <span className="flex-1 text-center text-xs font-medium tracking-wide text-ink-faint">
           OMP Studio
         </span>
         <span className="w-[72px]" />

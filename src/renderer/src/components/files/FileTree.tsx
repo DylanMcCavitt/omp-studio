@@ -56,7 +56,7 @@ export function FileTree() {
           onClick={() => void refreshTree()}
           className="h-6 w-6"
         >
-          <RefreshCw size={13} className={cn(rootLoading && "animate-spin")} />
+          <RefreshCw size={14} className={cn(rootLoading && "animate-spin")} />
         </IconButton>
       </div>
       <div

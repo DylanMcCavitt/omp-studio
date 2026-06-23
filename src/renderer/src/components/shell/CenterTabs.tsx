@@ -87,7 +87,7 @@ function TabStrip({
           activeTab === CHAT_TAB ? TAB_ACTIVE : TAB_INACTIVE,
         )}
       >
-        <MessageSquare size={13} className="shrink-0" />
+        <MessageSquare size={14} className="shrink-0" />
         Chat
       </button>
       {order.map((path) => (
@@ -126,7 +126,7 @@ function FileTabButton({
         title={path}
         className={cn(TAB_BASE, "pr-7", active ? TAB_ACTIVE : TAB_INACTIVE)}
       >
-        <FileText size={13} className="shrink-0 text-ink-faint" />
+        <FileText size={14} className="shrink-0 text-ink-faint" />
         <span className="max-w-[11rem] truncate">{name}</span>
         {dirty && (
           <span
@@ -142,7 +142,7 @@ function FileTabButton({
         onClick={() => closeFileWithConfirm(path)}
         className="absolute right-1 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-ink-faint transition-colors hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
       >
-        <X size={12} />
+        <X size={14} />
       </button>
     </div>
   );

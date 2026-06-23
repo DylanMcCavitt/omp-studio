@@ -50,7 +50,7 @@ export function FileEditor({ path }: { path: string }) {
                 : "cursor-default text-ink-faint",
             )}
           >
-            <Save size={13} />
+            <Save size={14} />
             Save
           </button>
         )}
