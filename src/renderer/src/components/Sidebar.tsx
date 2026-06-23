@@ -1,35 +1,8 @@
-import {
-  Bot,
-  Github,
-  History,
-  LayoutDashboard,
-  type LucideIcon,
-  MessagesSquare,
-  Plug,
-  Plus,
-  Settings,
-  Sparkles,
-} from "lucide-react";
+import { Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { type Route, useAppStore } from "@/store/app";
+import { NAV_ENTRIES, NAV_GROUP_ORDER } from "@/lib/nav-registry";
+import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
-
-export interface NavItem {
-  route: Route;
-  label: string;
-  icon: LucideIcon;
-}
-
-export const NAV: NavItem[] = [
-  { route: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { route: "chat", label: "Chat", icon: MessagesSquare },
-  { route: "sessions", label: "Sessions", icon: History },
-  { route: "skills", label: "Skills", icon: Sparkles },
-  { route: "mcp", label: "MCP", icon: Plug },
-  { route: "agents", label: "Agents", icon: Bot },
-  { route: "github", label: "GitHub", icon: Github },
-  { route: "settings", label: "Settings", icon: Settings },
-];
 
 export function Sidebar() {
   const route = useAppStore((s) => s.route);
@@ -63,30 +36,40 @@ export function Sidebar() {
       </div>
 
       <div className="scrollbar flex-1 overflow-y-auto px-2 py-2">
-        <ul className="flex flex-col gap-0.5">
-          {NAV.map(({ route: r, label, icon: Icon }) => {
-            const active = route === r;
+        <div className="flex flex-col gap-3">
+          {NAV_GROUP_ORDER.map((group) => {
+            const items = NAV_ENTRIES.filter(
+              (e) => (e.group ?? "core") === group,
+            );
+            if (items.length === 0) return null;
             return (
-              <li key={r}>
-                <button
-                  type="button"
-                  onClick={() => setRoute(r)}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-                    active
-                      ? "bg-accent-soft text-accent"
-                      : "text-ink-muted hover:bg-bg-hover hover:text-ink",
-                  )}
-                >
-                  <Icon size={17} className="shrink-0" />
-                  {label}
-                </button>
-              </li>
+              <ul key={group} className="flex flex-col gap-0.5">
+                {items.map(({ route: r, label, icon: Icon }) => {
+                  const active = route === r;
+                  return (
+                    <li key={r}>
+                      <button
+                        type="button"
+                        onClick={() => setRoute(r)}
+                        aria-current={active ? "page" : undefined}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                          active
+                            ? "bg-accent-soft text-accent"
+                            : "text-ink-muted hover:bg-bg-hover hover:text-ink",
+                        )}
+                      >
+                        <Icon size={17} className="shrink-0" />
+                        {label}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             );
           })}
-        </ul>
+        </div>
       </div>
 
       <div className="border-t border-border-subtle px-4 py-3">

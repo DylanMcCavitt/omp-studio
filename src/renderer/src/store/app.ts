@@ -1,5 +1,8 @@
 import { create } from "zustand";
 
+// Source of truth for the set of shell destinations. `lib/nav-registry.ts` keys
+// its `Record<Route, …>` registry off this union, so a route added here without
+// a matching NAV_ENTRIES entry (or vice versa) fails to typecheck (D2 coverage).
 export type Route =
   | "dashboard"
   | "chat"
