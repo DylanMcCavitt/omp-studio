@@ -85,6 +85,25 @@ export class SessionRegistry {
     this.store = opts?.store ?? defaultStore;
   }
 
+  // Seed the registry with persisted open-session descriptors on boot, as
+  // HIBERNATED records (no live child). Without this, a fresh process starts
+  // with an empty record set, so `chat:list` returns nothing and the first
+  // `resume`/`persist` writes only its own records back to settings —
+  // clobbering the un-resumed descriptors. Seeding here keeps the full open set
+  // in memory so list() surfaces it and persist() preserves it (merge by id;
+  // an already-tracked id is never overwritten). Idempotent and child-free, so
+  // no turn-end listener is attached until the chat is actually resumed.
+  hydrate(descriptors: OpenSessionDescriptor[]): void {
+    for (const descriptor of descriptors) {
+      const id = descriptor.studioSessionId;
+      if (this.records.has(id)) continue;
+      this.records.set(id, {
+        child: null,
+        descriptor: { ...descriptor, status: "hibernated" },
+      });
+    }
+  }
+
   async create(opts: {
     cwd: string;
     model?: string;

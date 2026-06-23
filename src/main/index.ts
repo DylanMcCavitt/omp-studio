@@ -6,7 +6,7 @@ import { registerDataIpc } from "./ipc/data";
 import { registerSettingsIpc } from "./ipc/settings";
 import { scoped } from "./logger";
 import { SessionRegistry } from "./omp/registry";
-import { setSettingsDir } from "./services/settings-service";
+import { loadSettings, setSettingsDir } from "./services/settings-service";
 
 let mainWindow: BrowserWindow | null = null;
 const registry = new SessionRegistry();
@@ -63,13 +63,18 @@ function createWindow(): void {
   }
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   electronApp.setAppUserModelId("com.ompstudio.app");
   app.on("browser-window-created", (_event, window) => {
     optimizer.watchWindowShortcuts(window);
   });
 
   setSettingsDir(app.getPath("userData"));
+  // Seed the registry with persisted open-session descriptors so a fresh boot
+  // lists them for resume (chat:list) and a later resume re-persists the FULL
+  // set instead of clobbering the un-resumed descriptors. No children spawn —
+  // the renderer resumes them on demand (D3r).
+  registry.hydrate((await loadSettings()).openSessions);
   registerDataIpc(ipcMain);
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);

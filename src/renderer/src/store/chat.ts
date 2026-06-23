@@ -14,11 +14,13 @@ import type {
   ChatLifecycleEvent,
   ChatUiRequestEvent,
   ChatUiRespondPayload,
+  OpenSessionDescriptor,
   PromptOptions,
 } from "@shared/ipc";
 import type {
   ContentBlock,
   ImageContent,
+  OmpMessage,
   RpcFrame,
   RpcState,
   ThinkingLevel,
@@ -28,6 +30,7 @@ import { create } from "zustand";
 import { useAppStore } from "@/store/app";
 import { useApprovalStore } from "@/store/approvals";
 import {
+  createSession,
   type LiveSessionState,
   reduceSession,
   sessionFromState,
@@ -37,9 +40,27 @@ import { useSettingsStore } from "@/store/settings";
 
 export type { ChatStatus, LiveSessionState } from "@/store/session-reducer";
 
+/**
+ * A persisted open-session descriptor that is NOT currently live (no child).
+ * These restore on boot (D3r) and render as muted, resumable rows in the rail.
+ * `resuming` drives the in-flight spinner; `error` holds an honest failure
+ * (missing JSONL / resume error) that surfaces a disabled error row + Remove.
+ */
+export interface HibernatedSession {
+  descriptor: OpenSessionDescriptor;
+  resuming?: boolean;
+  error?: string;
+}
+
 interface ChatState {
   /** Every open session's render state, keyed by studio session id. */
   openSessions: Record<string, LiveSessionState>;
+  /**
+   * Persisted-but-not-live sessions (restored on boot), keyed by studio session
+   * id. The rail lists these as hibernated rows; opening one resumes it and
+   * promotes it into `openSessions`. Never overlaps with `openSessions`.
+   */
+  hibernatedSessions: Record<string, HibernatedSession>;
   /** The session shown in the active chat pane, or null for a fresh chat. */
   activeSessionId: string | null;
   /** True while a brand-new session is spawning (drives the start panel). */
@@ -64,6 +85,26 @@ interface ChatActions {
   newChat(): void;
   /** Dispose a session's child and drop its slice (transcript untouched). */
   closeSession(id: string): Promise<void>;
+
+  /**
+   * Restore persisted open-session descriptors on boot (D3r). Reads the live
+   * registry list (chat.list) unioned with settings.openSessions, deduped by
+   * studio session id, and registers any descriptor without a live slice as a
+   * hibernated row. Does NOT auto-spawn any child.
+   */
+  loadOpenSessions(): Promise<void>;
+  /**
+   * Open (resume) a hibernated descriptor: hydrate the transcript from JSONL
+   * immediately so history shows while the child spawns, then merge live state
+   * over it via the standard refresh path. A missing JSONL or a failed resume
+   * surfaces an honest error row (no fabricated transcript).
+   */
+  resumeSession(id: string): Promise<void>;
+  /**
+   * Drop a hibernated/errored descriptor from the open list permanently
+   * (registry dispose → settings re-persist) so it does not return on reboot.
+   */
+  removeHibernated(id: string): Promise<void>;
 
   /** Register/refresh a session slice from a get_state snapshot + hydrate it. */
   openSession(
@@ -143,6 +184,7 @@ function buildUserMessage(text: string, images?: ImageContent[]): UserMessage {
 
 export const useChatStore = create<ChatStore>()((set, get) => ({
   openSessions: {},
+  hibernatedSessions: {},
   activeSessionId: null,
   creating: false,
   createError: undefined,
@@ -207,6 +249,152 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
           : s.activeSessionId;
       return { openSessions: rest, activeSessionId };
     });
+  },
+
+  async loadOpenSessions() {
+    // Open the global subscription first so a resumed child's frames route the
+    // moment it spawns.
+    get().ensureSubscribed();
+    let listed: OpenSessionDescriptor[] = [];
+    try {
+      listed = await window.omp.chat.list();
+    } catch {
+      // chat.list is best-effort; fall back to the persisted settings below so a
+      // boot still restores the workspace even if the registry call fails.
+    }
+    // Union the live registry list with the persisted descriptors (a fresh boot
+    // has an empty in-memory registry, so settings.openSessions is the real
+    // source), deduped by studio session id with the registry entry winning.
+    const persisted = useSettingsStore.getState().settings?.openSessions ?? [];
+    const byId = new Map<string, OpenSessionDescriptor>();
+    for (const d of persisted) byId.set(d.studioSessionId, d);
+    for (const d of listed) byId.set(d.studioSessionId, d);
+    if (byId.size === 0) return;
+
+    set((s) => {
+      const hibernatedSessions = { ...s.hibernatedSessions };
+      let changed = false;
+      for (const descriptor of byId.values()) {
+        const id = descriptor.studioSessionId;
+        // A descriptor already live this run (created/resumed) is not hibernated.
+        if (s.openSessions[id]) continue;
+        const existing = hibernatedSessions[id];
+        // Preserve an in-flight/error row; only refresh its descriptor.
+        hibernatedSessions[id] = existing
+          ? { ...existing, descriptor }
+          : { descriptor };
+        changed = true;
+      }
+      return changed ? { hibernatedSessions } : s;
+    });
+  },
+
+  async resumeSession(id) {
+    const row = get().hibernatedSessions[id];
+    if (!row || row.resuming) return;
+    const { descriptor } = row;
+    get().ensureSubscribed();
+    // Mark the row resuming (spinner, disabled) and clear any prior error.
+    set((s) => ({
+      hibernatedSessions: {
+        ...s.hibernatedSessions,
+        [id]: { descriptor, resuming: true },
+      },
+    }));
+
+    // 1) Hydrate the transcript from JSONL FIRST (fast, local read) so history
+    //    is visible the instant the slice mounts. A missing/unreadable JSONL is
+    //    an honest failure: surface the error row and never spawn a child or
+    //    fabricate a transcript.
+    let hydrated: OmpMessage[] = [];
+    if (descriptor.sessionFile) {
+      try {
+        const transcript = await window.omp.readSession(descriptor.sessionFile);
+        hydrated = transcript.messages;
+      } catch (e) {
+        set((s) => ({
+          hibernatedSessions: {
+            ...s.hibernatedSessions,
+            [id]: { descriptor, error: errorMessage(e) },
+          },
+        }));
+        return;
+      }
+    }
+
+    // 2) Show the hydrated history immediately: register an optimistic live
+    //    slice (spawning) carrying the JSONL transcript, drop the hibernated
+    //    row, and activate the pane while the child spawns.
+    set((s) => {
+      const hibernatedSessions = { ...s.hibernatedSessions };
+      delete hibernatedSessions[id];
+      return {
+        hibernatedSessions,
+        openSessions: {
+          ...s.openSessions,
+          [id]: createSession(id, {
+            status: "spawning",
+            cwd: descriptor.cwd,
+            sessionName: descriptor.title ?? undefined,
+            thinkingLevel: descriptor.thinkingLevel ?? "medium",
+            sessionFile: descriptor.sessionFile,
+            messages: hydrated,
+            lastActivityAt: Date.now(),
+          }),
+        },
+      };
+    });
+    get().openChat(id);
+    // Mirror create()'s per-session approval policy so the C3 approval control
+    // reflects the resumed child's spawn-time policy.
+    useApprovalStore.getState().setPolicy(id, descriptor.approvalPolicy);
+
+    // 3) Spawn + merge live state over the hydrated transcript via the standard
+    //    refresh path. openSession seeds from the authoritative resume state and
+    //    keeps `messages: hydrated` until live get_messages replaces it, so the
+    //    transcript never flashes empty (no double-render).
+    try {
+      const { state } = await window.omp.chat.resume(descriptor);
+      await get().openSession(id, state, {
+        cwd: descriptor.cwd,
+        messages: hydrated,
+      });
+    } catch (e) {
+      // Resume failed: drop the optimistic slice and surface an honest error
+      // row. The briefly-shown history is discarded — a dead child must not
+      // leave a zombie live pane behind.
+      set((s) => {
+        const openSessions = { ...s.openSessions };
+        delete openSessions[id];
+        const activeSessionId =
+          s.activeSessionId === id ? null : s.activeSessionId;
+        return {
+          openSessions,
+          activeSessionId,
+          hibernatedSessions: {
+            ...s.hibernatedSessions,
+            [id]: { descriptor, error: errorMessage(e) },
+          },
+        };
+      });
+    }
+  },
+
+  async removeHibernated(id) {
+    set((s) => {
+      if (!s.hibernatedSessions[id]) return s;
+      const hibernatedSessions = { ...s.hibernatedSessions };
+      delete hibernatedSessions[id];
+      return { hibernatedSessions };
+    });
+    // Permanently drop the descriptor from the registry + persisted settings so
+    // it does not reappear on the next boot. dispose() removes the record (and
+    // re-persists); close() would only hibernate it.
+    try {
+      await window.omp.chat.dispose(id);
+    } catch {
+      // best-effort: the row is already gone from the rail
+    }
   },
 
   async openSession(sessionId, state, init = {}) {

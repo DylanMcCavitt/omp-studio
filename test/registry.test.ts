@@ -277,3 +277,82 @@ test("disposeAll retires children but retains descriptors as hibernated", async 
   expect(registry.get(a.id)).toBeUndefined();
   expect(registry.get(b.id)).toBeUndefined();
 });
+
+test("hydrate seeds persisted descriptors and resume preserves the un-resumed set", async () => {
+  const { registry, saves } = makeRegistry();
+  const file = join(tmpRoot, "hydrate-a.jsonl");
+  writeFileSync(file, '{"type":"message"}\n');
+  const a = descriptor({
+    studioSessionId: "studio-a",
+    cwd: "/work/a",
+    sessionFile: file,
+    // Persisted as "open" from the last run (disposeAll never re-persists), to
+    // prove hydrate normalizes a stale status to hibernated on boot.
+    status: "open",
+  });
+  const b = descriptor({ studioSessionId: "studio-b", cwd: "/work/b" });
+  const c = descriptor({ studioSessionId: "studio-c", cwd: "/work/c" });
+
+  // Boot seed: a fresh process loads the persisted set into the registry.
+  registry.hydrate([a, b, c]);
+
+  // chat:list surfaces all three as hibernated (no live child), regardless of
+  // the stale persisted status.
+  let listed = registry.descriptors();
+  expect(listed.map((d) => d.studioSessionId).sort()).toEqual([
+    "studio-a",
+    "studio-b",
+    "studio-c",
+  ]);
+  expect(listed.every((d) => d.status === "hibernated")).toBe(true);
+  expect(registry.get("studio-a")).toBeUndefined();
+
+  // Resuming one keeps its stable id and marks it open — and crucially does NOT
+  // clobber the un-resumed b/c descriptors when it re-persists.
+  const resumed = await registry.resume(a);
+  expect(resumed.id).toBe("studio-a");
+  expect(registry.get("studio-a")).toBeDefined();
+
+  listed = registry.descriptors();
+  expect(listed.map((d) => d.studioSessionId).sort()).toEqual([
+    "studio-a",
+    "studio-b",
+    "studio-c",
+  ]);
+  expect(listed.find((d) => d.studioSessionId === "studio-a")!.status).toBe(
+    "open",
+  );
+  expect(listed.find((d) => d.studioSessionId === "studio-b")!.status).toBe(
+    "hibernated",
+  );
+  expect(listed.find((d) => d.studioSessionId === "studio-c")!.status).toBe(
+    "hibernated",
+  );
+
+  // The persisted snapshot (settings store) likewise retains all three, so a
+  // second restart still lists b and c.
+  expect(
+    saves
+      .at(-1)!
+      .map((d) => d.studioSessionId)
+      .sort(),
+  ).toEqual(["studio-a", "studio-b", "studio-c"]);
+});
+
+test("hydrate is idempotent and never overwrites a tracked record", async () => {
+  const { registry } = makeRegistry();
+  const live = await registry.create({ cwd: "/work/live" });
+  // A persisted descriptor for an already-tracked id must not clobber the live
+  // record (boot order or a double-seed should be harmless).
+  registry.hydrate([
+    descriptor({
+      studioSessionId: live.id,
+      cwd: "/stale",
+      status: "hibernated",
+    }),
+  ]);
+  expect(registry.get(live.id)).toBeDefined();
+  const d = registry.descriptors().find((x) => x.studioSessionId === live.id)!;
+  expect(d.cwd).toBe("/work/live");
+  expect(d.status).toBe("open");
+});
