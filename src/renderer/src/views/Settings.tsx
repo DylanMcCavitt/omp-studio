@@ -20,12 +20,14 @@ import {
   RefreshCw,
   ShieldAlert,
   SlidersHorizontal,
+  SquareKanban,
   Star,
   Trash2,
   TriangleAlert,
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { LinearConnectCard } from "@/components/linear/LinearConnectCard";
 import {
   Badge,
   type BadgeVariant,
@@ -41,6 +43,7 @@ import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
 import { type AsyncState, useAsync } from "@/lib/useAsync";
 import { sortWorkspaces } from "@/lib/workspaces";
+import { useLinearStore } from "@/store/linear";
 import { useSettingsStore } from "@/store/settings";
 
 const PATHS = [
@@ -136,6 +139,7 @@ export default function Settings() {
           <AppearancePanel />
           <WorkspacesPanel />
           <ProvidersPanel state={providers} />
+          <IntegrationsPanel />
           <ModelsPanel state={models} />
           <PathsPanel />
           <AboutPanel />
@@ -616,6 +620,91 @@ function ProvidersPanel({ state }: { state: AsyncState<ProviderInfo[]> }) {
           })}
         </div>
       )}
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Integrations (feature 2 — Linear connect/disconnect + non-secret prefs). The
+// API key is handled entirely by LinearConnectCard → main keychain; only the
+// non-secret prefs (writes capability, default team) live in settings JSON.
+// ---------------------------------------------------------------------------
+
+function IntegrationsPanel() {
+  const status = useLinearStore((s) => s.status);
+  const statusLoading = useLinearStore((s) => s.statusLoading);
+  const teams = useLinearStore((s) => s.teams);
+  const loadStatus = useLinearStore((s) => s.loadStatus);
+  const loadTeams = useLinearStore((s) => s.loadTeams);
+  const settings = useSettingsStore((s) => s.settings);
+  const update = useSettingsStore((s) => s.update);
+
+  const connected = status?.status === "authenticated";
+
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+  useEffect(() => {
+    if (connected) void loadTeams();
+  }, [connected, loadTeams]);
+
+  const writesEnabled = settings?.linear?.writesEnabled ?? false;
+  const defaultTeamId = settings?.linear?.defaultTeamId ?? "";
+  const teamOptions = [
+    { value: "", label: "No default team" },
+    ...teams.map((t) => ({ value: t.id, label: `${t.key} · ${t.name}` })),
+  ];
+
+  const title = (
+    <span className="flex items-center gap-2">
+      <SquareKanban className="h-4 w-4 text-accent" />
+      Integrations
+    </span>
+  );
+
+  return (
+    <Panel title={title} bodyClassName="space-y-4 p-4">
+      <div>
+        <p className="mb-2 text-sm font-medium text-ink">Linear</p>
+        {statusLoading && !status ? (
+          <div className="flex justify-center p-2">
+            <Spinner />
+          </div>
+        ) : (
+          <LinearConnectCard />
+        )}
+      </div>
+
+      <Field
+        label="Default team"
+        hint="Non-secret preference; used as the default scope for issue queries."
+      >
+        {connected ? (
+          <Combobox
+            aria-label="Default Linear team"
+            options={teamOptions}
+            value={defaultTeamId}
+            onChange={(v) =>
+              void update({
+                linear: { writesEnabled, defaultTeamId: v || null },
+              })
+            }
+            placeholder="No default team"
+            searchPlaceholder="Filter teams…"
+          />
+        ) : (
+          <p className="text-sm text-ink-faint">{defaultTeamId || "None"}</p>
+        )}
+      </Field>
+
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-ink-muted">
+          Issue writes (create / update)
+        </span>
+        <Badge variant={writesEnabled ? "success" : "muted"}>
+          {writesEnabled ? "enabled" : "read-only"}
+        </Badge>
+      </div>
     </Panel>
   );
 }

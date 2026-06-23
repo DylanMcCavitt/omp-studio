@@ -10,7 +10,9 @@ import {
   Plus,
   RefreshCw,
   Sparkles,
+  SquareKanban,
 } from "lucide-react";
+import { useEffect } from "react";
 import {
   Badge,
   Button,
@@ -24,6 +26,7 @@ import { formatNumber, formatRelativeTime } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
+import { useLinearStore } from "@/store/linear";
 
 export default function Dashboard() {
   const setRoute = useAppStore((s) => s.setRoute);
@@ -223,11 +226,98 @@ export default function Dashboard() {
                     </ul>
                   )}
                 </Panel>
+
+                <MyLinearIssuesPanel />
               </div>
             </div>
           </>
         )}
       </div>
     </div>
+  );
+}
+
+// Feature 2 — "My Linear issues" summary. Reuses store/linear.ts (the same store
+// the Linear view drives); only one view mounts at a time, so refreshing the
+// shared issue list here never races the full view. Degrades to a connect
+// prompt when no key is validated.
+function MyLinearIssuesPanel() {
+  const setRoute = useAppStore((s) => s.setRoute);
+  const status = useLinearStore((s) => s.status);
+  const issues = useLinearStore((s) => s.issues);
+  const loading = useLinearStore((s) => s.loading);
+  const loadStatus = useLinearStore((s) => s.loadStatus);
+  const loadIssues = useLinearStore((s) => s.loadIssues);
+
+  const connected = status?.status === "authenticated";
+
+  useEffect(() => {
+    void loadStatus();
+  }, [loadStatus]);
+  useEffect(() => {
+    if (connected) void loadIssues({ assignedToMe: true });
+  }, [connected, loadIssues]);
+
+  const mine = issues.slice(0, 6);
+
+  return (
+    <Panel
+      title="My Linear issues"
+      bodyClassName="p-0"
+      actions={
+        <Button variant="ghost" size="sm" onClick={() => setRoute("linear")}>
+          Open
+          <ChevronRight size={14} />
+        </Button>
+      }
+    >
+      {!connected ? (
+        <EmptyState
+          icon={<SquareKanban size={24} />}
+          title={
+            status?.status === "error" ? "Linear unavailable" : "Not connected"
+          }
+          hint="Connect Linear to see issues assigned to you."
+          action={
+            <Button
+              variant="subtle"
+              size="sm"
+              onClick={() => setRoute("linear")}
+            >
+              Connect Linear
+            </Button>
+          }
+        />
+      ) : loading && issues.length === 0 ? (
+        <div className="flex justify-center p-6">
+          <Spinner />
+        </div>
+      ) : mine.length === 0 ? (
+        <EmptyState icon={<Inbox size={24} />} title="No assigned issues" />
+      ) : (
+        <ul className="divide-y divide-border-subtle">
+          {mine.map((issue) => (
+            <li key={issue.id}>
+              <button
+                type="button"
+                onClick={() => window.omp.openExternal(issue.url)}
+                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-bg-hover focus-visible:bg-bg-hover focus-visible:outline-none"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {issue.title}
+                  </p>
+                  <p className="truncate text-xs text-ink-faint">
+                    {issue.identifier}
+                    {issue.team?.key ? ` · ${issue.team.key}` : ""}
+                  </p>
+                </div>
+                <Badge variant="muted">{issue.state.name}</Badge>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
