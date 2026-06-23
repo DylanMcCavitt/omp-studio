@@ -1,4 +1,8 @@
-import type { ListSessionsOptions, SessionSearchOptions } from "@shared/domain";
+import type {
+  BrowserViewState,
+  ListSessionsOptions,
+  SessionSearchOptions,
+} from "@shared/domain";
 import type {
   ChatCreateOptions,
   ChatLifecycleEvent,
@@ -11,7 +15,7 @@ import type {
   StudioSettingsV1,
 } from "@shared/ipc";
 import { CH } from "@shared/ipc";
-import type { ThinkingLevel } from "@shared/rpc";
+import type { SubagentSubscriptionLevel, ThinkingLevel } from "@shared/rpc";
 import { contextBridge, ipcRenderer } from "electron";
 
 // One IPC listener per channel, fanning out to a set of renderer subscribers.
@@ -44,15 +48,24 @@ const onLifecycleEvent = channelSubscription<ChatLifecycleEvent>(
 const onUiRequestEvent = channelSubscription<ChatUiRequestEvent>(
   CH.evtUiRequest,
 );
+const onTerminalData = channelSubscription<{ id: string; data: string }>(
+  CH.evtTerminalData,
+);
+const onTerminalExit = channelSubscription<{ id: string; code: number | null }>(
+  CH.evtTerminalExit,
+);
+const onBrowserState = channelSubscription<BrowserViewState>(
+  CH.evtBrowserState,
+);
 
 const api: OmpApi = {
   getDashboard: () => ipcRenderer.invoke(CH.dashboard),
   listSessions: (opts?: ListSessionsOptions) =>
     ipcRenderer.invoke(CH.listSessions, opts),
   readSession: (path: string) => ipcRenderer.invoke(CH.readSession, path),
-  listMcpServers: () => ipcRenderer.invoke(CH.listMcp),
-  listSkills: () => ipcRenderer.invoke(CH.listSkills),
-  listAgents: () => ipcRenderer.invoke(CH.listAgents),
+  listMcpServers: (cwd?: string) => ipcRenderer.invoke(CH.listMcp, cwd),
+  listSkills: (cwd?: string) => ipcRenderer.invoke(CH.listSkills, cwd),
+  listAgents: (cwd?: string) => ipcRenderer.invoke(CH.listAgents, cwd),
   listModels: () => ipcRenderer.invoke(CH.listModels),
   listProviders: () => ipcRenderer.invoke(CH.listProviders),
   pickDirectory: () => ipcRenderer.invoke(CH.pickDirectory),
@@ -89,6 +102,16 @@ const api: OmpApi = {
       ipcRenderer.invoke(CH.chatGetMessages, sessionId),
     getSubagents: (sessionId: string) =>
       ipcRenderer.invoke(CH.chatGetSubagents, sessionId),
+    setSubagentSubscription: (
+      sessionId: string,
+      level: SubagentSubscriptionLevel,
+    ) => ipcRenderer.invoke(CH.chatSetSubagentSubscription, sessionId, level),
+    getSubagentMessages: (
+      sessionId: string,
+      sel: { subagentId?: string; sessionFile?: string; fromByte?: number },
+    ) => ipcRenderer.invoke(CH.chatGetSubagentMessages, sessionId, sel),
+    getAvailableCommands: (sessionId: string) =>
+      ipcRenderer.invoke(CH.chatGetAvailableCommands, sessionId),
     dispose: (sessionId: string) =>
       ipcRenderer.invoke(CH.chatDispose, sessionId),
     onEvent: onRpcEvent,
@@ -104,6 +127,63 @@ const api: OmpApi = {
     resume: (descriptor: OpenSessionDescriptor) =>
       ipcRenderer.invoke(CH.chatResume, descriptor),
     close: (sessionId: string) => ipcRenderer.invoke(CH.chatClose, sessionId),
+  },
+
+  linear: {
+    status: () => ipcRenderer.invoke(CH.linearStatus),
+    setApiKey: (key: string) => ipcRenderer.invoke(CH.linearSetApiKey, key),
+    clearApiKey: () => ipcRenderer.invoke(CH.linearClearApiKey),
+    listTeams: () => ipcRenderer.invoke(CH.linearListTeams),
+    listProjects: (teamId?: string) =>
+      ipcRenderer.invoke(CH.linearListProjects, teamId),
+    listIssues: (opts?: {
+      teamId?: string;
+      assignedToMe?: boolean;
+      limit?: number;
+    }) => ipcRenderer.invoke(CH.linearListIssues, opts),
+    getIssue: (id: string) => ipcRenderer.invoke(CH.linearGetIssue, id),
+    createIssue: (input: {
+      teamId: string;
+      title: string;
+      description?: string;
+    }) => ipcRenderer.invoke(CH.linearCreateIssue, input),
+    updateIssue: (
+      id: string,
+      patch: { stateId?: string; title?: string; description?: string },
+    ) => ipcRenderer.invoke(CH.linearUpdateIssue, id, patch),
+    createComment: (issueId: string, body: string) =>
+      ipcRenderer.invoke(CH.linearCreateComment, issueId, body),
+  },
+
+  terminal: {
+    create: (opts: { cwd: string; cols: number; rows: number }) =>
+      ipcRenderer.invoke(CH.terminalCreate, opts),
+    write: (id: string, data: string) =>
+      ipcRenderer.invoke(CH.terminalWrite, id, data),
+    resize: (id: string, cols: number, rows: number) =>
+      ipcRenderer.invoke(CH.terminalResize, id, cols, rows),
+    kill: (id: string) => ipcRenderer.invoke(CH.terminalKill, id),
+    list: () => ipcRenderer.invoke(CH.terminalList),
+    onData: onTerminalData,
+    onExit: onTerminalExit,
+  },
+
+  browser: {
+    create: (opts: {
+      url: string;
+      bounds: { x: number; y: number; width: number; height: number };
+    }) => ipcRenderer.invoke(CH.browserCreate, opts),
+    navigate: (id: string, url: string) =>
+      ipcRenderer.invoke(CH.browserNavigate, id, url),
+    goBack: (id: string) => ipcRenderer.invoke(CH.browserGoBack, id),
+    goForward: (id: string) => ipcRenderer.invoke(CH.browserGoForward, id),
+    reload: (id: string) => ipcRenderer.invoke(CH.browserReload, id),
+    setBounds: (
+      id: string,
+      bounds: { x: number; y: number; width: number; height: number },
+    ) => ipcRenderer.invoke(CH.browserSetBounds, id, bounds),
+    destroy: (id: string) => ipcRenderer.invoke(CH.browserDestroy, id),
+    onState: onBrowserState,
   },
 
   settings: {
