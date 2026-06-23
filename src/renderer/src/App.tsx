@@ -33,6 +33,15 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       await loadSettings();
+      // Seed the workspace selection from the saved default so the switcher and
+      // new chats target it out of the box (the removed StartPanel used to do
+      // this on first render). Never clobber a selection already made.
+      const app = useAppStore.getState();
+      const defaultProject =
+        useSettingsStore.getState().settings?.defaultProject;
+      if (!app.selectedProject && defaultProject) {
+        app.setSelectedProject(defaultProject);
+      }
       ensureSubscribed();
       await loadOpenSessions();
     })();

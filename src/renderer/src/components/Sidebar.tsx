@@ -1,14 +1,27 @@
-import { Plus } from "lucide-react";
+// The workspace-centric left sidebar (AGE-632). Top to bottom: the workspace
+// switcher, a segmented Chats | Files toggle, then the active surface. Chats =
+// a New chat action + the live/hibernated session list (selecting a row opens
+// it in the center). Files = a placeholder until the editor lands (AGE-634).
+// The flat nav list that used to live here moved to the right icon rail (AGE-630).
+
+import {
+  FileText,
+  FolderOpen,
+  type LucideIcon,
+  MessageSquare,
+  Plus,
+} from "lucide-react";
+import { SessionList } from "@/components/chat/SessionList";
+import { EmptyState } from "@/components/ui";
 import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
 import { cn } from "@/lib/cn";
 import { useChatStore } from "@/store/chat";
+import { type SidebarMode, useShellStore } from "@/store/shell";
 
-// The left sidebar is workspace-centric: the workspace switcher and a New chat
-// action. The flat nav list that used to live here moved to the right icon rail
-// (AGE-630); the session list + Chats/Files toggle land in the full rebuild
-// (AGE-632). Until then the body is an empty spacer that keeps the footer pinned.
 export function Sidebar() {
   const newChat = useChatStore((s) => s.newChat);
+  const mode = useShellStore((s) => s.sidebarMode);
+  const setMode = useShellStore((s) => s.setSidebarMode);
 
   return (
     <nav className="no-drag flex h-full w-full min-w-0 flex-col border-r border-border bg-bg-raised">
@@ -31,9 +44,64 @@ export function Sidebar() {
       </div>
 
       <div className="px-3 pb-2">
+        <SidebarModeToggle mode={mode} onChange={setMode} />
+      </div>
+
+      {mode === "chats" ? <ChatsPane onNewChat={newChat} /> : <FilesPane />}
+
+      <div className="border-t border-border-subtle px-4 py-3">
+        <span className="text-xs text-ink-faint">omp harness</span>
+      </div>
+    </nav>
+  );
+}
+
+const MODES: { id: SidebarMode; label: string; icon: LucideIcon }[] = [
+  { id: "chats", label: "Chats", icon: MessageSquare },
+  { id: "files", label: "Files", icon: FileText },
+];
+
+function SidebarModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: SidebarMode;
+  onChange: (mode: SidebarMode) => void;
+}) {
+  return (
+    <div className="flex gap-1 rounded-lg bg-bg-panel p-1">
+      {MODES.map(({ id, label, icon: Icon }) => {
+        const active = id === mode;
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => onChange(id)}
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+              active
+                ? "bg-bg-raised text-ink shadow-sm"
+                : "text-ink-muted hover:text-ink",
+            )}
+          >
+            <Icon size={14} className="shrink-0" />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ChatsPane({ onNewChat }: { onNewChat: () => void }) {
+  return (
+    <>
+      <div className="px-3 pb-2">
         <button
           type="button"
-          onClick={newChat}
+          onClick={onNewChat}
           className={cn(
             "flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-bg transition-colors",
             "hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
@@ -43,12 +111,19 @@ export function Sidebar() {
           New chat
         </button>
       </div>
+      <SessionList />
+    </>
+  );
+}
 
-      <div className="flex-1" />
-
-      <div className="border-t border-border-subtle px-4 py-3">
-        <span className="text-xs text-ink-faint">omp harness</span>
-      </div>
-    </nav>
+function FilesPane() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
+      <EmptyState
+        icon={<FolderOpen className="h-6 w-6" />}
+        title="Open a file"
+        hint="Coming in the editor."
+      />
+    </div>
   );
 }

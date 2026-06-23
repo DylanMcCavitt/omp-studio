@@ -1,11 +1,11 @@
-// The live agent chat view. With no active session it shows a start panel
-// (project picker, model select, initial prompt). With an active session it
-// shows the transcript + composer on the left and model / thinking / plan /
-// subagent rails on the right, reading the active session's slice from the
-// normalized multi-session store.
+// The live agent chat view. With no active session it shows a minimal empty
+// state — new chats start from the left sidebar (or this view's New chat
+// button). With an active session it shows the transcript + composer on the left
+// and model / thinking / plan / subagent rails on the right, reading the active
+// session's slice from the normalized multi-session store.
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
-import type { ImageContent, RpcModel, ThinkingLevel } from "@shared/rpc";
+import type { RpcModel, ThinkingLevel } from "@shared/rpc";
 import {
   Brain,
   Check,
@@ -18,16 +18,13 @@ import {
   MoreHorizontal,
   PanelRightClose,
   PanelRightOpen,
-  Plus,
-  Sparkles,
   Users,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo } from "react";
 import { PanelGroup, Panel as ResizablePanel } from "react-resizable-panels";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
-import { PromptComposer } from "@/components/chat/PromptComposer";
-import { SessionRail, SessionStatusBadge } from "@/components/chat/SessionRail";
+import { SessionStatusBadge } from "@/components/chat/SessionList";
 import {
   ContextMeterChip,
   SessionStatsPanel,
@@ -41,15 +38,12 @@ import { usePersistedPanelLayout } from "@/components/layout/usePersistedPanelLa
 import {
   Badge,
   Button,
-  Combobox,
   EmptyState,
   IconButton,
   Menu,
   MenuItem,
   Panel,
-  Spinner,
 } from "@/components/ui";
-import { AddWorkspaceDialog } from "@/components/workspace/AddWorkspaceDialog";
 import { cn } from "@/lib/cn";
 import {
   CHAT_RAIL_MAX_PCT,
@@ -64,8 +58,6 @@ import {
   setRailPanelVisible,
 } from "@/lib/layout";
 import { useAsync } from "@/lib/useAsync";
-import { sortWorkspaces } from "@/lib/workspaces";
-import { useAppStore } from "@/store/app";
 import { useActiveSession, useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
 
@@ -84,180 +76,42 @@ const NO_UI: ChatUiRequestEvent[] = [];
 export default function ChatWorkspace() {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   // Cmd/Ctrl+W (close active session) is handled by the global shortcut manager
-  // (lib/useShortcuts), wired once in App — no per-view listener here.
+  // (lib/useShortcuts), wired once in App — no per-view listener here. The
+  // session list + New chat action live in the left sidebar (AGE-632), not here.
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
       {/* Mounted at the workspace root so the active session's pending UI
           requests survive session switches and render as focused modals. */}
       <UiRequestLayer />
-      <SessionRail />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {activeSessionId ? (
           <ChatSession key={activeSessionId} sessionId={activeSessionId} />
         ) : (
-          <StartPanel />
+          <NoActiveSession />
         )}
       </div>
     </div>
   );
 }
 
-function StartPanel() {
-  const selectedProject = useAppStore((s) => s.selectedProject);
-  const setSelectedProject = useAppStore((s) => s.setSelectedProject);
-  const settings = useSettingsStore((s) => s.settings);
-  const settingsLoading = useSettingsStore((s) => s.loading);
-  const start = useChatStore((s) => s.start);
-  const send = useChatStore((s) => s.send);
-  const { data: models, loading } = useAsync(() => window.omp.listModels(), []);
-  const [model, setModel] = useState("");
-  const recordWorkspace = useSettingsStore((s) => s.recordWorkspace);
-  const [adding, setAdding] = useState(false);
-
-  // Seed the project picker from the saved default the first time it is unset.
-  useEffect(() => {
-    if (!selectedProject && settings?.defaultProject) {
-      setSelectedProject(settings.defaultProject);
-    }
-  }, [selectedProject, settings?.defaultProject, setSelectedProject]);
-
-  // Seed the model once BOTH the model list and persisted settings have
-  // loaded: prefer the saved default, else fall back to the first available.
-  // Gating on `settingsLoading` avoids racing in the first model before
-  // `defaultModel` is known (which would then stick via the early return).
-  useEffect(() => {
-    if (model || settingsLoading || !models || models.length === 0) return;
-    const defaultModel = settings?.defaultModel ?? null;
-    const preferred =
-      defaultModel && models.some((m) => m.selector === defaultModel)
-        ? defaultModel
-        : (models[0]?.selector ?? "");
-    setModel(preferred);
-  }, [models, model, settingsLoading, settings?.defaultModel]);
-
-  const handleStart = async (
-    text: string,
-    images: ImageContent[],
-  ): Promise<boolean> => {
-    if (!selectedProject) return false;
-    const ok = await start({
-      cwd: selectedProject,
-      model: model || undefined,
-      thinkingLevel: settings?.defaultThinkingLevel,
-      approvalPolicy: settings
-        ? {
-            mode: settings.defaultApprovalMode,
-            autoApprove: settings.defaultAutoApprove,
-          }
-        : undefined,
-    });
-    if (!ok) return false;
-    // Return the prompt's acceptance: if session creation succeeds but the
-    // initial send is rejected, the composer keeps text + attachments to retry.
-    return await send(text, images);
-  };
-
+// The no-active-session center: a minimal empty state. The old StartPanel card
+// (project/model picker + prompt) is gone — new chats spawn from the sidebar (or
+// the button here) in the active workspace with the default model.
+function NoActiveSession() {
+  const newChat = useChatStore((s) => s.newChat);
   return (
     <div className="flex h-full items-center justify-center p-8">
-      <div className="w-full max-w-xl animate-fade-in space-y-5">
-        <div className="text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft text-accent">
-            <Sparkles className="h-6 w-6" />
-          </div>
-          <h1 className="text-xl font-semibold text-ink">
-            Start a new session
-          </h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Pick a workspace, choose a model, and describe the task.
-          </p>
-        </div>
-
-        <Panel title="New session" bodyClassName="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-              Workspace
-            </label>
-            <div className="flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <Combobox
-                  aria-label="Workspace"
-                  value={selectedProject ?? ""}
-                  onChange={(cwd) => {
-                    setSelectedProject(cwd);
-                    void recordWorkspace(cwd);
-                  }}
-                  placeholder="Select a workspace"
-                  searchPlaceholder="Search workspaces…"
-                  emptyText="No workspaces yet"
-                  options={sortWorkspaces(settings?.workspaces ?? []).map(
-                    (w) => ({
-                      value: w.cwd,
-                      label: w.label,
-                      description: w.cwd,
-                    }),
-                  )}
-                />
-              </div>
-              <Button
-                variant="subtle"
-                aria-label="Add workspace"
-                onClick={() => setAdding(true)}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-              Model
-            </label>
-            <Combobox
-              aria-label="Model"
-              value={model}
-              onChange={setModel}
-              disabled={loading || !models}
-              placeholder={loading ? "Loading models…" : "Select a model"}
-              searchPlaceholder="Search models…"
-              options={(models ?? []).map((m) => ({
-                value: m.selector,
-                label: m.name,
-              }))}
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-ink-muted">
-              Prompt
-            </label>
-            <PromptComposer
-              rows={5}
-              submitOnEnter={false}
-              placeholder="Describe what you want the agent to do…"
-              onSubmit={handleStart}
-              actionsPlacement="below"
-              renderActions={({ submit, canSubmit, busy }) => (
-                <Button
-                  variant="primary"
-                  onClick={submit}
-                  disabled={!canSubmit || !selectedProject}
-                  className="w-full justify-center"
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    {busy ? (
-                      <Spinner size={14} />
-                    ) : (
-                      <MessageSquarePlus className="h-4 w-4" />
-                    )}
-                    Start session
-                  </span>
-                </Button>
-              )}
-            />
-          </div>
-        </Panel>
-        {adding && <AddWorkspaceDialog onClose={() => setAdding(false)} />}
-      </div>
+      <EmptyState
+        icon={<MessageSquarePlus className="h-7 w-7" />}
+        title="No chat open"
+        hint="Pick one from the sidebar or start a new chat."
+        action={
+          <Button variant="primary" onClick={newChat}>
+            <MessageSquarePlus className="h-4 w-4" />
+            New chat
+          </Button>
+        }
+      />
     </div>
   );
 }
