@@ -71,10 +71,19 @@ Use real `dmcc` states only.
 
 Existing OMP Studio area/team/model labels remain valid for this repo, but OMP Native Zed ghosts should prefer the labels above until Zed-fork-specific labels are created.
 
-## Milestones and estimates
+## Milestones, estimates, and priority
 
 - Project milestones: none configured on 2026-06-23.
-- Estimate field: leave unchanged when an issue already has an estimate. For new ghosts, use the smallest honest Linear estimate and split anything larger than one reviewable branch into child issues. Do not invent a team scale in code or templates.
+
+| Linear estimate | Use for OMP Native Zed ghosts |
+| --- | --- |
+| None / unset | Planning-only or bookkeeping issues where effort is not useful. |
+| `1` | Contract/docs/config-only slice with no runtime behavior. |
+| `2` | Small single-surface implementation or test slice. |
+| `3` | Tracer bullet crossing runtime/integration/test seams. |
+| `5+` | Too large for one robot branch by default; split into child issues unless explicitly approved. |
+
+- Existing issue estimates are preserved; agents do not rewrite them during implementation unless the issue asks for estimation.
 - Priority mapping: Linear `1 Urgent`, `2 High`, `3 Medium`, `4 Low`, `0 None`. The OMP Native Zed project and AGE-638 are `2 High`.
 
 ## HITL / AFK classification
