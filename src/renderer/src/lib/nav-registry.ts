@@ -1,6 +1,7 @@
 import {
   Bot,
   Github,
+  Globe,
   History,
   LayoutDashboard,
   type LucideIcon,
@@ -9,10 +10,12 @@ import {
   Settings,
   Sparkles,
   SquareKanban,
+  Terminal as TerminalIcon,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Route } from "@/store/app";
 import Agents from "@/views/Agents";
+import Browser from "@/views/Browser";
 import Chat from "@/views/Chat";
 import Dashboard from "@/views/Dashboard";
 import GitHub from "@/views/GitHub";
@@ -21,6 +24,7 @@ import Mcp from "@/views/Mcp";
 import Sessions from "@/views/Sessions";
 import SettingsView from "@/views/Settings";
 import Skills from "@/views/Skills";
+import Terminal from "@/views/Terminal";
 
 /** Sidebar section a destination belongs to; rendered in `NAV_GROUP_ORDER`. */
 export type NavGroup = "core" | "tools" | "integrations";
@@ -65,6 +69,13 @@ const NAV_REGISTRY = {
   skills: { label: "Skills", icon: Sparkles, view: Skills, group: "tools" },
   mcp: { label: "MCP", icon: Plug, view: Mcp, group: "tools" },
   agents: { label: "Agents", icon: Bot, view: Agents, group: "tools" },
+  terminal: {
+    label: "Terminal",
+    icon: TerminalIcon,
+    view: Terminal,
+    group: "tools",
+  },
+  browser: { label: "Browser", icon: Globe, view: Browser, group: "tools" },
   github: {
     label: "GitHub",
     icon: Github,
