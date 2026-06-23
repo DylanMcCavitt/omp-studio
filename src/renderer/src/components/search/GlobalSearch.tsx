@@ -27,8 +27,10 @@ import {
 } from "@/lib/searchText";
 import { useAsync } from "@/lib/useAsync";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { type Route, useAppStore } from "@/store/app";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
+import { useUiStore } from "@/store/ui";
 
 type FlatResult =
   | {
@@ -74,7 +76,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const debouncedQuery = useDebouncedValue(query, 150);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>();
   const listRef = useRef<HTMLDivElement>(null);
 
   const openSessions = useChatStore((s) => s.openSessions);
@@ -164,11 +166,6 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
 
   const active = results.length ? Math.min(activeIndex, results.length - 1) : 0;
 
-  // Focus the input on open.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
   // Keep the active row visible.
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>(
@@ -218,15 +215,18 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
         className="absolute inset-0 bg-black/50"
       />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label="Global search"
-        className="relative flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border-strong bg-bg-panel shadow-panel"
+        data-search-overlay
+        tabIndex={-1}
+        className="relative flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-border-strong bg-bg-panel shadow-panel focus:outline-none"
       >
         <div className="flex items-center gap-2 border-b border-border px-3">
           <Search className="h-4 w-4 shrink-0 text-ink-faint" />
           <input
-            ref={inputRef}
+            data-autofocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
@@ -376,24 +376,14 @@ function ResultRow({
 }
 
 /**
- * Global Cmd+K (Ctrl+K) search. Always mounted; owns only the open flag + the
- * keyboard shortcut, deferring all search state to a freshly-mounted overlay so
- * each open starts clean and closed state costs nothing.
+ * Global Cmd+K search. Always mounted; reads its open flag from the ui store so
+ * the single global shortcut manager (lib/useShortcuts) owns the Cmd+K chord —
+ * no per-component keydown listener here. All search state lives in a
+ * freshly-mounted overlay so each open starts clean and closed state costs nothing.
  */
 export function GlobalSearch() {
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
-        e.preventDefault();
-        setOpen((o) => !o);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
+  const open = useUiStore((s) => s.searchOpen);
+  const closeSearch = useUiStore((s) => s.closeSearch);
   if (!open) return null;
-  return <GlobalSearchOverlay onClose={() => setOpen(false)} />;
+  return <GlobalSearchOverlay onClose={closeSearch} />;
 }

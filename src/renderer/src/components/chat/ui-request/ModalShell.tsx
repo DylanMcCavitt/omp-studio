@@ -1,13 +1,15 @@
 // Shared scaffolding for the four blocking UI-request dialogs (confirm/select/
-// input/editor). Owns the accessibility + focus basics the assignment calls for
-// (role=dialog, aria-modal, focus the default action on open, restore focus on
-// close, Esc to dismiss, Cmd/Ctrl+Enter for the primary action) and renders
-// through a portal so the overlay escapes any transformed ancestor. Full focus
-// trapping and the shortcut map are G2; this is the baseline.
+// input/editor). Owns the accessibility the assignment calls for (role=dialog,
+// aria-modal, labelled title+description, Esc to dismiss, Cmd/Ctrl+Enter for the
+// primary action) and renders through a portal so the overlay escapes any
+// transformed ancestor. Focus behaviour — focus the default action on open, trap
+// Tab within, restore focus to the trigger on close — comes from the shared
+// useFocusTrap hook so every dialog inherits one implementation.
 
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useId } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/cn";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 export interface ModalShellProps {
   title: string;
@@ -34,22 +36,9 @@ export function ModalShell({
   footer,
   kicker,
 }: ModalShellProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useFocusTrap<HTMLDivElement>();
   const titleId = useId();
   const descId = useId();
-
-  // Save the previously-focused element, focus the dialog's default action (the
-  // element marked data-autofocus) on open, and restore focus to the trigger
-  // when the dialog unmounts. Button is a plain function component (no
-  // forwardRef), so we locate the default action by attribute rather than ref.
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null;
-    const target =
-      panelRef.current?.querySelector<HTMLElement>("[data-autofocus]") ??
-      panelRef.current;
-    target?.focus();
-    return () => previous?.focus?.();
-  }, []);
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {

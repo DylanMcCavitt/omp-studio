@@ -11,11 +11,7 @@ import { useEffect, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PromptComposer } from "@/components/chat/PromptComposer";
-import {
-  closeSessionWithConfirm,
-  SessionRail,
-  SessionStatusBadge,
-} from "@/components/chat/SessionRail";
+import { SessionRail, SessionStatusBadge } from "@/components/chat/SessionRail";
 import {
   ContextMeterChip,
   SessionStatsPanel,
@@ -44,22 +40,8 @@ const NO_UI: ChatUiRequestEvent[] = [];
 
 export default function ChatWorkspace() {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
-
-  // Cmd/Ctrl+W closes the active session's row (close ≠ delete). Scoped to the
-  // chat workspace — the listener unmounts when the route changes.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "w" || e.key === "W")) {
-        const id = useChatStore.getState().activeSessionId;
-        if (!id) return;
-        e.preventDefault();
-        closeSessionWithConfirm(id);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
+  // Cmd/Ctrl+W (close active session) is handled by the global shortcut manager
+  // (lib/useShortcuts), wired once in App — no per-view listener here.
   return (
     <div className="flex h-full min-h-0">
       {/* Mounted at the workspace root so the active session's pending UI

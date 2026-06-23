@@ -12,6 +12,13 @@
 
 import type { OpenSessionDescriptor } from "@shared/ipc";
 import { MessageSquarePlus, Moon, Plus, X } from "lucide-react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
 import { SessionActionsMenu } from "@/components/session/SessionActionsMenu";
 import { Badge, type BadgeVariant, EmptyState, Spinner } from "@/components/ui";
@@ -98,6 +105,17 @@ export function closeSessionWithConfirm(id: string): void {
   void store.closeSession(id);
 }
 
+/** Sentinel id for the "New chat" draft row in the roving-focus order. */
+const NEW_CHAT_ITEM = "__new-chat__";
+
+/** Roving-tabindex props spread onto each rail item's primary button. */
+interface RailItemNav {
+  "data-rail-item": string;
+  tabIndex: number;
+  onKeyDown: (e: KeyboardEvent<HTMLElement>) => void;
+  onFocus: () => void;
+}
+
 export function SessionRail() {
   // Subscribe shallowly to the id lists so the rail container re-renders only
   // when sessions open/close — each row subscribes to its own slice for live
@@ -110,8 +128,67 @@ export function SessionRail() {
   const newChat = useChatStore((s) => s.newChat);
   const total = ids.length + hibernatedIds.length;
 
+  // Roving tabindex: the rail is one Tab stop and Up/Down move focus between
+  // rows (Enter/Space activate via the native buttons). The ordered id list is
+  // the New-chat row, then live rows, then hibernated rows.
+  const railRef = useRef<HTMLElement>(null);
+  const order = useMemo(
+    () => [NEW_CHAT_ITEM, ...ids, ...hibernatedIds],
+    [ids, hibernatedIds],
+  );
+  const [rovingId, setRovingId] = useState<string>(
+    activeSessionId ?? NEW_CHAT_ITEM,
+  );
+
+  // Keep the tab stop valid as rows open/close; default it to the active session.
+  useEffect(() => {
+    setRovingId((cur) => {
+      if (order.includes(cur)) return cur;
+      if (activeSessionId && order.includes(activeSessionId))
+        return activeSessionId;
+      return order[0] ?? NEW_CHAT_ITEM;
+    });
+  }, [order, activeSessionId]);
+
+  const focusItem = (id: string) => {
+    setRovingId(id);
+    railRef.current
+      ?.querySelector<HTMLElement>(`[data-rail-item="${CSS.escape(id)}"]`)
+      ?.focus();
+  };
+
+  const onItemKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    const currentId = e.currentTarget.getAttribute("data-rail-item");
+    const idx = currentId ? order.indexOf(currentId) : -1;
+    if (idx < 0) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      focusItem(order[Math.min(idx + 1, order.length - 1)] ?? order[idx]);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      focusItem(order[Math.max(idx - 1, 0)] ?? order[idx]);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      focusItem(order[0] ?? order[idx]);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      focusItem(order[order.length - 1] ?? order[idx]);
+    }
+  };
+
+  const navProps = (id: string): RailItemNav => ({
+    "data-rail-item": id,
+    tabIndex: id === rovingId ? 0 : -1,
+    onKeyDown: onItemKeyDown,
+    onFocus: () => setRovingId(id),
+  });
+
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-border-subtle bg-bg-panel/40">
+    <aside
+      ref={railRef}
+      aria-label="Sessions"
+      className="flex w-64 shrink-0 flex-col border-r border-border-subtle bg-bg-panel/40"
+    >
       <div className="flex items-center justify-between px-3 py-2.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
           Sessions
@@ -122,6 +199,7 @@ export function SessionRail() {
       <div className="px-2">
         <button
           type="button"
+          {...navProps(NEW_CHAT_ITEM)}
           onClick={newChat}
           aria-current={activeSessionId === null ? "true" : undefined}
           className={cn(
@@ -151,6 +229,7 @@ export function SessionRail() {
                 key={id}
                 sessionId={id}
                 active={id === activeSessionId}
+                nav={navProps(id)}
               />
             ))}
             {hibernatedIds.length > 0 && (
@@ -162,7 +241,7 @@ export function SessionRail() {
               </p>
             )}
             {hibernatedIds.map((id) => (
-              <HibernatedRailRow key={id} sessionId={id} />
+              <HibernatedRailRow key={id} sessionId={id} nav={navProps(id)} />
             ))}
           </>
         )}
@@ -174,9 +253,11 @@ export function SessionRail() {
 function SessionRailRow({
   sessionId,
   active,
+  nav,
 }: {
   sessionId: string;
   active: boolean;
+  nav: RailItemNav;
 }) {
   const session = useChatStore((s) => s.openSessions[sessionId]);
   const setActiveSession = useChatStore((s) => s.setActiveSession);
@@ -191,6 +272,7 @@ function SessionRailRow({
     <div className="group relative">
       <button
         type="button"
+        {...nav}
         aria-current={active ? "true" : undefined}
         onClick={() => setActiveSession(sessionId)}
         className={cn(
@@ -277,7 +359,13 @@ function hibernatedTitle(descriptor: OpenSessionDescriptor): string {
  * live rows; clicking it resumes (hydrating from JSONL). A failed resume renders
  * a disabled error row with Retry / Remove (Remove drops it from the open list).
  */
-function HibernatedRailRow({ sessionId }: { sessionId: string }) {
+function HibernatedRailRow({
+  sessionId,
+  nav,
+}: {
+  sessionId: string;
+  nav: RailItemNav;
+}) {
   const row = useChatStore((s) => s.hibernatedSessions[sessionId]);
   const resumeSession = useChatStore((s) => s.resumeSession);
   const removeHibernated = useChatStore((s) => s.removeHibernated);
@@ -300,6 +388,7 @@ function HibernatedRailRow({ sessionId }: { sessionId: string }) {
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
+            {...nav}
             onClick={() => void resumeSession(sessionId)}
             className="rounded px-2 py-1 text-xs font-medium text-accent hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
@@ -321,6 +410,7 @@ function HibernatedRailRow({ sessionId }: { sessionId: string }) {
     <div className="group relative">
       <button
         type="button"
+        {...nav}
         disabled={resuming}
         onClick={() => void resumeSession(sessionId)}
         title="Resume session"

@@ -3,9 +3,12 @@
 // closing one through the store's closeSession action, and each row's badge
 // reflects the session's derived headline status. Assertions go through roles,
 // accessible names, and aria-current — never styling.
+//
+// G2 adds the keyboard-accessibility coverage at the bottom: roving tabindex
+// (one Tab stop, defaulted to the active session) and Arrow-key navigation.
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
 import { createSession } from "@/store/session-reducer";
@@ -35,6 +38,12 @@ function approvalRequest(sessionId: string): ChatUiRequestEvent {
     responseRequired: true,
     request: { type: "extension_ui_request", id: "r1", method: "confirm" },
   };
+}
+
+function railItem(id: string): HTMLElement {
+  const el = document.querySelector<HTMLElement>(`[data-rail-item="${id}"]`);
+  if (!el) throw new Error(`no rail item ${id}`);
+  return el;
 }
 
 it("renders one row per open session with its title", () => {
@@ -116,4 +125,50 @@ it("reflects each session's derived status in its badge", () => {
 it("shows an empty state when no sessions are open", () => {
   render(<SessionRail />);
   expect(screen.getByText(/no open sessions/i)).toBeInTheDocument();
+});
+
+describe("keyboard nav (G2)", () => {
+  it("gives the active session the single tab stop (roving tabindex)", () => {
+    seed(
+      {
+        a: createSession("a", { sessionName: "Alpha", status: "idle" }),
+        b: createSession("b", { sessionName: "Beta", status: "streaming" }),
+      },
+      "a",
+    );
+    render(<SessionRail />);
+    expect(railItem("a").tabIndex).toBe(0);
+    expect(railItem("b").tabIndex).toBe(-1);
+    expect(railItem("__new-chat__").tabIndex).toBe(-1);
+  });
+
+  it("moves focus to the next row on ArrowDown and updates the tab stop", () => {
+    seed(
+      {
+        a: createSession("a", { sessionName: "Alpha", status: "idle" }),
+        b: createSession("b", { sessionName: "Beta", status: "idle" }),
+      },
+      "a",
+    );
+    render(<SessionRail />);
+    railItem("a").focus();
+    fireEvent.keyDown(railItem("a"), { key: "ArrowDown" });
+    expect(railItem("b")).toHaveFocus();
+    expect(railItem("b").tabIndex).toBe(0);
+    expect(railItem("a").tabIndex).toBe(-1);
+  });
+
+  it("moves focus to the previous row on ArrowUp", () => {
+    seed(
+      {
+        a: createSession("a", { sessionName: "Alpha", status: "idle" }),
+        b: createSession("b", { sessionName: "Beta", status: "idle" }),
+      },
+      "a",
+    );
+    render(<SessionRail />);
+    railItem("b").focus();
+    fireEvent.keyDown(railItem("b"), { key: "ArrowUp" });
+    expect(railItem("a")).toHaveFocus();
+  });
 });

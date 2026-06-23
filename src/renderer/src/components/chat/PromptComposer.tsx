@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { type ImageAttachment, MAX_IMAGES, readImageFiles } from "@/lib/images";
+import { useUiStore } from "@/store/ui";
 import { ImageAttachmentStrip } from "./ImageAttachmentStrip";
 
 export interface PromptComposerActionContext {
@@ -62,6 +63,8 @@ export interface PromptComposerProps {
   renderOverlay?: (ctx: PromptComposerOverlayContext) => ReactNode;
   disabled?: boolean;
   placeholder?: string;
+  /** Accessible name for the textarea (placeholder is not a reliable label). Default "Message". */
+  ariaLabel?: string;
   /** Submit on Enter (Shift+Enter always newlines). Default true. */
   submitOnEnter?: boolean;
   /** Textarea baseline row count (drives the min height). Default 1. */
@@ -79,6 +82,7 @@ export function PromptComposer({
   renderOverlay,
   disabled = false,
   placeholder,
+  ariaLabel = "Message",
   submitOnEnter = true,
   rows = 1,
   maxHeight = 200,
@@ -126,22 +130,19 @@ export function PromptComposer({
     textareaRef.current?.focus();
   };
 
-  // Cmd/Ctrl+Shift+P toggles the overlay (slash palette) when one is wired.
+  // The global shortcut manager (lib/useShortcuts) bumps this counter on
+  // Cmd/Ctrl+Shift+P; toggle the overlay when it changes. Only the composer
+  // wired with an overlay (the active chat composer) reacts, so the chord is a
+  // no-op in the StartPanel composer. No window listener lives here — the
+  // manager is the single source of truth for the chord.
+  const slashToggle = useUiStore((s) => s.slashPaletteToggle);
+  const slashToggleSeen = useRef(slashToggle);
   useEffect(() => {
     if (!hasOverlay) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        (e.key === "p" || e.key === "P")
-      ) {
-        e.preventDefault();
-        setOverlayOpen((o) => !o);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [hasOverlay]);
+    if (slashToggle === slashToggleSeen.current) return;
+    slashToggleSeen.current = slashToggle;
+    setOverlayOpen((o) => !o);
+  }, [slashToggle, hasOverlay]);
 
   const addFiles = async (files: File[]) => {
     if (disabled || files.length === 0) return;
@@ -268,6 +269,7 @@ export function PromptComposer({
           </IconButton>
           <textarea
             ref={textareaRef}
+            aria-label={ariaLabel}
             value={text}
             rows={rows}
             disabled={disabled}

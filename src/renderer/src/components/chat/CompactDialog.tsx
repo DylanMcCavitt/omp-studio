@@ -5,8 +5,9 @@
 // the panel/badge reflect the compacting state via the slice's `compacting` flag.
 
 import { Minimize2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Spinner } from "@/components/ui";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 import { useActiveSession, useChatStore } from "@/store/chat";
 
 export function CompactDialog({
@@ -20,12 +21,11 @@ export function CompactDialog({
   const compacting = useActiveSession((s) => s?.compacting ?? false);
   const [instructions, setInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Focus the instructions field on open, trap Tab, and restore focus on close.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
 
-  // Escape cancels (unless mid-compaction) and the instructions field takes
-  // focus on mount, matching the app's existing modal behaviour.
+  // Escape cancels (unless mid-compaction).
   useEffect(() => {
-    textareaRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !submitting) onClose();
     };
@@ -49,11 +49,13 @@ export function CompactDialog({
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="compact-title"
         aria-describedby="compact-note"
-        className="relative w-full max-w-md rounded-xl border border-border bg-bg-panel p-5 shadow-panel"
+        tabIndex={-1}
+        className="relative w-full max-w-md rounded-xl border border-border bg-bg-panel p-5 shadow-panel focus:outline-none"
       >
         <div className="mb-3 flex items-center gap-2 text-ink">
           <Minimize2 className="h-5 w-5 shrink-0 text-accent" />
@@ -75,7 +77,7 @@ export function CompactDialog({
         </label>
         <textarea
           id="compact-instructions"
-          ref={textareaRef}
+          data-autofocus
           value={instructions}
           rows={3}
           disabled={busy}

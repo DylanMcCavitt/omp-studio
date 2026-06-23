@@ -6,6 +6,7 @@
 import { Pencil } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
+import { useFocusTrap } from "@/lib/useFocusTrap";
 
 export function RenameSessionDialog({
   initialTitle,
@@ -20,9 +21,11 @@ export function RenameSessionDialog({
   const [value, setValue] = useState(initialTitle ?? "");
   const [submitting, setSubmitting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Focus the name field on open, trap Tab, and restore focus on close.
+  const dialogRef = useFocusTrap<HTMLDivElement>();
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // The hook focuses the field (data-autofocus); select its text for quick replace.
     inputRef.current?.select();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !submitting) onClose();
@@ -45,11 +48,13 @@ export function RenameSessionDialog({
   return (
     <div className="fixed inset-0 z-[60] grid place-items-center bg-black/50 p-4">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="rename-title"
         aria-describedby="rename-note"
-        className="w-full max-w-md rounded-xl border border-border bg-bg-panel p-5 shadow-panel"
+        tabIndex={-1}
+        className="w-full max-w-md rounded-xl border border-border bg-bg-panel p-5 shadow-panel focus:outline-none"
       >
         <div className="mb-3 flex items-center gap-2 text-ink">
           <Pencil className="h-5 w-5 shrink-0 text-accent" />
@@ -71,6 +76,7 @@ export function RenameSessionDialog({
         <input
           id="rename-input"
           ref={inputRef}
+          data-autofocus
           value={value}
           disabled={submitting}
           placeholder="e.g. Auth refactor"
