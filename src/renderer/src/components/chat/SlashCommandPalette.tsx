@@ -10,9 +10,11 @@ import { CornerDownLeft, Slash } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import {
+  clampIndex,
   commandInsertText,
   commandName,
   filterCommands,
+  moveIndex,
 } from "@/lib/slash-commands";
 
 export interface SlashCommandPaletteProps {
@@ -45,9 +47,14 @@ export function SlashCommandPalette({
   }, [open]);
 
   const filtered = filterCommands(commands, query);
-  const active = filtered.length
-    ? Math.min(activeIndex, filtered.length - 1)
-    : 0;
+  const active = clampIndex(activeIndex, filtered.length);
+
+  // Reset the cursor to the top whenever the result set changes — typing a new
+  // query or a live availableCommands update — so arrow nav never starts from a
+  // stale index into a now-shorter list.
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query, filtered.length]);
 
   // Keep the active row visible.
   useEffect(() => {
@@ -69,10 +76,12 @@ export function SlashCommandPalette({
       close();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(filtered.length - 1, i + 1));
+      // Move relative to the visible (clamped) index, never the stale stored
+      // one; moveIndex no-ops to 0 for an empty list.
+      setActiveIndex(moveIndex(active, "down", filtered.length));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => Math.max(0, i - 1));
+      setActiveIndex(moveIndex(active, "up", filtered.length));
     } else if (e.key === "Enter") {
       e.preventDefault();
       const command = filtered[active];

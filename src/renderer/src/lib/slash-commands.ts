@@ -46,3 +46,31 @@ export function filterCommands(
     return desc.toLowerCase().includes(q);
   });
 }
+
+/**
+ * Resolve a stored cursor index against the current result length: clamp into
+ * range, or 0 when the list is empty. The palette renders and selects from this
+ * resolved value (never the raw stored index) so a stale index left over from a
+ * longer, pre-filter list can never point past the end.
+ */
+export function clampIndex(index: number, length: number): number {
+  if (length <= 0) return 0;
+  return Math.min(Math.max(index, 0), length - 1);
+}
+
+/**
+ * Next cursor index for an arrow key, computed from the resolved (clamped)
+ * current index so navigation stays correct even after the result set shrank.
+ * Returns 0 for an empty list.
+ */
+export function moveIndex(
+  current: number,
+  direction: "up" | "down",
+  length: number,
+): number {
+  if (length <= 0) return 0;
+  const here = clampIndex(current, length);
+  return direction === "down"
+    ? Math.min(length - 1, here + 1)
+    : Math.max(0, here - 1);
+}
