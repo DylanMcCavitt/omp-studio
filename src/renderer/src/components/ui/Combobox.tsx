@@ -71,6 +71,7 @@ export function Combobox({
   "aria-label": ariaLabel,
 }: ComboboxProps) {
   const selected = options.find((o) => o.value === value);
+  const listboxId = useId();
 
   return (
     <Popover
@@ -85,6 +86,7 @@ export function Combobox({
           role="combobox"
           aria-expanded={open}
           aria-haspopup="listbox"
+          aria-controls={listboxId}
           aria-label={ariaLabel}
           disabled={disabled}
           onClick={toggle}
@@ -106,6 +108,7 @@ export function Combobox({
         <ComboboxList
           options={options}
           value={value}
+          listId={listboxId}
           searchPlaceholder={searchPlaceholder}
           emptyText={emptyText}
           onSelect={(v) => {
@@ -121,12 +124,14 @@ export function Combobox({
 function ComboboxList({
   options,
   value,
+  listId,
   searchPlaceholder,
   emptyText,
   onSelect,
 }: {
   options: ComboboxOption[];
   value: string;
+  listId: string;
   searchPlaceholder: string;
   emptyText: string;
   onSelect: (value: string) => void;
@@ -135,7 +140,6 @@ function ComboboxList({
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const listId = useId();
 
   // Focus the filter input as soon as the panel mounts (i.e. on open).
   useEffect(() => {

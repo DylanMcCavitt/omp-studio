@@ -161,5 +161,7 @@ export function MenuItem({
 }
 
 export function MenuSeparator() {
-  return <div role="separator" className="my-1 h-px bg-border-subtle" />;
+  // Native <hr> carries an implicit separator role (no explicit role attribute
+  // needed, which keeps biome's a11y rules satisfied).
+  return <hr className="my-1 h-px border-0 bg-border-subtle" />;
 }

@@ -38,7 +38,6 @@ export interface PopoverProps {
   /** Class for the floating panel. */
   contentClassName?: string;
   contentRole?: string;
-  "aria-label"?: string;
 }
 
 export function Popover({
@@ -50,7 +49,6 @@ export function Popover({
   className,
   contentClassName,
   contentRole,
-  "aria-label": ariaLabel,
 }: PopoverProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const controlled = openProp !== undefined;
@@ -90,7 +88,6 @@ export function Popover({
         <div
           ref={contentRef}
           role={contentRole}
-          aria-label={ariaLabel}
           className={cn(
             "absolute top-full z-30 mt-1 min-w-full animate-fade-in overflow-hidden rounded-lg border border-border-strong bg-bg-panel shadow-panel",
             align === "end" ? "right-0" : "left-0",
