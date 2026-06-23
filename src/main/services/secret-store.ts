@@ -20,23 +20,37 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+// Lazy electron access: importing this module must NOT resolve electron's named
+// exports at static link time, or plain-node test graphs that load it without the
+// electron mock active fail with "Export named 'app' not found". Resolved (and
+// memoized) on the first secret op, where bun's mock.module and the real runtime
+// both intercept correctly.
+import { createRequire } from "node:module";
 import { join } from "node:path";
-import { app, safeStorage } from "electron";
+
+const requireCjs = createRequire(import.meta.url);
+let _electron: typeof import("electron") | undefined;
+function electron(): typeof import("electron") {
+  if (_electron === undefined) {
+    _electron = requireCjs("electron") as typeof import("electron");
+  }
+  return _electron;
+}
 
 /** Session-only fallback when OS encryption is unavailable or a disk op fails. */
 const memory = new Map<string, string>();
 
 function secretPath(name: string): string {
-  return join(app.getPath("userData"), "secrets", `${name}.bin`);
+  return join(electron().app.getPath("userData"), "secrets", `${name}.bin`);
 }
 
 /** Read a secret, or `null` when none is stored. Never throws. */
 export function getSecret(name: string): string | null {
-  if (safeStorage.isEncryptionAvailable()) {
+  if (electron().safeStorage.isEncryptionAvailable()) {
     const path = secretPath(name);
     if (existsSync(path)) {
       try {
-        return safeStorage.decryptString(readFileSync(path));
+        return electron().safeStorage.decryptString(readFileSync(path));
       } catch {
         // Corrupt/undecryptable ciphertext — fall through to any in-memory value.
       }
@@ -47,14 +61,16 @@ export function getSecret(name: string): string | null {
 
 /** Persist a secret as OS-encrypted ciphertext (0600), or in memory if it can't be encrypted. */
 export function setSecret(name: string, value: string): void {
-  if (safeStorage.isEncryptionAvailable()) {
+  if (electron().safeStorage.isEncryptionAvailable()) {
     try {
       const path = secretPath(name);
-      mkdirSync(join(app.getPath("userData"), "secrets"), {
+      mkdirSync(join(electron().app.getPath("userData"), "secrets"), {
         recursive: true,
         mode: 0o700,
       });
-      writeFileSync(path, safeStorage.encryptString(value), { mode: 0o600 });
+      writeFileSync(path, electron().safeStorage.encryptString(value), {
+        mode: 0o600,
+      });
       // Enforce 0600 even when overwriting a pre-existing, looser file.
       chmodSync(path, 0o600);
       memory.delete(name);
