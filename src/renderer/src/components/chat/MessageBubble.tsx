@@ -4,12 +4,14 @@
 
 import type {
   ContentBlock,
+  ImageBlock,
   OmpMessage,
   TextBlock,
   ThinkingBlock as ThinkingBlockData,
   ToolCallBlock,
   ToolResultMessage,
 } from "@shared/rpc";
+import { imageBlockSrc } from "@/lib/images";
 import { Markdown } from "./Markdown";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallCard } from "./ToolCallCard";
@@ -24,18 +26,37 @@ export function MessageBubble({ message, toolResults, streaming }: Props) {
   if (message.role === "toolResult") return null;
 
   if (message.role === "user") {
-    const text =
-      typeof message.content === "string"
-        ? message.content
-        : message.content
-            .map((b) =>
-              b.type === "text" ? String((b as TextBlock).text ?? "") : "",
-            )
-            .join("");
+    const content = message.content;
+    let images: ImageBlock[] = [];
+    let text: string;
+    if (typeof content === "string") {
+      text = content;
+    } else {
+      text = content
+        .filter((b): b is TextBlock => b.type === "text")
+        .map((b) => String(b.text ?? ""))
+        .join("");
+      images = content.filter((b): b is ImageBlock => b.type === "image");
+    }
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5 text-sm text-ink">
-          <Markdown>{text}</Markdown>
+          {images.length > 0 && (
+            <div className="mb-1.5 flex flex-wrap gap-1.5">
+              {images.map((img, i) => {
+                const src = imageBlockSrc(img);
+                return src ? (
+                  <img
+                    key={i}
+                    src={src}
+                    alt="Attachment"
+                    className="max-h-48 rounded-lg border border-border-subtle object-cover"
+                  />
+                ) : null;
+              })}
+            </div>
+          )}
+          {text && <Markdown>{text}</Markdown>}
         </div>
       </div>
     );

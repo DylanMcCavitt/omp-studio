@@ -5,11 +5,12 @@
 // normalized multi-session store.
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
-import type { RpcModel, ThinkingLevel } from "@shared/rpc";
+import type { ImageContent, RpcModel, ThinkingLevel } from "@shared/rpc";
 import { FolderOpen, MessageSquarePlus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
+import { PromptComposer } from "@/components/chat/PromptComposer";
 import {
   closeSessionWithConfirm,
   SessionRail,
@@ -75,10 +76,8 @@ function StartPanel() {
   const settingsLoading = useSettingsStore((s) => s.loading);
   const start = useChatStore((s) => s.start);
   const send = useChatStore((s) => s.send);
-  const creating = useChatStore((s) => s.creating);
   const { data: models, loading } = useAsync(() => window.omp.listModels(), []);
   const [model, setModel] = useState("");
-  const [prompt, setPrompt] = useState("");
 
   // Seed the project picker from the saved default the first time it is unset.
   useEffect(() => {
@@ -101,15 +100,12 @@ function StartPanel() {
     setModel(preferred);
   }, [models, model, settingsLoading, settings?.defaultModel]);
 
-  const spawning = creating;
-  const canStart =
-    Boolean(selectedProject) && prompt.trim() !== "" && !spawning;
-
-  const onStart = async () => {
-    if (!selectedProject || prompt.trim() === "") return;
-    const text = prompt;
-    setPrompt("");
-    await start({
+  const handleStart = async (
+    text: string,
+    images: ImageContent[],
+  ): Promise<boolean> => {
+    if (!selectedProject) return false;
+    const ok = await start({
       cwd: selectedProject,
       model: model || undefined,
       thinkingLevel: settings?.defaultThinkingLevel,
@@ -120,7 +116,9 @@ function StartPanel() {
           }
         : undefined,
     });
-    await send(text);
+    if (!ok) return false;
+    await send(text, images);
+    return true;
   };
 
   return (
@@ -187,30 +185,31 @@ function StartPanel() {
             <label className="mb-1.5 block text-xs font-medium text-ink-muted">
               Prompt
             </label>
-            <textarea
-              value={prompt}
+            <PromptComposer
               rows={5}
+              submitOnEnter={false}
               placeholder="Describe what you want the agent to do…"
-              onChange={(e) => setPrompt(e.target.value)}
-              className="scrollbar w-full resize-none rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              onSubmit={handleStart}
+              actionsPlacement="below"
+              renderActions={({ submit, canSubmit, busy }) => (
+                <Button
+                  variant="primary"
+                  onClick={submit}
+                  disabled={!canSubmit || !selectedProject}
+                  className="w-full justify-center"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    {busy ? (
+                      <Spinner size={14} />
+                    ) : (
+                      <MessageSquarePlus className="h-4 w-4" />
+                    )}
+                    Start session
+                  </span>
+                </Button>
+              )}
             />
           </div>
-
-          <Button
-            variant="primary"
-            onClick={() => void onStart()}
-            disabled={!canStart}
-            className="w-full justify-center"
-          >
-            <span className="flex items-center justify-center gap-1.5">
-              {spawning ? (
-                <Spinner size={14} />
-              ) : (
-                <MessageSquarePlus className="h-4 w-4" />
-              )}
-              Start session
-            </span>
-          </Button>
         </Panel>
       </div>
     </div>

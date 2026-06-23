@@ -14,8 +14,11 @@ import type {
   ChatLifecycleEvent,
   ChatUiRequestEvent,
   ChatUiRespondPayload,
+  PromptOptions,
 } from "@shared/ipc";
 import type {
+  ContentBlock,
+  ImageContent,
   RpcFrame,
   RpcState,
   ThinkingLevel,
@@ -67,13 +70,20 @@ interface ChatActions {
     state: RpcState,
     init?: Partial<LiveSessionState>,
   ): Promise<void>;
-  /** Spawn a new rpc-ui session, register it, and make it active. */
-  start(opts: ChatCreateOptions): Promise<void>;
+  /**
+   * Spawn a new rpc-ui session, register it, and make it active. Resolves
+   * `true` on success, `false` if the spawn failed (createError is set).
+   */
+  start(opts: ChatCreateOptions): Promise<boolean>;
 
-  /** Prompt the active session (steers/follow-ups while it streams). */
-  send(text: string): Promise<void>;
-  /** Steer the active session mid-turn. */
-  steer(text: string): Promise<void>;
+  /**
+   * Prompt the active session, optionally with image attachments (follows up
+   * while it streams). Resolves `true` once the prompt is accepted by the
+   * bridge, `false` if there was nothing to send or the IPC call failed.
+   */
+  send(text: string, images?: ImageContent[]): Promise<boolean>;
+  /** Steer the active session mid-turn, optionally with image attachments. */
+  steer(text: string, images?: ImageContent[]): Promise<boolean>;
   /** Abort the active session's current turn. */
   abort(): Promise<void>;
   setModel(provider: string, modelId: string): Promise<void>;
@@ -98,6 +108,22 @@ export type ChatStore = ChatState & ChatActions;
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+// Build the optimistic user message appended to the transcript before the prompt
+// round-trips. With attachments the content becomes ordered blocks (text first,
+// then images) so MessageBubble can render the image blocks; image-only prompts
+// omit the text block entirely.
+function buildUserMessage(text: string, images?: ImageContent[]): UserMessage {
+  if (!images || images.length === 0) {
+    return { role: "user", content: text, timestamp: Date.now() };
+  }
+  const content: ContentBlock[] = [];
+  if (text.trim() !== "") content.push({ type: "text", text });
+  for (const image of images) {
+    content.push({ type: "image", data: image.data, mimeType: image.mimeType });
+  }
+  return { role: "user", content, timestamp: Date.now() };
 }
 
 export const useChatStore = create<ChatStore>()((set, get) => ({
@@ -211,52 +237,61 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       // Register + activate before hydrating so the new pane shows instantly.
       get().openChat(sessionId);
       await get().openSession(sessionId, state, { cwd: opts.cwd });
+      return true;
     } catch (e) {
       set({ creating: false, createError: errorMessage(e) });
+      return false;
     }
   },
 
-  async send(text) {
+  async send(text, images) {
     const id = get().activeSessionId;
-    const trimmed = text.trim();
-    if (!id || !trimmed) return;
-    const userMsg: UserMessage = {
-      role: "user",
-      content: text,
-      timestamp: Date.now(),
-    };
-    get()._patch(id, (s) => reduceSession(s, studioFrame.userMessage(userMsg)));
+    const hasImages = Boolean(images && images.length > 0);
+    if (!id || (text.trim() === "" && !hasImages)) return false;
+    get()._patch(id, (s) =>
+      reduceSession(s, studioFrame.userMessage(buildUserMessage(text, images))),
+    );
     try {
-      if (get().openSessions[id]?.status === "streaming") {
-        await window.omp.chat.prompt(id, text, {
-          streamingBehavior: "followUp",
-        });
-      } else {
-        await window.omp.chat.prompt(id, text);
-      }
+      const streaming = get().openSessions[id]?.status === "streaming";
+      const promptOpts: PromptOptions | undefined = streaming
+        ? { streamingBehavior: "followUp", images }
+        : hasImages
+          ? { images }
+          : undefined;
+      await window.omp.chat.prompt(id, text, promptOpts);
+      return true;
     } catch (e) {
       get()._patch(id, (s) => ({
         ...s,
         status: "error",
         error: errorMessage(e),
       }));
+      return false;
     }
   },
 
-  async steer(text) {
+  async steer(text, images) {
     const id = get().activeSessionId;
-    const trimmed = text.trim();
-    if (!id || !trimmed) return;
-    const userMsg: UserMessage = {
-      role: "user",
-      content: text,
-      timestamp: Date.now(),
-    };
-    get()._patch(id, (s) => reduceSession(s, studioFrame.userMessage(userMsg)));
+    const hasImages = Boolean(images && images.length > 0);
+    if (!id || (text.trim() === "" && !hasImages)) return false;
+    get()._patch(id, (s) =>
+      reduceSession(s, studioFrame.userMessage(buildUserMessage(text, images))),
+    );
     try {
-      await window.omp.chat.steer(id, text);
+      if (hasImages) {
+        // chat.steer carries no images; the prompt command with a "steer"
+        // streamingBehavior is the image-capable steer path.
+        await window.omp.chat.prompt(id, text, {
+          streamingBehavior: "steer",
+          images,
+        });
+      } else {
+        await window.omp.chat.steer(id, text);
+      }
+      return true;
     } catch (e) {
       get()._patch(id, (s) => ({ ...s, error: errorMessage(e) }));
+      return false;
     }
   },
 
