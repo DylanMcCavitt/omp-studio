@@ -5,6 +5,7 @@ import { BrowserViewManager } from "./browser/view-manager";
 import { registerBrowserIpc } from "./ipc/browser";
 import { registerChatIpc } from "./ipc/chat";
 import { registerDataIpc } from "./ipc/data";
+import { registerFilesIpc } from "./ipc/files";
 import { registerLinearIpc } from "./ipc/linear";
 import { registerSettingsIpc } from "./ipc/settings";
 import { registerTerminalIpc } from "./ipc/terminal";
@@ -108,6 +109,9 @@ void app.whenReady().then(async () => {
   // the renderer resumes them on demand (D3r).
   registry.hydrate((await loadSettings()).openSessions);
   registerDataIpc(ipcMain, () => activeSessionCwd());
+  // FS access scoped to the active workspace cwd (same resolver as data IPC);
+  // the service path-contains every renderer-supplied path under that root.
+  registerFilesIpc(ipcMain, () => activeSessionCwd());
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);
   registerLinearIpc(ipcMain);
