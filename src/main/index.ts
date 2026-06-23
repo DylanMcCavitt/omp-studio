@@ -12,6 +12,20 @@ let mainWindow: BrowserWindow | null = null;
 const registry = new SessionRegistry();
 const log = scoped("main");
 
+// The project root for skills/mcp/agents discovery (feat 6a/§4.4). In a packaged
+// app process.cwd() is the launch dir, not the workspace, so project-scoped
+// reads fall back to the most-recently-active chat session's cwd. Returns
+// undefined when no session is tracked yet (services then use process.cwd()).
+function activeSessionCwd(): string | undefined {
+  let best: { cwd: string; at: string } | undefined;
+  for (const session of registry.list()) {
+    if (!best || session.lastActiveAt > best.at) {
+      best = { cwd: session.cwd, at: session.lastActiveAt };
+    }
+  }
+  return best?.cwd;
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -75,7 +89,7 @@ void app.whenReady().then(async () => {
   // set instead of clobbering the un-resumed descriptors. No children spawn —
   // the renderer resumes them on demand (D3r).
   registry.hydrate((await loadSettings()).openSessions);
-  registerDataIpc(ipcMain);
+  registerDataIpc(ipcMain, () => activeSessionCwd());
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);
 

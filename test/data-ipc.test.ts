@@ -131,3 +131,54 @@ test("searchSessions returns [] with no sessions to scan and never throws", asyn
     invoke(CH.searchSessions, "anything") as Promise<unknown>,
   ).resolves.toEqual([]);
 });
+
+// ---- active-workspace cwd threading (feat 6a/§4.4) -----------------------
+// The data handlers thread an optional cwd into the project-scoped reads,
+// falling back to the active chat session's cwd when the renderer passes none.
+// mcp is used as the probe: its project root is `<cwd>/.mcp.json` and its user
+// root is agentDir()/mcp.json (the isolated temp), so the assertion never
+// depends on host homedir state.
+
+type McpRow = { name: string; source: string };
+
+async function writeMcpProject(dir: string, name: string): Promise<void> {
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, ".mcp.json"),
+    JSON.stringify({ mcpServers: { [name]: { type: "stdio", command: "x" } } }),
+  );
+}
+
+test("listMcp falls back to the active session cwd when the renderer passes none", async () => {
+  const project = mkdtempSync(join(tmpdir(), "omp-studio-data-ipc-proj-"));
+  await writeMcpProject(project, "active-cwd-srv");
+  const harness = makeIpcMain();
+  registerDataIpc(harness.ipcMain, () => project);
+
+  const rows = (await harness.invoke(CH.listMcp)) as McpRow[];
+  const found = rows.find((s) => s.name === "active-cwd-srv");
+  expect(found?.source).toBe("project");
+});
+
+test("a renderer-supplied cwd overrides the active session cwd", async () => {
+  const active = mkdtempSync(join(tmpdir(), "omp-studio-data-ipc-active-"));
+  const explicit = mkdtempSync(join(tmpdir(), "omp-studio-data-ipc-explicit-"));
+  await writeMcpProject(active, "active-srv");
+  await writeMcpProject(explicit, "explicit-srv");
+  const harness = makeIpcMain();
+  registerDataIpc(harness.ipcMain, () => active);
+
+  const rows = (await harness.invoke(CH.listMcp, explicit)) as McpRow[];
+  expect(rows.find((s) => s.name === "explicit-srv")).toBeDefined();
+  expect(rows.find((s) => s.name === "active-srv")).toBeUndefined();
+});
+
+test("the dashboard reads project mcp under the active session cwd", async () => {
+  const project = mkdtempSync(join(tmpdir(), "omp-studio-data-ipc-dash-"));
+  await writeMcpProject(project, "dash-srv");
+  const harness = makeIpcMain();
+  registerDataIpc(harness.ipcMain, () => project);
+
+  const data = (await harness.invoke(CH.dashboard)) as DashboardData;
+  expect(data.mcp.find((s) => s.name === "dash-srv")).toBeDefined();
+});

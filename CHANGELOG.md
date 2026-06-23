@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default-focus, danger styling, and session-scoped "Always allow" — mapping the
   chosen affordance back to the select's `{value}` response. Generic (non
   approval) selects keep the plain `SelectRequestDialog`.
+- Skill discovery now mirrors omp's own roots. `listSkills(cwd?)` walks up from
+  the active workspace (capped at 5 ancestors) collecting `.agents/skills` and
+  `.agent/skills`, adds the user `~/.agents`, `~/.agent`, and `~/.claude` skill
+  dirs plus the project `<cwd>/.claude/skills`, and scans the managed/auto-learn
+  dir at the exact `<agentDir>/managed-skills` path (no broad `agentDir()` scan,
+  so sessions/blobs/SQLite noise stays out). Per-root depth rises 1→2 and skills
+  are tagged `claude`/`managed`. The skills/MCP/agents reads and the dashboard
+  now thread the active workspace cwd (falling back to the most-recently-active
+  chat session's cwd) instead of the wrong `process.cwd()` project root.
 
 ## [0.1.0] - 2026-06-19
 

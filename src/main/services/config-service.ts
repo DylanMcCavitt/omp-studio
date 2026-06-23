@@ -288,10 +288,10 @@ async function collectMcp(
   }
 }
 
-export async function listMcpServers(): Promise<McpServerInfo[]> {
+export async function listMcpServers(cwd?: string): Promise<McpServerInfo[]> {
   const servers: McpServerInfo[] = [];
   await collectMcp(mcpConfigPath(), "user", servers);
-  await collectMcp(join(process.cwd(), ".mcp.json"), "project", servers);
+  await collectMcp(join(cwd ?? process.cwd(), ".mcp.json"), "project", servers);
   return servers;
 }
 
@@ -318,17 +318,106 @@ async function collectSkills(
   }
 }
 
-export async function listSkills(): Promise<SkillInfo[]> {
+/**
+ * A skill root to scan: its filesystem path, the `source` tag applied to every
+ * skill found under it, and the recursion cap for {@link findFiles}.
+ */
+interface SkillRoot {
+  root: string;
+  source: SkillInfo["source"];
+  maxDepth: number;
+}
+
+/** How many ancestor levels above `cwd` we probe for project skill roots. */
+const SKILL_WALKUP_DEPTH = 5;
+
+/** Per-root recursion cap for non-builtin roots (some skills nest one level). */
+const SKILL_MAX_DEPTH = 2;
+
+/** `cwd` plus up to `depth` ancestor directories, stopping at the fs root. */
+function ancestorDirs(start: string, depth: number): string[] {
+  const dirs: string[] = [];
+  let dir = start;
+  for (let i = 0; i <= depth; i++) {
+    dirs.push(dir);
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return dirs;
+}
+
+/**
+ * The ordered skill roots, lowest precedence first (later sources overwrite on
+ * name collision): builtin < managed < user < project. Mirrors omp's own
+ * discovery — project walk-up for `.agents`/`.agent`, the home `.claude` dir,
+ * and the managed/auto-learn dir at the EXACT `managed-skills` subpath (never a
+ * broad `agentDir()` scan, which also holds sessions/blobs/SQLite DBs).
+ */
+function skillRoots(cwd: string, home: string): SkillRoot[] {
+  const agent = agentDir();
+  const roots: SkillRoot[] = [
+    // builtin — bundled workflow-kit, nested several levels deep.
+    { root: join(agent, "workflow-kit"), source: "builtin", maxDepth: 6 },
+    // managed/auto-learn skills at the exact subdir.
+    {
+      root: join(agent, "managed-skills"),
+      source: "managed",
+      maxDepth: SKILL_MAX_DEPTH,
+    },
+    // user home roots.
+    {
+      root: join(home, ".agents", "skills"),
+      source: "user",
+      maxDepth: SKILL_MAX_DEPTH,
+    },
+    {
+      root: join(home, ".agent", "skills"),
+      source: "user",
+      maxDepth: SKILL_MAX_DEPTH,
+    },
+    {
+      root: join(home, ".claude", "skills"),
+      source: "claude",
+      maxDepth: SKILL_MAX_DEPTH,
+    },
+  ];
+  // Project roots: walk up from cwd collecting `.agents/skills` + `.agent/skills`
+  // at each ancestor. Collect farthest first so the nearest dir (cwd) wins, then
+  // the project `.claude/skills`.
+  for (const dir of ancestorDirs(cwd, SKILL_WALKUP_DEPTH).reverse()) {
+    roots.push({
+      root: join(dir, ".agents", "skills"),
+      source: "project",
+      maxDepth: SKILL_MAX_DEPTH,
+    });
+    roots.push({
+      root: join(dir, ".agent", "skills"),
+      source: "project",
+      maxDepth: SKILL_MAX_DEPTH,
+    });
+  }
+  roots.push({
+    root: join(cwd, ".claude", "skills"),
+    source: "claude",
+    maxDepth: SKILL_MAX_DEPTH,
+  });
+  return roots;
+}
+
+// `home` is an injectable test seam (real `homedir()` by default); `os.homedir()`
+// ignores `$HOME` on macOS, so user-home roots cannot be redirected via env.
+export async function listSkills(
+  cwd?: string,
+  home: string = homedir(),
+): Promise<SkillInfo[]> {
   const byName = new Map<string, SkillInfo>();
-  // Lowest precedence first; later sources overwrite (project > user > builtin).
-  await collectSkills(join(agentDir(), "workflow-kit"), "builtin", 6, byName);
-  await collectSkills(join(homedir(), ".agents", "skills"), "user", 1, byName);
-  await collectSkills(
-    join(process.cwd(), ".agents", "skills"),
-    "project",
-    1,
-    byName,
-  );
+  for (const { root, source, maxDepth } of skillRoots(
+    cwd ?? process.cwd(),
+    home,
+  )) {
+    await collectSkills(root, source, maxDepth, byName);
+  }
   return [...byName.values()];
 }
 
@@ -371,7 +460,7 @@ async function collectAgents(
   }
 }
 
-export async function listAgents(): Promise<AgentInfo[]> {
+export async function listAgents(cwd?: string): Promise<AgentInfo[]> {
   const byName = new Map<string, AgentInfo>();
 
   // Builtin agents are materialized to a temp dir via `omp agents unpack`.
@@ -388,6 +477,10 @@ export async function listAgents(): Promise<AgentInfo[]> {
   }
 
   await collectAgents(join(agentDir(), "agents"), "user", byName);
-  await collectAgents(join(process.cwd(), ".omp", "agents"), "project", byName);
+  await collectAgents(
+    join(cwd ?? process.cwd(), ".omp", "agents"),
+    "project",
+    byName,
+  );
   return [...byName.values()];
 }

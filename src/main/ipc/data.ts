@@ -32,14 +32,14 @@ import {
   unarchiveSession,
 } from "../services/session-store";
 
-async function buildDashboard(): Promise<DashboardData> {
+async function buildDashboard(cwd?: string): Promise<DashboardData> {
   const [sessions, models, mcp, skills, agents, repo, issues, prs] =
     await Promise.all([
       listSessions().catch(() => []),
       listModels().catch(() => []),
-      listMcpServers().catch(() => []),
-      listSkills().catch(() => []),
-      listAgents().catch(() => []),
+      listMcpServers(cwd).catch(() => []),
+      listSkills(cwd).catch(() => []),
+      listAgents(cwd).catch(() => []),
       currentRepo().catch(() => null),
       listIssues().catch(() => []),
       listPrs().catch(() => []),
@@ -92,8 +92,16 @@ async function buildDashboard(): Promise<DashboardData> {
   };
 }
 
-export function registerDataIpc(ipcMain: IpcMain): void {
-  ipcMain.handle(CH.dashboard, () => buildDashboard());
+// `activeCwd` resolves the active workspace cwd for project-scoped reads
+// (skills/mcp/agents/dashboard). It falls back to the most-recently-active chat
+// session's cwd (threaded from index.ts); a renderer-supplied cwd always wins.
+export function registerDataIpc(
+  ipcMain: IpcMain,
+  activeCwd: () => string | undefined = () => undefined,
+): void {
+  const resolveCwd = (cwd?: string): string | undefined => cwd ?? activeCwd();
+
+  ipcMain.handle(CH.dashboard, () => buildDashboard(activeCwd()));
 
   ipcMain.handle(CH.listSessions, (_event, opts?: ListSessionsOptions) =>
     listSessions(opts),
@@ -105,9 +113,15 @@ export function registerDataIpc(ipcMain: IpcMain): void {
       searchSessions(query, opts),
   );
 
-  ipcMain.handle(CH.listMcp, () => listMcpServers());
-  ipcMain.handle(CH.listSkills, () => listSkills());
-  ipcMain.handle(CH.listAgents, () => listAgents());
+  ipcMain.handle(CH.listMcp, (_event, cwd?: string) =>
+    listMcpServers(resolveCwd(cwd)),
+  );
+  ipcMain.handle(CH.listSkills, (_event, cwd?: string) =>
+    listSkills(resolveCwd(cwd)),
+  );
+  ipcMain.handle(CH.listAgents, (_event, cwd?: string) =>
+    listAgents(resolveCwd(cwd)),
+  );
   ipcMain.handle(CH.listModels, () => listModels());
   ipcMain.handle(CH.listProviders, () => listProviders());
 
