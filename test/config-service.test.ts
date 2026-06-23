@@ -124,6 +124,23 @@ test("listSkills gives project roots precedence over user roots on name collisio
   expect(dup[0]?.source).toBe("project");
 });
 
+test("listSkills keeps user-home skills tagged 'user' when cwd is nested under home", async () => {
+  // The project walk-up reaches `home` as an ancestor of cwd; it must NOT
+  // re-add `~/.agents`/`~/.agent` as source:"project" and clobber the user entry.
+  const home = mk("home");
+  const agent = mk("agent");
+  process.env.PI_CODING_AGENT_DIR = agent;
+  const cwd = join(home, "projects", "app");
+  await mkdir(cwd, { recursive: true });
+  await writeSkill(join(home, ".agents", "skills"), "homed", "home-skill");
+
+  const skills = await listSkills(cwd, home);
+  const homed = skills.filter((s) => s.name === "home-skill");
+
+  expect(homed).toHaveLength(1);
+  expect(homed[0]?.source).toBe("user");
+});
+
 test("listSkills degrades to [] when every root is missing", async () => {
   process.env.PI_CODING_AGENT_DIR = join(tmpdir(), "omp-age619-no-agent");
   const skills = await listSkills(

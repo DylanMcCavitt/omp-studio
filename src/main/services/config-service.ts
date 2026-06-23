@@ -383,25 +383,22 @@ function skillRoots(cwd: string, home: string): SkillRoot[] {
     },
   ];
   // Project roots: walk up from cwd collecting `.agents/skills` + `.agent/skills`
-  // at each ancestor. Collect farthest first so the nearest dir (cwd) wins, then
-  // the project `.claude/skills`.
+  // at each ancestor (farthest first so the nearest dir wins), then the project
+  // `.claude/skills`. Skip any path already classified above — when cwd is nested
+  // under home, the walk-up reaches home and would otherwise re-add the user
+  // `~/.agents`/`~/.agent` dirs as `source:"project"`, clobbering the correct
+  // "user" entries via name-keyed dedup and breaking project>user precedence.
+  const seen = new Set(roots.map((r) => r.root));
+  const addProject = (root: string, source: SkillInfo["source"]): void => {
+    if (seen.has(root)) return;
+    seen.add(root);
+    roots.push({ root, source, maxDepth: SKILL_MAX_DEPTH });
+  };
   for (const dir of ancestorDirs(cwd, SKILL_WALKUP_DEPTH).reverse()) {
-    roots.push({
-      root: join(dir, ".agents", "skills"),
-      source: "project",
-      maxDepth: SKILL_MAX_DEPTH,
-    });
-    roots.push({
-      root: join(dir, ".agent", "skills"),
-      source: "project",
-      maxDepth: SKILL_MAX_DEPTH,
-    });
+    addProject(join(dir, ".agents", "skills"), "project");
+    addProject(join(dir, ".agent", "skills"), "project");
   }
-  roots.push({
-    root: join(cwd, ".claude", "skills"),
-    source: "claude",
-    maxDepth: SKILL_MAX_DEPTH,
-  });
+  addProject(join(cwd, ".claude", "skills"), "claude");
   return roots;
 }
 
