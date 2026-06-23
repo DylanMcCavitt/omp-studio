@@ -87,7 +87,7 @@ export interface SkillInfo {
   name: string;
   description: string;
   path: string;
-  source: "builtin" | "user" | "project";
+  source: "builtin" | "user" | "project" | "claude" | "managed";
 }
 
 // ---------------------------------------------------------------------------
@@ -193,4 +193,78 @@ export interface DashboardData {
     openPrs: number;
   };
   generatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Linear (feature 2) — issue tracking integration. All Linear HTTP happens in
+// the main process; the renderer only ever sees these mapped domain shapes.
+// ---------------------------------------------------------------------------
+
+export type LinearAuthStatus = "authenticated" | "unauthenticated" | "error";
+
+export interface LinearViewer {
+  id: string;
+  name: string;
+  email?: string;
+  organization?: string;
+}
+
+export interface LinearTeam {
+  id: string;
+  key: string;
+  name: string;
+}
+
+export interface LinearProjectInfo {
+  id: string;
+  name: string;
+  state?: string;
+  url?: string;
+  progress?: number;
+}
+
+export interface LinearIssue {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  state: { name: string; type: string };
+  priority?: number;
+  assignee?: { name: string } | null;
+  team?: { key: string } | null;
+  project?: { name: string } | null;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface LinearStatusInfo {
+  status: LinearAuthStatus;
+  viewer?: LinearViewer;
+  writesEnabled: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Terminal (feature 7) — one entry per live pty session.
+// ---------------------------------------------------------------------------
+
+export interface TerminalInfo {
+  id: string;
+  cwd: string;
+  shell: string;
+  cols: number;
+  rows: number;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Embedded browser (feature 8) — state of an isolated WebContentsView.
+// ---------------------------------------------------------------------------
+
+export interface BrowserViewState {
+  id: string;
+  url: string;
+  title: string;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  loading: boolean;
 }
