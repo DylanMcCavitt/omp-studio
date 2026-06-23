@@ -19,7 +19,7 @@ import { Highlight } from "@/components/search/Highlight";
 import { Badge, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
-import { NAV_ENTRIES } from "@/lib/nav-registry";
+import { RAIL_ENTRIES } from "@/lib/nav-registry";
 import {
   type LiveSessionHit,
   messageText,
@@ -31,6 +31,7 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { type Route, useAppStore } from "@/store/app";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
+import { useShellStore } from "@/store/shell";
 import { useUiStore } from "@/store/ui";
 
 type FlatResult =
@@ -82,7 +83,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
 
   const openSessions = useChatStore((s) => s.openSessions);
   const openChat = useChatStore((s) => s.openChat);
-  const setRoute = useAppStore((s) => s.setRoute);
+  const setOpenPanel = useShellStore((s) => s.setOpenPanel);
   const focusSession = useAppStore((s) => s.focusSession);
 
   const trimmed = query.trim();
@@ -110,7 +111,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
 
   const routeResults = useMemo<FlatResult[]>(() => {
     const q = trimmed.toLowerCase();
-    return NAV_ENTRIES.filter(
+    return RAIL_ENTRIES.filter(
       (n) => !q || n.label.toLowerCase().includes(q),
     ).map((n) => ({
       kind: "route",
@@ -181,7 +182,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
 
   const activate = useCallback(
     (r: FlatResult) => {
-      if (r.kind === "route") setRoute(r.route);
+      if (r.kind === "route") setOpenPanel(r.route);
       else if (r.kind === "live") openChat(r.hit.sessionId);
       else
         focusSession({
@@ -190,7 +191,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
         });
       onClose();
     },
-    [setRoute, openChat, focusSession, onClose],
+    [setOpenPanel, openChat, focusSession, onClose],
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {

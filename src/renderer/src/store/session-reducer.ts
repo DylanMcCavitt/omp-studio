@@ -78,7 +78,7 @@ export interface SubagentLiveState {
 /**
  * Everything the UI needs to render ONE chat session. The multi-session store
  * keeps a `Record<studioSessionId, LiveSessionState>`; the active pane and the
- * (future) SessionRail read slices of it. Keep this shape additive and clean —
+ * sidebar's SessionList read slices of it. Keep this shape additive and clean —
  * downstream issues (C3/D2r/E4/F4) build directly on these fields.
  */
 export interface LiveSessionState {
@@ -532,7 +532,7 @@ export function reduceSession(
 
 /**
  * A stable, framework-free classification of a session's headline status for
- * the SessionRail / pane header badge. UI labels and colors are mapped from
+ * the SessionList / pane header badge. UI labels and colors are mapped from
  * this kind in the view layer. Priority is deliberate: terminal states
  * (error/exited) win, then a pending UI request the user must answer
  * (approval before input), then compaction, then the streaming lifecycle.

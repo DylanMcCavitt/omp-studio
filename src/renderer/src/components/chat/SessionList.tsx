@@ -1,17 +1,18 @@
-// The session list rail for the chat workspace. Lists every open session from
-// the normalized store, surfaces each one's headline status (incl. the
-// needs-approval / needs-input badge derived from its uiRequests queue), and
-// lets the user switch between them (keeping all children alive) or close one
-// (disposing that child only — transcript untouched). A "New chat" draft row at
-// the top clears the active session so the StartPanel shows.
+// The session list for the left sidebar's Chats surface (AGE-632). Lists every
+// open session from the normalized store, surfaces each one's headline status
+// (incl. the needs-approval / needs-input badge derived from its uiRequests
+// queue), and lets the user switch between them (keeping all children alive) or
+// close one (disposing that child only — transcript untouched). Selecting a row
+// opens it in the center pane via the active-session wiring.
 //
 // Persisted-but-not-live sessions (restored on boot, D3r) render below the live
 // rows as muted "hibernated" rows: clicking one resumes it (hydrating its
 // transcript from JSONL), and a failed resume becomes a disabled error row with
-// Retry / Remove affordances.
+// Retry / Remove affordances. The "New chat" action lives in the sidebar above
+// this list, not in the list itself.
 
 import type { OpenSessionDescriptor } from "@shared/ipc";
-import { MessageSquarePlus, Moon, Plus, X } from "lucide-react";
+import { MessageSquarePlus, Moon, X } from "lucide-react";
 import {
   type KeyboardEvent,
   useEffect,
@@ -44,7 +45,7 @@ const BADGE: Record<
   exited: { label: "Exited", variant: "muted" },
 };
 
-/** Headline status badge shared by the rail rows and the active-pane header. */
+/** Headline status badge shared by the list rows and the active-pane header. */
 export function SessionStatusBadge({
   status,
   uiRequests,
@@ -87,7 +88,7 @@ function modelLabel(s: LiveSessionState): string {
 /**
  * Confirm-then-close. Prompts before discarding a session that is mid-stream so
  * an in-flight turn is not killed accidentally; lives here (not in the store) so
- * the store stays side-effect-pure of window dialogs. Used by the rail rows and
+ * the store stays side-effect-pure of window dialogs. Used by the list rows and
  * the workspace's Cmd+W shortcut.
  */
 export function closeSessionWithConfirm(id: string): void {
@@ -105,19 +106,16 @@ export function closeSessionWithConfirm(id: string): void {
   void store.closeSession(id);
 }
 
-/** Sentinel id for the "New chat" draft row in the roving-focus order. */
-const NEW_CHAT_ITEM = "__new-chat__";
-
-/** Roving-tabindex props spread onto each rail item's primary button. */
-interface RailItemNav {
+/** Roving-tabindex props spread onto each list item's primary button. */
+interface ListItemNav {
   "data-rail-item": string;
   tabIndex: number;
   onKeyDown: (e: KeyboardEvent<HTMLElement>) => void;
   onFocus: () => void;
 }
 
-export function SessionRail() {
-  // Subscribe shallowly to the id lists so the rail container re-renders only
+export function SessionList() {
+  // Subscribe shallowly to the id lists so the list container re-renders only
   // when sessions open/close — each row subscribes to its own slice for live
   // status updates (including background, non-active sessions).
   const ids = useChatStore(useShallow((s) => Object.keys(s.openSessions)));
@@ -125,20 +123,14 @@ export function SessionRail() {
     useShallow((s) => Object.keys(s.hibernatedSessions)),
   );
   const activeSessionId = useChatStore((s) => s.activeSessionId);
-  const newChat = useChatStore((s) => s.newChat);
   const total = ids.length + hibernatedIds.length;
 
-  // Roving tabindex: the rail is one Tab stop and Up/Down move focus between
+  // Roving tabindex: the list is one Tab stop and Up/Down move focus between
   // rows (Enter/Space activate via the native buttons). The ordered id list is
-  // the New-chat row, then live rows, then hibernated rows.
-  const railRef = useRef<HTMLElement>(null);
-  const order = useMemo(
-    () => [NEW_CHAT_ITEM, ...ids, ...hibernatedIds],
-    [ids, hibernatedIds],
-  );
-  const [rovingId, setRovingId] = useState<string>(
-    activeSessionId ?? NEW_CHAT_ITEM,
-  );
+  // the live rows, then the hibernated rows.
+  const listRef = useRef<HTMLElement>(null);
+  const order = useMemo(() => [...ids, ...hibernatedIds], [ids, hibernatedIds]);
+  const [rovingId, setRovingId] = useState<string>(activeSessionId ?? "");
 
   // Keep the tab stop valid as rows open/close; default it to the active session.
   useEffect(() => {
@@ -146,13 +138,13 @@ export function SessionRail() {
       if (order.includes(cur)) return cur;
       if (activeSessionId && order.includes(activeSessionId))
         return activeSessionId;
-      return order[0] ?? NEW_CHAT_ITEM;
+      return order[0] ?? "";
     });
   }, [order, activeSessionId]);
 
   const focusItem = (id: string) => {
     setRovingId(id);
-    railRef.current
+    listRef.current
       ?.querySelector<HTMLElement>(`[data-rail-item="${CSS.escape(id)}"]`)
       ?.focus();
   };
@@ -177,7 +169,7 @@ export function SessionRail() {
     }
   };
 
-  const navProps = (id: string): RailItemNav => ({
+  const navProps = (id: string): ListItemNav => ({
     "data-rail-item": id,
     tabIndex: id === rovingId ? 0 : -1,
     onKeyDown: onItemKeyDown,
@@ -186,37 +178,11 @@ export function SessionRail() {
 
   return (
     <aside
-      ref={railRef}
+      ref={listRef}
       aria-label="Sessions"
-      className="flex w-64 shrink-0 flex-col border-r border-border-subtle bg-bg-panel/40"
+      className="flex min-h-0 flex-1 flex-col"
     >
-      <div className="flex items-center justify-between px-3 py-2.5">
-        <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          Sessions
-        </span>
-        <span className="text-xs text-ink-faint">{total}</span>
-      </div>
-
-      <div className="px-2">
-        <button
-          type="button"
-          {...navProps(NEW_CHAT_ITEM)}
-          onClick={newChat}
-          aria-current={activeSessionId === null ? "true" : undefined}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-sm transition-colors",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-            activeSessionId === null
-              ? "border-accent/50 bg-accent-soft text-accent"
-              : "border-border-subtle text-ink-muted hover:bg-bg-hover hover:text-ink",
-          )}
-        >
-          <Plus size={15} className="shrink-0" />
-          New chat
-        </button>
-      </div>
-
-      <div className="scrollbar mt-2 flex-1 space-y-1 overflow-y-auto px-2 pb-2">
+      <div className="scrollbar flex-1 space-y-1 overflow-y-auto px-3 pb-2">
         {total === 0 ? (
           <EmptyState
             icon={<MessageSquarePlus className="h-6 w-6" />}
@@ -226,7 +192,7 @@ export function SessionRail() {
         ) : (
           <>
             {ids.map((id) => (
-              <SessionRailRow
+              <SessionListRow
                 key={id}
                 sessionId={id}
                 active={id === activeSessionId}
@@ -242,7 +208,7 @@ export function SessionRail() {
               </p>
             )}
             {hibernatedIds.map((id) => (
-              <HibernatedRailRow key={id} sessionId={id} nav={navProps(id)} />
+              <HibernatedListRow key={id} sessionId={id} nav={navProps(id)} />
             ))}
           </>
         )}
@@ -251,14 +217,14 @@ export function SessionRail() {
   );
 }
 
-function SessionRailRow({
+function SessionListRow({
   sessionId,
   active,
   nav,
 }: {
   sessionId: string;
   active: boolean;
-  nav: RailItemNav;
+  nav: ListItemNav;
 }) {
   const session = useChatStore((s) => s.openSessions[sessionId]);
   const setActiveSession = useChatStore((s) => s.setActiveSession);
@@ -362,12 +328,12 @@ function hibernatedTitle(descriptor: OpenSessionDescriptor): string {
  * live rows; clicking it resumes (hydrating from JSONL). A failed resume renders
  * a disabled error row with Retry / Remove (Remove drops it from the open list).
  */
-function HibernatedRailRow({
+function HibernatedListRow({
   sessionId,
   nav,
 }: {
   sessionId: string;
-  nav: RailItemNav;
+  nav: ListItemNav;
 }) {
   const row = useChatStore((s) => s.hibernatedSessions[sessionId]);
   const resumeSession = useChatStore((s) => s.resumeSession);

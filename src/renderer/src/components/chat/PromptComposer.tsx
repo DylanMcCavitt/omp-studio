@@ -1,5 +1,5 @@
-// Reusable prompt input shared by the active-chat composer and the new-session
-// StartPanel. Owns the textarea (auto-grow, optional Enter-to-submit) plus image
+// Reusable prompt input for the active-chat composer. Owns the textarea
+// (auto-grow, optional Enter-to-submit) plus image
 // attachment input via three routes — clipboard paste, drag/drop (with a drop
 // overlay), and an attach button — building `ImageContent[]` for the caller.
 //
@@ -153,7 +153,7 @@ export function PromptComposer({
   // The global shortcut manager (lib/useShortcuts) bumps this counter on
   // Cmd/Ctrl+Shift+P; toggle the overlay when it changes. Only the composer
   // wired with an overlay (the active chat composer) reacts, so the chord is a
-  // no-op in the StartPanel composer. No window listener lives here — the
+  // no-op for any composer mounted without one. No window listener lives here —
   // manager is the single source of truth for the chord.
   const slashToggle = useUiStore((s) => s.slashPaletteToggle);
   const slashToggleSeen = useRef(slashToggle);

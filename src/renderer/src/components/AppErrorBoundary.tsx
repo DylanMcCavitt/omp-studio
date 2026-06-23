@@ -1,7 +1,7 @@
-// App-level render error boundary (G2). Wraps the active route view in Layout so
-// one component throwing during render shows an actionable fallback (message +
-// Reset-to-dashboard + Copy-error) instead of a blank white window — the cockpit
-// is long-running, so a single crashed view must not take down the shell.
+// App-level render error boundary (G2). Wraps the chat surface in Layout so one
+// component throwing during render shows an actionable fallback (message + Reset
+// view + Copy-error) instead of a blank white window — the cockpit is
+// long-running, so a single crashed view must not take down the shell.
 //
 // By design this catches ONLY render/lifecycle errors (that is all React error
 // boundaries can catch). Event-handler and async errors are NOT swallowed; they
@@ -13,12 +13,12 @@ import { Button } from "@/components/ui";
 
 interface AppErrorBoundaryProps {
   children: ReactNode;
-  /** Invoked by "Reset to dashboard"; the host navigates and the boundary clears. */
+  /** Optional hook invoked by "Reset view" after the boundary clears its error. */
   onReset?: () => void;
   /**
-   * When this value changes a caught error is cleared. App passes the current
-   * route so navigating away from a crashed view (e.g. via the sidebar) recovers
-   * automatically instead of stranding the fallback over every route.
+   * When this value changes a caught error is cleared. App passes the active
+   * session id so opening another chat recovers automatically instead of
+   * stranding the fallback over the next session's transcript.
    */
   resetKey?: unknown;
 }
@@ -96,7 +96,7 @@ export class AppErrorBoundary extends Component<
           </h2>
           <p className="text-sm text-ink-muted">
             This view hit an unexpected error and stopped rendering. The rest of
-            the app is still running — reset to the dashboard to continue.
+            the app is still running — reset the view to continue.
           </p>
           <p className="break-words font-mono text-xs text-danger">
             {error.message}
@@ -104,7 +104,7 @@ export class AppErrorBoundary extends Component<
         </div>
         <div className="flex items-center gap-2">
           <Button variant="primary" onClick={this.handleReset}>
-            Reset to dashboard
+            Reset view
           </Button>
           <Button variant="subtle" onClick={this.handleCopy}>
             {copied ? "Copied" : "Copy error"}

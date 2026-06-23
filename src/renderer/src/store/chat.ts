@@ -3,7 +3,7 @@
 // subscription to the bridge's frame/lifecycle/ui-request streams (routing each
 // frame to its session), and reduces frames through the pure `reduceSession`
 // reducer. The active pane reads the active session's slice via
-// `useActiveSession`; the (future) SessionRail will list `openSessions`.
+// `useActiveSession`; the sidebar's SessionList lists `openSessions`.
 //
 // All state shaping flows through the reducer — the store owns only side effects
 // (subscriptions, IPC calls, optimistic appends) and feeds their results back as
@@ -111,7 +111,7 @@ interface ChatActions {
   setActiveSession(id: string | null): void;
   /** Show an existing session in the chat route. */
   openChat(id: string): void;
-  /** Start a brand-new (unspawned) chat in the chat route. */
+  /** Start a brand-new chat in the active workspace using the default model. */
   newChat(): void;
   /** Dispose a session's child and drop its slice (transcript untouched). */
   closeSession(id: string): Promise<void>;
@@ -286,8 +286,33 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   newChat() {
-    set({ activeSessionId: null });
-    useAppStore.getState().setRoute("chat");
+    const app = useAppStore.getState();
+    const settings = useSettingsStore.getState().settings;
+    // Resolve the workspace to spawn in: the active selection, else the saved
+    // default. With neither we can't spawn a child, so fall back to the empty
+    // state where the user can pick a workspace from the switcher.
+    const cwd = app.selectedProject ?? settings?.defaultProject ?? null;
+    if (!cwd) {
+      set({ activeSessionId: null });
+      app.setRoute("chat");
+      return;
+    }
+    // Keep the switcher in sync when we fell back to the saved default.
+    if (app.selectedProject !== cwd) app.setSelectedProject(cwd);
+    // Start immediately with the default model (no start card); the user types
+    // the first prompt into the spawned session's composer. start() routes to
+    // chat and activates the new session once it spawns.
+    void get().start({
+      cwd,
+      model: settings?.defaultModel ?? undefined,
+      thinkingLevel: settings?.defaultThinkingLevel,
+      approvalPolicy: settings
+        ? {
+            mode: settings.defaultApprovalMode,
+            autoApprove: settings.defaultAutoApprove,
+          }
+        : undefined,
+    });
   },
 
   async closeSession(id) {
@@ -830,7 +855,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       if (next === cur) return s;
       // `next` is a freshly-built slice (the reducer/patch fns never return a
       // shared reference when they change state), so stamping the activity time
-      // in place is copy-free — it powers the SessionRail "last activity"
+      // in place is copy-free — it powers the SessionList "last activity"
       // column and keeps non-active sessions' rows live as frames arrive.
       next.lastActivityAt = Date.now();
       return { openSessions: { ...s.openSessions, [sessionId]: next } };

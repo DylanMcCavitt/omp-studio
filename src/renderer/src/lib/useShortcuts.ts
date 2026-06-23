@@ -20,7 +20,7 @@
 // mutates sessions behind a safety prompt.
 
 import { useEffect } from "react";
-import { closeSessionWithConfirm } from "@/components/chat/SessionRail";
+import { closeSessionWithConfirm } from "@/components/chat/SessionList";
 import { useChatStore } from "@/store/chat";
 import { useUiStore } from "@/store/ui";
 

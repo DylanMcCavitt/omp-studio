@@ -44,7 +44,7 @@ describe("AppErrorBoundary", () => {
         <Boom crash={true} />
       </AppErrorBoundary>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Reset to dashboard" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset view" }));
     expect(onReset).toHaveBeenCalledOnce();
     spy.mockRestore();
   });

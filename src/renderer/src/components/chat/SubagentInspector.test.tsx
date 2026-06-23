@@ -12,6 +12,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
+import { useSettingsStore } from "@/store/settings";
+import { useShellStore } from "@/store/shell";
 import { SubagentInspector } from "./SubagentInspector";
 
 function snap(over: Partial<SubagentSnapshot> = {}): SubagentSnapshot {
@@ -55,6 +57,9 @@ beforeEach(() => {
     activeSessionId: null,
   });
   useAppStore.setState({ route: "dashboard", sessionFocus: null });
+  useShellStore.setState({ openPanelId: null });
+  // Stub the debounced layout persist so setOpenPanel never schedules a real IPC.
+  useSettingsStore.setState({ setLayout: vi.fn() });
 });
 
 it("with no sessionFile shows progress-only and no transcript pane", () => {
@@ -148,7 +153,7 @@ it("Open in Sessions focuses the subagent's transcript file", async () => {
     />,
   );
   await user.click(screen.getByLabelText("Open in Sessions"));
-  expect(useAppStore.getState().route).toBe("sessions");
+  expect(useShellStore.getState().openPanelId).toBe("sessions");
   expect(useAppStore.getState().sessionFocus).toEqual({
     path: "/abs/a.jsonl",
     messageIndex: -1,

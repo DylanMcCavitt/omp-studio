@@ -9,6 +9,9 @@ import { create } from "zustand";
 import type { Route } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
 
+/** Which primary surface the left sidebar shows: the chat list or the file tree. */
+export type SidebarMode = "chats" | "files";
+
 interface ShellState {
   /** The open right-rail destination panel, or null when the rail is collapsed. */
   openPanelId: Route | null;
@@ -23,6 +26,11 @@ interface ShellState {
    * came from settings). Called once by `Layout` after settings load.
    */
   hydrate: (id: Route | null) => void;
+
+  /** The left sidebar's active surface (Chats list vs. Files tree). */
+  sidebarMode: SidebarMode;
+  /** Switch the left sidebar between its Chats and Files surfaces. */
+  setSidebarMode: (mode: SidebarMode) => void;
 }
 
 /** Persist the open-panel id through the settings store's debounced writer. */
@@ -51,5 +59,11 @@ export const useShellStore = create<ShellState>((set, get) => ({
 
   hydrate(id) {
     set({ openPanelId: id });
+  },
+
+  sidebarMode: "chats",
+
+  setSidebarMode(mode) {
+    set({ sidebarMode: mode });
   },
 }));

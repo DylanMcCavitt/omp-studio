@@ -11,6 +11,7 @@
 
 import { X } from "lucide-react";
 import { useEffect } from "react";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { IconButton } from "@/components/ui";
 import { railEntry } from "@/lib/nav-registry";
 import type { Route } from "@/store/app";
@@ -53,7 +54,11 @@ export function RailPanelHost({ openPanelId }: { openPanelId: Route }) {
         </IconButton>
       </header>
       <div className="min-h-0 flex-1 overflow-hidden">
-        <View />
+        {/* Isolate a crash in a rail destination view so it can't blank the
+            whole app (the old center had this; restore it for railed views). */}
+        <AppErrorBoundary resetKey={openPanelId} onReset={closePanel}>
+          <View />
+        </AppErrorBoundary>
       </div>
     </aside>
   );

@@ -1,5 +1,5 @@
 // Shared overflow menu of session-management actions, used by BOTH the live
-// SessionRail rows and the historical Sessions detail header. Each caller passes
+// SessionList rows and the historical Sessions detail header. Each caller passes
 // a `target` describing the session; the menu adapts which actions it shows and
 // routes every file action through `window.omp.session.*` on the JSONL path:
 //

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShellStore } from "@/store/shell";
 
 // Source of truth for the set of shell destinations. `lib/nav-registry.ts` keys
 // its `Record<Route, …>` registry off this union, so a route added here without
@@ -34,7 +35,7 @@ interface AppState {
 
   /** Pending request to focus a session in the Sessions view (consumed once). */
   sessionFocus: SessionFocus | null;
-  /** Navigate to Sessions and request the given transcript + message focus. */
+  /** Open the Sessions rail panel and request the given transcript + message focus. */
   focusSession: (focus: SessionFocus) => void;
   /** Clear the pending focus once the Sessions view has consumed it. */
   clearSessionFocus: () => void;
@@ -59,7 +60,10 @@ export const useAppStore = create<AppState>((set) => ({
   setSelectedProject: (selectedProject) => set({ selectedProject }),
 
   sessionFocus: null,
-  focusSession: (sessionFocus) => set({ route: "sessions", sessionFocus }),
+  focusSession: (sessionFocus) => {
+    set({ sessionFocus });
+    useShellStore.getState().setOpenPanel("sessions");
+  },
   clearSessionFocus: () => set({ sessionFocus: null }),
 
   pendingComposerText: null,

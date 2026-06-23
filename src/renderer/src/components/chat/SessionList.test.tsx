@@ -1,18 +1,20 @@
-// D2r — the multi-session rail. Drives the real (normalized) chat store: it
-// renders one row per open session, switching the active session on click and
-// closing one through the store's closeSession action, and each row's badge
-// reflects the session's derived headline status. Assertions go through roles,
-// accessible names, and aria-current — never styling.
+// D2r — the multi-session list (now the left sidebar's Chats surface). Drives
+// the real (normalized) chat store: it renders one row per open session,
+// switching the active session on click and closing one through the store's
+// closeSession action, and each row's badge reflects the session's derived
+// headline status. Assertions go through roles, accessible names, and
+// aria-current — never styling.
 //
-// G2 adds the keyboard-accessibility coverage at the bottom: roving tabindex
-// (one Tab stop, defaulted to the active session) and Arrow-key navigation.
+// G2 covers keyboard accessibility: roving tabindex (one Tab stop, defaulted to
+// the active session) and Arrow-key navigation. The "New chat" action lives in
+// the sidebar above this list, so it is no longer part of the roving order.
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
 import { createSession } from "@/store/session-reducer";
-import { SessionRail } from "./SessionRail";
+import { SessionList } from "./SessionList";
 
 // Full store snapshot (state + actions) captured before any test mutates it, so
 // each test starts from a clean slice map with the real actions restored.
@@ -54,7 +56,7 @@ it("renders one row per open session with its title", () => {
     },
     "a",
   );
-  render(<SessionRail />);
+  render(<SessionList />);
   // Title precedence: sessionName, else basename(cwd).
   expect(screen.getByText("Alpha")).toBeInTheDocument();
   expect(screen.getByText("beta")).toBeInTheDocument();
@@ -69,7 +71,7 @@ it("switches the active session when a row is clicked", async () => {
     },
     "a",
   );
-  render(<SessionRail />);
+  render(<SessionList />);
 
   const alphaRow = screen.getByText("Alpha").closest("button");
   const betaRow = screen.getByText("Beta").closest("button");
@@ -92,7 +94,7 @@ it("closes a session through the store's closeSession action", async () => {
   );
   // Override the action; closeSessionWithConfirm reads it from getState().
   useChatStore.setState({ closeSession });
-  render(<SessionRail />);
+  render(<SessionList />);
 
   await user.click(screen.getByRole("button", { name: "Close session" }));
 
@@ -114,7 +116,7 @@ it("reflects each session's derived status in its badge", () => {
     },
     "r",
   );
-  render(<SessionRail />);
+  render(<SessionList />);
 
   expect(screen.getByText("Ready")).toBeInTheDocument();
   expect(screen.getByText("Streaming")).toBeInTheDocument();
@@ -123,7 +125,7 @@ it("reflects each session's derived status in its badge", () => {
 });
 
 it("shows an empty state when no sessions are open", () => {
-  render(<SessionRail />);
+  render(<SessionList />);
   expect(screen.getByText(/no open sessions/i)).toBeInTheDocument();
 });
 
@@ -136,10 +138,9 @@ describe("keyboard nav (G2)", () => {
       },
       "a",
     );
-    render(<SessionRail />);
+    render(<SessionList />);
     expect(railItem("a").tabIndex).toBe(0);
     expect(railItem("b").tabIndex).toBe(-1);
-    expect(railItem("__new-chat__").tabIndex).toBe(-1);
   });
 
   it("moves focus to the next row on ArrowDown and updates the tab stop", () => {
@@ -150,7 +151,7 @@ describe("keyboard nav (G2)", () => {
       },
       "a",
     );
-    render(<SessionRail />);
+    render(<SessionList />);
     railItem("a").focus();
     fireEvent.keyDown(railItem("a"), { key: "ArrowDown" });
     expect(railItem("b")).toHaveFocus();
@@ -166,7 +167,7 @@ describe("keyboard nav (G2)", () => {
       },
       "a",
     );
-    render(<SessionRail />);
+    render(<SessionList />);
     railItem("b").focus();
     fireEvent.keyDown(railItem("b"), { key: "ArrowUp" });
     expect(railItem("a")).toHaveFocus();
@@ -183,7 +184,7 @@ describe("keyboard nav (G2)", () => {
       },
       "a",
     );
-    render(<SessionRail />);
+    render(<SessionList />);
     // Accessory controls stay mouse-clickable but are not Tab stops.
     expect(screen.getByRole("button", { name: "Close session" }).tabIndex).toBe(
       -1,

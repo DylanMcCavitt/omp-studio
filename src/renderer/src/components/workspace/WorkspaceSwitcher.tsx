@@ -23,11 +23,12 @@ import {
 } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
+import { useShellStore } from "@/store/shell";
 
 export function WorkspaceSwitcher() {
   const selectedProject = useAppStore((s) => s.selectedProject);
   const setSelectedProject = useAppStore((s) => s.setSelectedProject);
-  const setRoute = useAppStore((s) => s.setRoute);
+  const setOpenPanel = useShellStore((s) => s.setOpenPanel);
   const workspaces = useSettingsStore((s) => s.settings?.workspaces);
   const recordWorkspace = useSettingsStore((s) => s.recordWorkspace);
   const [adding, setAdding] = useState(false);
@@ -119,7 +120,7 @@ export function WorkspaceSwitcher() {
         </MenuItem>
         <MenuItem
           icon={<SlidersHorizontal className="h-4 w-4" />}
-          onClick={() => setRoute("settings")}
+          onClick={() => setOpenPanel("settings")}
         >
           Manage workspaces…
         </MenuItem>
