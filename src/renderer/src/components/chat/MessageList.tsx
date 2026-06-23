@@ -1,5 +1,6 @@
 // Scrollable transcript column. Builds the toolCallId -> result lookup, renders
-// a bubble per non-toolResult message, and appends a live streaming bubble while
+// a bubble per non-toolResult message, interleaves slash-command system cards at
+// their captured transcript positions, and appends a live streaming bubble while
 // the agent is responding. Auto-scrolls to the bottom unless the user scrolled up.
 
 import type {
@@ -9,11 +10,14 @@ import type {
   ToolResultMessage,
 } from "@shared/rpc";
 import { Loader } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { useActiveSession } from "@/store/chat";
+import type { SystemCard } from "@/store/session-reducer";
 import { MessageBubble } from "./MessageBubble";
+import { SystemCardBubble } from "./SystemCardBubble";
 
 const EMPTY_MESSAGES: OmpMessage[] = [];
+const EMPTY_CARDS: SystemCard[] = [];
 
 export function MessageList() {
   const messages = useActiveSession((s) => s?.messages ?? EMPTY_MESSAGES);
@@ -21,6 +25,7 @@ export function MessageList() {
   const liveText = useActiveSession((s) => s?.liveText ?? "");
   const liveThinking = useActiveSession((s) => s?.liveThinking ?? "");
   const activeTool = useActiveSession((s) => s?.activeTool ?? null);
+  const systemCards = useActiveSession((s) => s?.systemCards ?? EMPTY_CARDS);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -28,7 +33,7 @@ export function MessageList() {
   useEffect(() => {
     const el = containerRef.current;
     if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
-  }, [messages, liveText, liveThinking, status]);
+  }, [messages, systemCards, liveText, liveThinking, status]);
 
   const toolResults = new Map<string, ToolResultMessage>();
   for (const m of messages) {
@@ -50,7 +55,11 @@ export function MessageList() {
   }
 
   const visible = messages.filter((m) => m.role !== "toolResult");
-  const empty = visible.length === 0 && !liveMessage && !streaming;
+  const empty =
+    visible.length === 0 &&
+    systemCards.length === 0 &&
+    !liveMessage &&
+    !streaming;
 
   return (
     <div
@@ -71,18 +80,32 @@ export function MessageList() {
       ) : (
         <div className="mx-auto flex max-w-3xl flex-col gap-4">
           {visible.map((m, i) => (
-            <MessageBubble
-              key={i}
-              message={m}
-              toolResults={toolResults}
-              streaming={
-                streaming &&
-                lastIsAssistant &&
-                m.role === "assistant" &&
-                i === visible.length - 1
-              }
-            />
+            <Fragment key={i}>
+              {/* Cards captured at this transcript position render before the
+                  message that followed them (chronological interleave). */}
+              {systemCards
+                .filter((c) => c.afterCount === i)
+                .map((c) => (
+                  <SystemCardBubble key={c.id} card={c} />
+                ))}
+              <MessageBubble
+                message={m}
+                toolResults={toolResults}
+                streaming={
+                  streaming &&
+                  lastIsAssistant &&
+                  m.role === "assistant" &&
+                  i === visible.length - 1
+                }
+              />
+            </Fragment>
           ))}
+          {/* Cards anchored at (or past) the end of the transcript. */}
+          {systemCards
+            .filter((c) => c.afterCount >= visible.length)
+            .map((c) => (
+              <SystemCardBubble key={c.id} card={c} />
+            ))}
           {liveMessage && (
             <MessageBubble
               message={liveMessage}

@@ -1,11 +1,18 @@
 // Active-chat composer. Wraps the reusable PromptComposer with the chat-specific
 // action buttons: Send when idle, Steer + Stop while the agent streams. Both
-// send paths accept image attachments. Disabled until a session is active.
+// send paths accept image attachments. Hangs the slash-command palette off the
+// composer overlay seam, fed by the active session's available commands.
+// Disabled until a session is active.
 
+import type { AvailableCommand } from "@shared/rpc";
 import { Navigation, Send, Square } from "lucide-react";
 import { PromptComposer } from "@/components/chat/PromptComposer";
+import { SlashCommandPalette } from "@/components/chat/SlashCommandPalette";
 import { Button } from "@/components/ui";
 import { useActiveSession, useChatStore } from "@/store/chat";
+
+/** Stable empty ref so the no-session selector keeps a steady identity. */
+const NO_COMMANDS: AvailableCommand[] = [];
 
 export function Composer() {
   const sessionId = useActiveSession((s) => s?.sessionId ?? null);
@@ -13,6 +20,9 @@ export function Composer() {
   const send = useChatStore((s) => s.send);
   const steer = useChatStore((s) => s.steer);
   const abort = useChatStore((s) => s.abort);
+  const availableCommands = useActiveSession(
+    (s) => s?.availableCommands ?? NO_COMMANDS,
+  );
 
   const streaming = status === "streaming";
   const disabled = !sessionId;
@@ -32,6 +42,9 @@ export function Composer() {
           onSubmit={(text, images) =>
             streaming ? steer(text, images) : send(text, images)
           }
+          renderOverlay={(ctx) => (
+            <SlashCommandPalette {...ctx} commands={availableCommands} />
+          )}
           renderActions={({ submit, canSubmit }) =>
             streaming ? (
               <>

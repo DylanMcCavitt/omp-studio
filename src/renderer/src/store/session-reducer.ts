@@ -35,6 +35,30 @@ import type {
 export type ChatStatus = "idle" | "spawning" | "streaming" | "error" | "exited";
 
 /**
+ * Kind of a transcript system card. `command_output` carries the text a local
+ * slash command printed; `session_info` reflects a `session_info_update` (e.g. a
+ * rename); `config` reflects a `config_update` (model/thinking change).
+ */
+export type SystemCardKind = "command_output" | "session_info" | "config";
+
+/**
+ * A lightweight system notice rendered inline in the transcript. Local slash
+ * commands emit no agent_end, so their `command_output`/`session_info_update`/
+ * `config_update` side-channel frames need visible feedback. Cards are anchored
+ * to the transcript position they arrived at (`afterCount` = number of visible,
+ * non-toolResult messages that preceded them) so they interleave chronologically
+ * with messages rather than floating to the bottom. `id` is a per-session
+ * monotonic key (no Date.now/random — the reducer stays pure).
+ */
+export interface SystemCard {
+  id: string;
+  kind: SystemCardKind;
+  title: string;
+  body: string;
+  afterCount: number;
+}
+
+/**
  * Everything the UI needs to render ONE chat session. The multi-session store
  * keeps a `Record<studioSessionId, LiveSessionState>`; the active pane and the
  * (future) SessionRail read slices of it. Keep this shape additive and clean —
@@ -80,6 +104,14 @@ export interface LiveSessionState {
   availableCommands: AvailableCommand[];
   /** Outstanding extension UI requests awaiting a renderer response (C3). */
   uiRequests: ChatUiRequestEvent[];
+  /**
+   * Inline transcript system cards from local slash-command side channels
+   * (`command_output`/`session_info_update`/`config_update`). Capped to the most
+   * recent entries (oldest dropped) so a long session never grows unbounded.
+   */
+  systemCards: SystemCard[];
+  /** Per-session monotonic counter for stable `SystemCard.id`s (pure, no Date.now). */
+  systemCardSeq: number;
   error?: string;
 }
 
@@ -109,6 +141,8 @@ export function createSession(
     activeTool: null,
     availableCommands: [],
     uiRequests: [],
+    systemCards: [],
+    systemCardSeq: 0,
     error: undefined,
     ...init,
   };
@@ -199,6 +233,41 @@ export function upsertAssistant(
   return [...messages, snapshot];
 }
 
+/** Most recent system cards kept per session; older ones are dropped. */
+const MAX_SYSTEM_CARDS = 50;
+
+/**
+ * Append a transcript system card, anchoring it after the current visible
+ * (non-toolResult) message count, minting a stable id from the per-session
+ * counter, and capping the list to the most recent entries. Pure: returns a new
+ * state object. Empty bodies are dropped (no-op) so a blank side-channel frame
+ * never produces an empty card.
+ */
+function appendSystemCard(
+  state: LiveSessionState,
+  kind: SystemCardKind,
+  title: string,
+  body: string,
+): LiveSessionState {
+  if (body === "") return state;
+  const afterCount = state.messages.reduce(
+    (n, m) => (m.role === "toolResult" ? n : n + 1),
+    0,
+  );
+  const card: SystemCard = {
+    id: `card-${state.systemCardSeq}`,
+    kind,
+    title,
+    body,
+    afterCount,
+  };
+  return {
+    ...state,
+    systemCards: [...state.systemCards, card].slice(-MAX_SYSTEM_CARDS),
+    systemCardSeq: state.systemCardSeq + 1,
+  };
+}
+
 /**
  * Reduce one frame into the next session state. Pure and immutable: returns a
  * NEW state object when something changed, or the SAME reference for a no-op
@@ -273,6 +342,44 @@ export function reduceSession(
       return Array.isArray(commands)
         ? { ...state, availableCommands: commands }
         : state;
+    }
+
+    // Builtin slash-command side channels. Local commands produce no agent_end,
+    // so these frames are the only visible feedback — surface each as an inline
+    // transcript card (and keep the relevant slice fields fresh).
+    case "command_output": {
+      const text = (frame as { text?: unknown }).text;
+      return typeof text === "string"
+        ? appendSystemCard(state, "command_output", "Command output", text)
+        : state;
+    }
+
+    case "session_info_update": {
+      const title = (frame as { title?: unknown }).title;
+      const name = typeof title === "string" ? title : "";
+      // Keep the rail/header title in sync, then note the change in-transcript.
+      const next = name ? { ...state, sessionName: name } : state;
+      return appendSystemCard(
+        next,
+        "session_info",
+        "Session",
+        name ? `Renamed to “${name}”` : "Session updated",
+      );
+    }
+
+    case "config_update": {
+      const f = frame as { model?: RpcModel; thinkingLevel?: ThinkingLevel };
+      const model = f.model ?? state.model;
+      const thinkingLevel = f.thinkingLevel ?? state.thinkingLevel;
+      const modelLabel = model
+        ? (model.name ?? `${model.provider}/${model.id}`)
+        : "—";
+      return appendSystemCard(
+        { ...state, model, thinkingLevel },
+        "config",
+        "Config updated",
+        `Model: ${modelLabel} · thinking: ${thinkingLevel}`,
+      );
     }
 
     case CONTROL.state: {
