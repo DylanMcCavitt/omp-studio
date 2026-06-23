@@ -544,3 +544,153 @@ test("isCompacting tracks auto_compaction_start/end and still forwards the frame
     session.dispose();
   }
 }, 15000);
+
+// ---------------------------------------------------------------------------
+// Non-live subagent drill-in bridge tests (feature 4).
+//
+// Same fake-omp child: read the request frame the bridge wrote, then echo a
+// correlated response (or an id-less unknown-command failure the way real omp
+// replies for commands a build doesn't implement) back via __emit.
+// ---------------------------------------------------------------------------
+
+test("getSubagents returns the widened subagent snapshot array", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getSubagents();
+    const req = outgoing(writes).find((f) => f.type === "get_subagents");
+    expect(req).toBeDefined();
+    const snapshot = [
+      {
+        id: "c1",
+        index: 0,
+        agent: "task",
+        agentSource: "bundled",
+        status: "running",
+        lastUpdate: 1,
+      },
+    ];
+    emitFrame(session, {
+      type: "response",
+      command: "get_subagents",
+      id: req?.id as string,
+      success: true,
+      data: { subagents: snapshot },
+    });
+    await expect(pending).resolves.toEqual(snapshot);
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("getSubagentMessages sends the selector and returns the parsed cursor", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getSubagentMessages({
+      subagentId: "child-1",
+      fromByte: 42,
+    });
+    const req = outgoing(writes).find(
+      (f) => f.type === "get_subagent_messages",
+    );
+    expect(req).toBeDefined();
+    expect(req?.subagentId).toBe("child-1");
+    expect(req?.fromByte).toBe(42);
+
+    const result = {
+      sessionFile: "/sessions/child-1.jsonl",
+      fromByte: 42,
+      nextByte: 99,
+      reset: false,
+      entries: [{ type: "message" }],
+      messages: [],
+    };
+    emitFrame(session, {
+      type: "response",
+      command: "get_subagent_messages",
+      id: req?.id as string,
+      success: true,
+      data: result,
+    });
+    await expect(pending).resolves.toEqual(result);
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("getSubagentMessages degrades to an empty result on an unknown command", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getSubagentMessages({ sessionFile: "/x.jsonl" });
+    expect(
+      outgoing(writes).some((f) => f.type === "get_subagent_messages"),
+    ).toBe(true);
+    // Real omp drops the id and reports success:false for unknown commands; no
+    // markReady auto-send competes for this command, so id-less correlation by
+    // command name resolves exactly this request and the method degrades.
+    emitFrame(session, {
+      type: "response",
+      command: "get_subagent_messages",
+      success: false,
+      error: "Unknown command: get_subagent_messages",
+    });
+    await expect(pending).resolves.toEqual({
+      sessionFile: "",
+      fromByte: 0,
+      nextByte: 0,
+      reset: false,
+      entries: [],
+      messages: [],
+    });
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("setSubagentSubscription sends the level and resolves on success", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.setSubagentSubscription("progress");
+    // markReady already emits set_subagent_subscription {level:"events"}, so
+    // match OUR call by level and respond by its exact id (id-match wins over
+    // the id-less command correlation, which would otherwise settle markReady's).
+    const req = outgoing(writes).find(
+      (f) => f.type === "set_subagent_subscription" && f.level === "progress",
+    );
+    expect(req).toBeDefined();
+    emitFrame(session, {
+      type: "response",
+      command: "set_subagent_subscription",
+      id: req?.id as string,
+      success: true,
+    });
+    await expect(pending).resolves.toBeUndefined();
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("setSubagentSubscription degrades on an unknown command", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.setSubagentSubscription("off");
+    const req = outgoing(writes).find(
+      (f) => f.type === "set_subagent_subscription" && f.level === "off",
+    );
+    expect(req).toBeDefined();
+    emitFrame(session, {
+      type: "response",
+      command: "set_subagent_subscription",
+      id: req?.id as string,
+      success: false,
+      error: "Unknown command: set_subagent_subscription",
+    });
+    await expect(pending).resolves.toBeUndefined();
+  } finally {
+    session.dispose();
+  }
+}, 15000);

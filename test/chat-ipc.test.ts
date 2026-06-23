@@ -8,17 +8,20 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { BrowserWindow, IpcMain } from "electron";
 import { registerChatIpc } from "../src/main/ipc/chat";
 import { SessionRegistry } from "../src/main/omp/registry";
 import { OmpRpcSession } from "../src/main/omp/rpc-session";
+import { sessionsDir } from "../src/main/paths";
 import type { ChatCreateOptions, ChatUiRequestEvent } from "../src/shared/ipc";
 import { CH } from "../src/shared/ipc";
 import type {
   ExtensionUiRequest,
   ExtensionUiResponse,
   RpcState,
+  SubagentMessagesResult,
+  SubagentSubscriptionLevel,
 } from "../src/shared/rpc";
 
 // ---------------------------------------------------------------------------
@@ -47,15 +50,44 @@ function makeIpcMain(): {
   return { ipcMain: ipcMain as unknown as IpcMain, invoke };
 }
 
-// Stand-in for a live OmpRpcSession: an EventEmitter that records respondUi.
+// Stand-in for a live OmpRpcSession: an EventEmitter that records the calls the
+// chat IPC handlers route to it (respondUi + the feature-4 subagent methods).
 class FakeSession extends EventEmitter {
   readonly respondUiCalls: Array<{
     requestId: string;
     response: ExtensionUiResponse;
   }> = [];
+  readonly subagentMessagesCalls: Array<{
+    subagentId?: string;
+    sessionFile?: string;
+    fromByte?: number;
+  }> = [];
+  readonly subscriptionCalls: SubagentSubscriptionLevel[] = [];
 
   respondUi(requestId: string, response: ExtensionUiResponse): void {
     this.respondUiCalls.push({ requestId, response });
+  }
+
+  async getSubagentMessages(sel: {
+    subagentId?: string;
+    sessionFile?: string;
+    fromByte?: number;
+  }): Promise<SubagentMessagesResult> {
+    this.subagentMessagesCalls.push(sel);
+    return {
+      sessionFile: sel.sessionFile ?? "",
+      fromByte: sel.fromByte ?? 0,
+      nextByte: 0,
+      reset: false,
+      entries: [],
+      messages: [],
+    };
+  }
+
+  async setSubagentSubscription(
+    level: SubagentSubscriptionLevel,
+  ): Promise<void> {
+    this.subscriptionCalls.push(level);
   }
 }
 
@@ -235,6 +267,80 @@ test("chat:create forwards only known fields to registry.create (drops a rendere
   ]);
   expect(seen.cwd).toBe("/tmp/x");
   expect(seen.approvalPolicy).toEqual({ mode: "write", autoApprove: true });
+});
+
+// ---------------------------------------------------------------------------
+// Feature 4: subagent drill-in handler wiring + sessionFile path containment.
+// These exercise registerChatIpc against the stubbed seams (no omp child); the
+// FakeSession records exactly what each handler forwards to the session.
+// ---------------------------------------------------------------------------
+
+async function wiredSession(): Promise<{
+  invoke: (channel: string, ...args: unknown[]) => unknown;
+  session: FakeSession;
+  sessionId: string;
+}> {
+  const { ipcMain, invoke } = makeIpcMain();
+  const { registry, sessions } = makeRegistry();
+  const { win } = makeWindow();
+  registerChatIpc(ipcMain, registry, () => win);
+  const created = (await invoke(CH.chatCreate, {
+    cwd: "/tmp/x",
+  } satisfies ChatCreateOptions)) as { sessionId: string };
+  const session = sessions.get(created.sessionId);
+  if (!session) throw new Error("session not created");
+  return { invoke, session, sessionId: created.sessionId };
+}
+
+test("chat:getSubagentMessages forwards a normalized, contained sessionFile to the session", async () => {
+  const { invoke, session, sessionId } = await wiredSession();
+  const file = join(sessionsDir(), "proj-abc", "agent.jsonl");
+  const result = (await invoke(CH.chatGetSubagentMessages, sessionId, {
+    sessionFile: file,
+    fromByte: 10,
+  })) as SubagentMessagesResult;
+  expect(session.subagentMessagesCalls).toHaveLength(1);
+  expect(session.subagentMessagesCalls[0]?.sessionFile).toBe(resolve(file));
+  expect(session.subagentMessagesCalls[0]?.fromByte).toBe(10);
+  expect(result.sessionFile).toBe(resolve(file));
+});
+
+test("chat:getSubagentMessages passes a subagentId selector through without a path check", async () => {
+  const { invoke, session, sessionId } = await wiredSession();
+  await invoke(CH.chatGetSubagentMessages, sessionId, {
+    subagentId: "child-1",
+  });
+  expect(session.subagentMessagesCalls).toEqual([{ subagentId: "child-1" }]);
+});
+
+test("chat:getSubagentMessages rejects a sessionFile that escapes sessionsDir()", async () => {
+  const { invoke, session, sessionId } = await wiredSession();
+  const traversal = join(sessionsDir(), "..", "evil.jsonl");
+  await expect(
+    invoke(CH.chatGetSubagentMessages, sessionId, { sessionFile: traversal }),
+  ).rejects.toThrow(/escapes the sessions directory/);
+  await expect(
+    invoke(CH.chatGetSubagentMessages, sessionId, {
+      sessionFile: "/etc/passwd",
+    }),
+  ).rejects.toThrow(/escapes the sessions directory/);
+  // A rejected path never reaches the child reader.
+  expect(session.subagentMessagesCalls).toHaveLength(0);
+});
+
+test("chat:setSubagentSubscription forwards the level to the session", async () => {
+  const { invoke, session, sessionId } = await wiredSession();
+  await invoke(CH.chatSetSubagentSubscription, sessionId, "progress");
+  expect(session.subscriptionCalls).toEqual(["progress"]);
+});
+
+test("chat:getSubagentMessages throws for an unknown session id", async () => {
+  const { invoke } = await wiredSession();
+  await expect(
+    invoke(CH.chatGetSubagentMessages, "no-such-session", {
+      subagentId: "x",
+    }),
+  ).rejects.toThrow(/unknown session/);
 });
 
 // ---------------------------------------------------------------------------

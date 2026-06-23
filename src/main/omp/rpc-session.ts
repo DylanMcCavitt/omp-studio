@@ -24,7 +24,9 @@ import type {
   RpcFrame,
   RpcState,
   SessionStats,
-  SubagentInfo,
+  SubagentMessagesResult,
+  SubagentSnapshot,
+  SubagentSubscriptionLevel,
   ThinkingLevel,
 } from "@shared/rpc";
 import { scoped } from "../logger";
@@ -155,13 +157,49 @@ export class OmpRpcSession extends EventEmitter {
     return data?.messages ?? [];
   }
 
-  async getSubagents(): Promise<SubagentInfo[]> {
+  // The richer SubagentSnapshot superset of the legacy SubagentInfo; the live
+  // roster reduces the same shape from forwarded frames.
+  async getSubagents(): Promise<SubagentSnapshot[]> {
     const data = (await this.send({ type: "get_subagents" })) as
-      | { subagents?: SubagentInfo[] }
-      | SubagentInfo[]
+      | { subagents?: SubagentSnapshot[] }
+      | SubagentSnapshot[]
       | undefined;
     if (Array.isArray(data)) return data;
     return data?.subagents ?? [];
+  }
+
+  // Push the per-session subagent subscription level to the child (cost
+  // control: scope "events" to the active session, drop background sessions to
+  // "off"). Optional command — markReady already subscribes at "events", so we
+  // degrade silently on an omp build that predates the setter.
+  async setSubagentSubscription(
+    level: SubagentSubscriptionLevel,
+  ): Promise<void> {
+    try {
+      await this.send({ type: "set_subagent_subscription", level });
+    } catch (error) {
+      if (isUnknownCommand(error)) return;
+      throw error;
+    }
+  }
+
+  // Live, paginated transcript for a single subagent (drill-in). `fromByte`
+  // resumes incremental tailing; on `reset: true` the consumer clears its
+  // cursor and restarts from `nextByte` (session-file rotation). Degrades to an
+  // empty result on an omp build without get_subagent_messages so the drill-in
+  // shows "no messages" instead of an error.
+  async getSubagentMessages(sel: {
+    subagentId?: string;
+    sessionFile?: string;
+    fromByte?: number;
+  }): Promise<SubagentMessagesResult> {
+    try {
+      const data = await this.send({ type: "get_subagent_messages", ...sel });
+      return (data ?? emptySubagentMessages()) as SubagentMessagesResult;
+    } catch (error) {
+      if (isUnknownCommand(error)) return emptySubagentMessages();
+      throw error;
+    }
   }
 
   async prompt(message: string, opts?: PromptOptions): Promise<void> {
@@ -438,4 +476,18 @@ export class OmpRpcSession extends EventEmitter {
 // degrade gracefully instead of surfacing an error the host can't act on.
 function isUnknownCommand(error: unknown): boolean {
   return error instanceof Error && /unknown command/i.test(error.message);
+}
+
+// A fresh empty transcript cursor — returned when get_subagent_messages yields
+// no data or the omp build predates the command. A new object per call keeps
+// callers from sharing (and mutating) one frozen literal.
+function emptySubagentMessages(): SubagentMessagesResult {
+  return {
+    sessionFile: "",
+    fromByte: 0,
+    nextByte: 0,
+    reset: false,
+    entries: [],
+    messages: [],
+  };
 }
