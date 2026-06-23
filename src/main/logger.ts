@@ -31,7 +31,7 @@ const DEFAULT_LEVEL: LogLevel = "info";
 function threshold(): number {
   const raw = process.env.OMP_STUDIO_LOG_LEVEL?.toLowerCase();
   const level: LogLevel =
-    raw && raw in WEIGHT ? (raw as LogLevel) : DEFAULT_LEVEL;
+    raw && Object.hasOwn(WEIGHT, raw) ? (raw as LogLevel) : DEFAULT_LEVEL;
   return WEIGHT[level];
 }
 

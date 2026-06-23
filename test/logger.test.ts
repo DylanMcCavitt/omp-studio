@@ -72,6 +72,17 @@ test("an invalid or absent level falls back so info still emits", () => {
   expect(stdout[0]).toContain("smoke ok");
 });
 
+test("an inherited Object key as the level falls back to info, not a function", () => {
+  // `raw in WEIGHT` would match prototype keys like "constructor"/"toString",
+  // making WEIGHT[level] a function and disabling all filtering. Own-key checks
+  // must reject them so the threshold stays info (debug filtered, info emitted).
+  process.env.OMP_STUDIO_LOG_LEVEL = "constructor";
+  const l = scoped("x");
+  l.debug("hidden");
+  l.info("shown");
+  expect(stdout.map(strip)).toEqual(["INFO [x] shown"]);
+});
+
 test("scoped() prefixes the tag and nested scopes chain", () => {
   process.env.OMP_STUDIO_LOG_LEVEL = "debug";
   scoped("github").info("hi");
