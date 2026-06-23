@@ -26,6 +26,7 @@ import type {
 } from "@shared/rpc";
 import { create } from "zustand";
 import { useAppStore } from "@/store/app";
+import { useApprovalStore } from "@/store/approvals";
 import {
   type LiveSessionState,
   reduceSession,
@@ -90,6 +91,12 @@ interface ChatActions {
   setThinking(level: ThinkingLevel): Promise<void>;
   /** Answer an extension UI request and dequeue it from its session. */
   respondUi(payload: ChatUiRespondPayload): Promise<void>;
+  /**
+   * Drop a UI request from a session's queue WITHOUT writing a response.
+   * For passive hints, open_url, and orphan cleanup (exit / renderer-side
+   * timeout) where the bridge either expects no reply or has already settled.
+   */
+  dismissUiRequest(sessionId: string, requestId: string): void;
   /** Pull a fresh `get_session_stats` snapshot into the session slice. */
   refreshStats(sessionId: string): Promise<void>;
   /**
@@ -245,6 +252,14 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     try {
       const { sessionId, state } = await window.omp.chat.create(opts);
       void useSettingsStore.getState().recordProject(opts.cwd);
+      // Record the spawn-time approval policy for the per-session approval
+      // control (approval mode is fixed at spawn — there is no runtime setter).
+      useApprovalStore
+        .getState()
+        .setPolicy(
+          sessionId,
+          opts.approvalPolicy ?? { mode: "always-ask", autoApprove: false },
+        );
       set({ creating: false });
       // Register + activate before hydrating so the new pane shows instantly.
       get().openChat(sessionId);
@@ -359,6 +374,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         error: errorMessage(e),
       }));
     }
+  },
+
+  dismissUiRequest(sessionId, requestId) {
+    get()._patch(sessionId, (s) =>
+      reduceSession(s, studioFrame.uiResolved(requestId)),
+    );
   },
 
   async refreshStats(sessionId) {

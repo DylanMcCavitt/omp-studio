@@ -22,6 +22,7 @@ import {
 } from "@/components/chat/SessionStatsPanel";
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
+import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
 import { Badge, Button, Panel, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
@@ -61,6 +62,9 @@ export default function ChatWorkspace() {
 
   return (
     <div className="flex h-full min-h-0">
+      {/* Mounted at the workspace root so the active session's pending UI
+          requests survive session switches and render as focused modals. */}
+      <UiRequestLayer />
       <SessionRail />
       <div className="flex min-w-0 flex-1 flex-col">
         {activeSessionId ? (

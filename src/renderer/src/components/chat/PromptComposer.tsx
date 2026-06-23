@@ -12,7 +12,7 @@
 import type { ImageContent } from "@shared/rpc";
 import { ImagePlus } from "lucide-react";
 import type { ClipboardEvent, DragEvent, ReactNode } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { type ImageAttachment, MAX_IMAGES, readImageFiles } from "@/lib/images";
@@ -29,6 +29,23 @@ export interface PromptComposerActionContext {
   hasContent: boolean;
 }
 
+/**
+ * Controls handed to an overlay rendered above the input (the slash-command
+ * palette). The overlay opens on `/` typed at an empty composer or
+ * Cmd/Ctrl+Shift+P; it reads/replaces the composer text without touching the
+ * image-attachment state.
+ */
+export interface PromptComposerOverlayContext {
+  /** Whether the overlay has been requested open. */
+  open: boolean;
+  /** Close the overlay and refocus the textarea. */
+  close: () => void;
+  /** Replace the composer text, refocus, and move the cursor to the end. */
+  setText: (text: string) => void;
+  /** Current composer text. */
+  text: string;
+}
+
 export interface PromptComposerProps {
   /** Send the prompt. Resolve `true` to clear the composer, `false` to keep it. */
   onSubmit: (
@@ -37,6 +54,12 @@ export interface PromptComposerProps {
   ) => boolean | Promise<boolean>;
   /** Render the action button(s); receives submit + derived state. */
   renderActions: (ctx: PromptComposerActionContext) => ReactNode;
+  /**
+   * Optional overlay rendered above the input — the slash-command palette. When
+   * provided, the composer opens it on `/` at an empty composer or
+   * Cmd/Ctrl+Shift+P and hands it controls via `PromptComposerOverlayContext`.
+   */
+  renderOverlay?: (ctx: PromptComposerOverlayContext) => ReactNode;
   disabled?: boolean;
   placeholder?: string;
   /** Submit on Enter (Shift+Enter always newlines). Default true. */
@@ -53,6 +76,7 @@ export interface PromptComposerProps {
 export function PromptComposer({
   onSubmit,
   renderActions,
+  renderOverlay,
   disabled = false,
   placeholder,
   submitOnEnter = true,
@@ -66,6 +90,8 @@ export function PromptComposer({
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const hasOverlay = renderOverlay !== undefined;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -80,6 +106,42 @@ export function PromptComposer({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, maxHeight)}px`;
   };
+
+  // Replace the composer text (slash-command insertion), then refocus and put
+  // the cursor at the end so arguments are immediately typeable. rAF waits for
+  // the controlled value to commit before reading/setting the caret + height.
+  const applyText = (value: string) => {
+    setText(value);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(value.length, value.length);
+      resize();
+    });
+  };
+
+  const closeOverlay = () => {
+    setOverlayOpen(false);
+    textareaRef.current?.focus();
+  };
+
+  // Cmd/Ctrl+Shift+P toggles the overlay (slash palette) when one is wired.
+  useEffect(() => {
+    if (!hasOverlay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        e.shiftKey &&
+        (e.key === "p" || e.key === "P")
+      ) {
+        e.preventDefault();
+        setOverlayOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hasOverlay]);
 
   const addFiles = async (files: File[]) => {
     if (disabled || files.length === 0) return;
@@ -181,6 +243,13 @@ export function PromptComposer({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {renderOverlay?.({
+        open: overlayOpen,
+        close: closeOverlay,
+        setText: applyText,
+        text,
+      })}
+
       <ImageAttachmentStrip
         attachments={attachments}
         errors={errors}
@@ -209,6 +278,13 @@ export function PromptComposer({
             }}
             onPaste={onPaste}
             onKeyDown={(e) => {
+              // `/` at an empty composer opens the overlay (slash palette)
+              // instead of typing a literal slash.
+              if (hasOverlay && e.key === "/" && text === "") {
+                e.preventDefault();
+                setOverlayOpen(true);
+                return;
+              }
               if (submitOnEnter && e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void submit();

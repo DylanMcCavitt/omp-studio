@@ -385,3 +385,74 @@ test("a stats snapshot with no payload is a no-op", () => {
   const s = reduceSession(seeded, { type: "studio/stats" });
   expect(s).toBe(seeded);
 });
+
+test("command_output appends a transcript card with the printed text", () => {
+  const s = reduceSession(createSession("s1"), {
+    type: "command_output",
+    text: "usage: ...",
+  });
+  expect(s.systemCards).toHaveLength(1);
+  expect(s.systemCards[0]).toMatchObject({
+    id: "card-0",
+    kind: "command_output",
+    body: "usage: ...",
+    afterCount: 0,
+  });
+  expect(s.systemCardSeq).toBe(1);
+});
+
+test("command_output with no/empty text is a no-op", () => {
+  const base = createSession("s1");
+  expect(reduceSession(base, { type: "command_output" })).toBe(base);
+  expect(reduceSession(base, { type: "command_output", text: "" })).toBe(base);
+});
+
+test("cards anchor after the current visible (non-toolResult) message count", () => {
+  const seeded = createSession("s1", {
+    messages: [
+      { role: "user", content: "/help" },
+      { role: "toolResult", toolCallId: "t1", toolName: "x", content: [] },
+    ],
+  });
+  const s = reduceSession(seeded, { type: "command_output", text: "out" });
+  // One visible message (toolResult is excluded) → afterCount 1.
+  expect(s.systemCards[0]?.afterCount).toBe(1);
+});
+
+test("session_info_update updates the session name and notes the rename", () => {
+  const s = reduceSession(createSession("s1"), {
+    type: "session_info_update",
+    title: "My Session",
+    sessionId: "omp-1",
+  });
+  expect(s.sessionName).toBe("My Session");
+  expect(s.systemCards[0]).toMatchObject({ kind: "session_info" });
+  expect(s.systemCards[0]?.body).toContain("My Session");
+});
+
+test("config_update refreshes model + thinking and cards the change", () => {
+  const s = reduceSession(createSession("s1"), {
+    type: "config_update",
+    model: { provider: "anthropic", id: "opus", name: "Opus" },
+    thinkingLevel: "high",
+  });
+  expect(s.model).toMatchObject({ id: "opus" });
+  expect(s.thinkingLevel).toBe("high");
+  expect(s.systemCards[0]).toMatchObject({ kind: "config" });
+  expect(s.systemCards[0]?.body).toContain("Opus");
+  expect(s.systemCards[0]?.body).toContain("high");
+});
+
+test("system cards mint unique ids and stay capped at 50", () => {
+  let s = createSession("s1");
+  for (let i = 0; i < 60; i++) {
+    s = reduceSession(s, { type: "command_output", text: `line ${i}` });
+  }
+  expect(s.systemCards).toHaveLength(50);
+  // Oldest dropped; newest retained; seq keeps climbing for stable keys.
+  expect(s.systemCards[0]?.body).toBe("line 10");
+  expect(s.systemCards.at(-1)?.body).toBe("line 59");
+  expect(s.systemCardSeq).toBe(60);
+  const ids = new Set(s.systemCards.map((c) => c.id));
+  expect(ids.size).toBe(50);
+});

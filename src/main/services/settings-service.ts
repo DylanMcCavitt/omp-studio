@@ -18,6 +18,9 @@ import type {
   ThemeMode,
 } from "@shared/ipc";
 import type { ApprovalMode, ApprovalPolicy, ThinkingLevel } from "@shared/rpc";
+import { scoped } from "../logger";
+
+const log = scoped("settings");
 
 const SETTINGS_FILE = "settings.json";
 
@@ -234,9 +237,9 @@ export function migrate(raw: unknown): StudioSettingsV1 {
     case 1:
       return mergeKnown(defaultSettings(), raw);
     default:
-      console.warn(
-        `[settings] unknown settings version ${String(raw.version)}; using defaults`,
-      );
+      log.warn("unknown settings version; using defaults", {
+        version: String(raw.version),
+      });
       return defaultSettings();
   }
 }
