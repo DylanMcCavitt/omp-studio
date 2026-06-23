@@ -11,8 +11,8 @@ import type { ChatUiRequestEvent } from "@shared/ipc";
 import type { ExtensionUiRequest } from "@shared/rpc";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useApprovalStore } from "@/store/approvals";
 import type { AllowRule } from "@/store/approvals";
+import { useApprovalStore } from "@/store/approvals";
 import { useChatStore } from "@/store/chat";
 import { createSession } from "@/store/session-reducer";
 import { UiRequestLayer } from "./UiRequestLayer";
@@ -46,11 +46,16 @@ function uiEvent(request: ExtensionUiRequest): ChatUiRequestEvent {
 }
 
 /** Seed the active session's queue (+ optional allowlist) and spy the wire. */
-function seed(events: ChatUiRequestEvent[], opts: { rules?: AllowRule[] } = {}) {
+function seed(
+  events: ChatUiRequestEvent[],
+  opts: { rules?: AllowRule[] } = {},
+) {
   const respondUi = vi.fn(async () => {});
   const dismissUiRequest = vi.fn();
   useChatStore.setState({
-    openSessions: { s1: createSession("s1", { status: "idle", uiRequests: events }) },
+    openSessions: {
+      s1: createSession("s1", { status: "idle", uiRequests: events }),
+    },
     activeSessionId: "s1",
     respondUi,
     dismissUiRequest,
@@ -110,7 +115,9 @@ describe("UiRequestLayer — approval-select routing", () => {
     render(<UiRequestLayer />);
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("listbox")).toBeInTheDocument();
-    expect(within(dialog).queryByText("Approval required")).not.toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Approval required"),
+    ).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Select" }));
     expect(respondUi).toHaveBeenCalledWith({
       sessionId: "s1",

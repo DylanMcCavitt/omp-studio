@@ -55,10 +55,7 @@ export function ApprovalRequestDialog({
               Always allow
             </Button>
           )}
-          <Button
-            variant="primary"
-            onClick={() => onResolve(decide(true))}
-          >
+          <Button variant="primary" onClick={() => onResolve(decide(true))}>
             Approve once
           </Button>
         </>

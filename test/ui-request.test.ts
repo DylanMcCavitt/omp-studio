@@ -266,7 +266,9 @@ describe("approvalSelectShape", () => {
 
   test("is null when options are missing or not a string array", () => {
     expect(approvalSelectShape(req("select", {}))).toBeNull();
-    expect(approvalSelectShape(req("select", { options: "Approve" }))).toBeNull();
+    expect(
+      approvalSelectShape(req("select", { options: "Approve" })),
+    ).toBeNull();
   });
 
   test("is null for a non-select method", () => {
@@ -284,9 +286,9 @@ describe("approvalSelectKey", () => {
   });
 
   test("distinct titles (different args) produce distinct keys", () => {
-    expect(approvalSelectKey(approvalReq("Allow tool: write Path: a.txt"))).not.toBe(
-      approvalSelectKey(approvalReq("Allow tool: write Path: b.txt")),
-    );
+    expect(
+      approvalSelectKey(approvalReq("Allow tool: write Path: a.txt")),
+    ).not.toBe(approvalSelectKey(approvalReq("Allow tool: write Path: b.txt")));
   });
 
   test("prefers a structured tool key when the frame carries one", () => {
@@ -310,7 +312,9 @@ describe("approvalSelectKey", () => {
   });
 
   test("is null for an approval-select with no title to key on", () => {
-    expect(approvalSelectKey(req("select", { options: ["Approve", "Deny"] }))).toBeNull();
+    expect(
+      approvalSelectKey(req("select", { options: ["Approve", "Deny"] })),
+    ).toBeNull();
   });
 });
 
@@ -319,13 +323,19 @@ describe("isSelectApprovalAllowed", () => {
 
   test("auto-approves an allowlisted approval-select by its title key", () => {
     expect(
-      isSelectApprovalAllowed(keys, approvalReq("Allow tool: read Path: a.txt")),
+      isSelectApprovalAllowed(
+        keys,
+        approvalReq("Allow tool: read Path: a.txt"),
+      ),
     ).toBe(true);
   });
 
   test("rejects the same tool with different args (different title)", () => {
     expect(
-      isSelectApprovalAllowed(keys, approvalReq("Allow tool: read Path: b.txt")),
+      isSelectApprovalAllowed(
+        keys,
+        approvalReq("Allow tool: read Path: b.txt"),
+      ),
     ).toBe(false);
   });
 

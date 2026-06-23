@@ -259,7 +259,8 @@ export function UiRequestLayer() {
                 if (key && activeSessionId) {
                   // No structured tool identity on a select-approval frame, so
                   // the action-specific title is the readable rule label.
-                  const label = asString(modal.request.title) ?? "tool approval";
+                  const label =
+                    asString(modal.request.title) ?? "tool approval";
                   addRule(activeSessionId, {
                     key,
                     label,
