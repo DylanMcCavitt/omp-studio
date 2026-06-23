@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { Layout } from "@/components/Layout";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
+import { CenterTabs } from "@/components/shell/CenterTabs";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { useTheme } from "@/lib/useTheme";
 import { useAppStore } from "@/store/app";
@@ -9,10 +10,11 @@ import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
 import ChatWorkspace from "@/views/Chat";
 
-// The center is ALWAYS the Chat primary surface (the active session's transcript,
-// else a minimal empty state). The 9 nav destinations live only in the right icon
+// The center surface is `CenterTabs`: an always-present Chat tab (the active
+// session's transcript, else a minimal empty state) plus one tab per open file
+// (a lazy CodeMirror editor). The 9 nav destinations live only in the right icon
 // rail — `RailPanelHost` renders them off the shell store's `openPanelId`, never
-// `route` (AGE-632). Center file tabs (chat + open files) are AGE-634.
+// `route` (AGE-632/634).
 export default function App() {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
   const loadSettings = useSettingsStore((s) => s.load);
@@ -45,12 +47,17 @@ export default function App() {
   }, [loadSettings, ensureSubscribed, loadOpenSessions]);
   return (
     <Layout>
-      {/* A crash in the chat surface shows a fallback, not a blank window; the
-          shell (sidebar / header / rail) and search stay alive. resetKey tracks
+      {/* The center is the chat/files primary surface. A crash in the chat
+          surface shows a fallback, not a blank window; the shell (sidebar /
+          header / rail), the file tabs, and search stay alive. resetKey tracks
           the active session so opening another chat clears a crashed transcript. */}
-      <AppErrorBoundary resetKey={activeSessionId}>
-        <ChatWorkspace />
-      </AppErrorBoundary>
+      <CenterTabs
+        chat={
+          <AppErrorBoundary resetKey={activeSessionId}>
+            <ChatWorkspace />
+          </AppErrorBoundary>
+        }
+      />
       <GlobalSearch />
     </Layout>
   );

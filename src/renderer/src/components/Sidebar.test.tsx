@@ -1,7 +1,7 @@
-// AGE-632 — the workspace-centric left sidebar. Drives the real chat + shell
+// AGE-632/634 — the workspace-centric left sidebar. Drives the real chat + shell
 // stores: the Chats surface shows the session list with a New chat action
 // (selecting a row switches the active session), and the Chats | Files toggle
-// flips the sidebar between the session list and the editor placeholder.
+// flips the sidebar between the session list and the workspace file tree.
 // Assertions go through roles, accessible names, and store state — never styling.
 
 import { render, screen } from "@testing-library/react";
@@ -19,6 +19,9 @@ beforeEach(() => {
     true,
   );
   useShellStore.setState({ sidebarMode: "chats" });
+  // The Files tree lists the workspace root on mount; stub the FS bridge so the
+  // sidebar renders without a real main process.
+  Object.assign(window.omp, { files: { readDir: vi.fn(async () => []) } });
 });
 
 function seedSessions() {
@@ -60,7 +63,7 @@ it("selects a session when its row is clicked", async () => {
   expect(useChatStore.getState().activeSessionId).toBe("b");
 });
 
-it("switches to the Files placeholder and hides the session list", async () => {
+it("switches to the Files tree and hides the session list", async () => {
   const user = userEvent.setup();
   seedSessions();
   render(<Sidebar />);
@@ -75,8 +78,13 @@ it("switches to the Files placeholder and hides the session list", async () => {
   await user.click(screen.getByRole("button", { name: "Files" }));
 
   expect(useShellStore.getState().sidebarMode).toBe("files");
-  expect(screen.getByText(/open a file/i)).toBeInTheDocument();
-  expect(screen.getByText(/coming in the editor/i)).toBeInTheDocument();
+  // The file tree (its refresh control + workspace label) replaces the list.
+  expect(
+    screen.getByRole("button", { name: "Refresh files" }),
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText(/no files in this workspace/i),
+  ).toBeInTheDocument();
   // The session list (and its New chat action) are gone in Files mode.
   expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
   expect(

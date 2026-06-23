@@ -1,18 +1,13 @@
-// The workspace-centric left sidebar (AGE-632). Top to bottom: the workspace
+// The workspace-centric left sidebar (AGE-632/634). Top to bottom: the workspace
 // switcher, a segmented Chats | Files toggle, then the active surface. Chats =
 // a New chat action + the live/hibernated session list (selecting a row opens
-// it in the center). Files = a placeholder until the editor lands (AGE-634).
-// The flat nav list that used to live here moved to the right icon rail (AGE-630).
+// it in the center). Files = the workspace file tree (AGE-634), whose file
+// clicks open a center editor tab. The flat nav list that used to live here
+// moved to the right icon rail (AGE-630).
 
-import {
-  FileText,
-  FolderOpen,
-  type LucideIcon,
-  MessageSquare,
-  Plus,
-} from "lucide-react";
+import { FileText, type LucideIcon, MessageSquare, Plus } from "lucide-react";
 import { SessionList } from "@/components/chat/SessionList";
-import { EmptyState } from "@/components/ui";
+import { FileTree } from "@/components/files/FileTree";
 import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
 import { cn } from "@/lib/cn";
 import { useChatStore } from "@/store/chat";
@@ -47,7 +42,7 @@ export function Sidebar() {
         <SidebarModeToggle mode={mode} onChange={setMode} />
       </div>
 
-      {mode === "chats" ? <ChatsPane onNewChat={newChat} /> : <FilesPane />}
+      {mode === "chats" ? <ChatsPane onNewChat={newChat} /> : <FileTree />}
 
       <div className="border-t border-border-subtle px-4 py-3">
         <span className="text-xs text-ink-faint">omp harness</span>
@@ -113,17 +108,5 @@ function ChatsPane({ onNewChat }: { onNewChat: () => void }) {
       </div>
       <SessionList />
     </>
-  );
-}
-
-function FilesPane() {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col px-3 pb-2">
-      <EmptyState
-        icon={<FolderOpen className="h-6 w-6" />}
-        title="Open a file"
-        hint="Coming in the editor."
-      />
-    </div>
   );
 }
