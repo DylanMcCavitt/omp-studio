@@ -17,6 +17,7 @@ import { EventEmitter } from "node:events";
 import type { PromptOptions } from "@shared/ipc";
 import type {
   ApprovalMode,
+  AvailableSlashCommand,
   ExtensionUiMethod,
   ExtensionUiRequest,
   ExtensionUiResponse,
@@ -198,6 +199,26 @@ export class OmpRpcSession extends EventEmitter {
       return (data ?? emptySubagentMessages()) as SubagentMessagesResult;
     } catch (error) {
       if (isUnknownCommand(error)) return emptySubagentMessages();
+      throw error;
+    }
+  }
+
+  // On-demand snapshot of the session's slash-command palette (feature 6b).
+  // Live updates arrive as forwarded `available_commands_update` frames; this
+  // is the snapshot taken at view open / resume. omp builds that predate
+  // `get_available_commands` reply with an id-less unknown-command failure; we
+  // degrade to an empty list so the palette shows "no commands" instead of an
+  // error. The wire reply is either a bare array or `{ commands: [...] }`.
+  async getAvailableCommands(): Promise<AvailableSlashCommand[]> {
+    try {
+      const data = (await this.send({ type: "get_available_commands" })) as
+        | { commands?: AvailableSlashCommand[] }
+        | AvailableSlashCommand[]
+        | undefined;
+      if (Array.isArray(data)) return data;
+      return data?.commands ?? [];
+    } catch (error) {
+      if (isUnknownCommand(error)) return [];
       throw error;
     }
   }

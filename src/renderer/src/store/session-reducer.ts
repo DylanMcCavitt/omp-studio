@@ -16,6 +16,7 @@
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
 import type {
+  AgentProgress,
   AvailableCommand,
   ContextUsage,
   MessageUpdateFrame,
@@ -24,7 +25,9 @@ import type {
   RpcModel,
   RpcState,
   SessionStats,
+  SubagentEventFrame,
   SubagentInfo,
+  SubagentProgressFrame,
   ThinkingLevel,
   TodoPhase,
   ToolExecutionFrame,
@@ -56,6 +59,20 @@ export interface SystemCard {
   title: string;
   body: string;
   afterCount: number;
+}
+
+/**
+ * Live per-subagent drill-in data reduced from the NESTED `subagent_progress`
+ * (`payload.progress`) and `subagent_event` (`payload.event`) frames, keyed by
+ * subagent id. The SubagentTree ticker reads `progress`; the inspector live
+ * feed reads `events`, capped to the most recent {@link MAX_SUBAGENT_EVENTS}
+ * (oldest dropped) so a chatty child never grows the slice unbounded.
+ */
+export interface SubagentLiveState {
+  /** Latest snapshot from `subagent_progress.payload.progress`. */
+  progress?: AgentProgress;
+  /** Recent child RPC frames from `subagent_event.payload.event` (capped). */
+  events: RpcFrame[];
 }
 
 /**
@@ -103,6 +120,12 @@ export interface LiveSessionState {
   liveThinking: string;
   todoPhases: TodoPhase[];
   subagents: SubagentInfo[];
+  /**
+   * Live per-subagent progress + event buffers reduced from the NESTED
+   * subagent frames, keyed by subagent id. Drives the SubagentTree ticker and
+   * the SubagentInspector live feed; ephemeral (dies with the slice).
+   */
+  subagentEvents: Record<string, SubagentLiveState>;
   model: RpcModel | null;
   thinkingLevel: ThinkingLevel;
   contextUsage?: ContextUsage;
@@ -147,6 +170,7 @@ export function createSession(
     liveThinking: "",
     todoPhases: [],
     subagents: [],
+    subagentEvents: {},
     model: null,
     thinkingLevel: "medium",
     contextUsage: undefined,
@@ -250,6 +274,9 @@ export function upsertAssistant(
 
 /** Most recent system cards kept per session; older ones are dropped. */
 const MAX_SYSTEM_CARDS = 50;
+
+/** Most recent child events kept per subagent in `subagentEvents`. */
+const MAX_SUBAGENT_EVENTS = 200;
 
 /**
  * Append a transcript system card, anchoring it after the current visible
@@ -395,6 +422,43 @@ export function reduceSession(
         "Config updated",
         `Model: ${modelLabel} · thinking: ${thinkingLevel}`,
       );
+    }
+
+    // Feature 4: subagent drill-in. Frames are NESTED under `payload`. Progress
+    // overwrites the latest snapshot per subagent id; events append to a capped
+    // ring (oldest dropped). The store (chat.ts) reacts to these to pump the
+    // open inspector's live transcript cursor — the reducer only shapes state.
+    case "subagent_progress": {
+      const progress = (frame as SubagentProgressFrame).payload?.progress;
+      const id = progress?.id;
+      if (!id) return state;
+      const prev = state.subagentEvents[id];
+      return {
+        ...state,
+        subagentEvents: {
+          ...state.subagentEvents,
+          [id]: { progress, events: prev?.events ?? [] },
+        },
+      };
+    }
+
+    case "subagent_event": {
+      const payload = (frame as SubagentEventFrame).payload;
+      const id = payload?.id;
+      const event = payload?.event;
+      if (!id || !event) return state;
+      const prev = state.subagentEvents[id];
+      const events = [...(prev?.events ?? []), event];
+      if (events.length > MAX_SUBAGENT_EVENTS) {
+        events.splice(0, events.length - MAX_SUBAGENT_EVENTS);
+      }
+      return {
+        ...state,
+        subagentEvents: {
+          ...state.subagentEvents,
+          [id]: { progress: prev?.progress, events },
+        },
+      };
     }
 
     case CONTROL.state: {
