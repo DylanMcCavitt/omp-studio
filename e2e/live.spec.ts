@@ -45,7 +45,7 @@ const mainEntry = fileURLToPath(
   new URL("../out/main/index.js", import.meta.url),
 );
 
-// Distinctive tokens so a `getByText` match can never collide with chrome/labels.
+// Distinctive tokens so a text match can never collide with chrome/labels.
 const CHAT_TOKEN = "STUDIO-CHAT-7Q2W";
 const RESUME_TOKEN = "STUDIO-RESUME-7Q2W";
 const ALPHA = "STUDIO-ALPHA-7Q2W";
@@ -135,6 +135,18 @@ function rail(page: Page) {
     .filter({ has: page.getByRole("button", { name: "New chat" }) });
 }
 
+/**
+ * An ASSISTANT (left-aligned) message bubble containing `text`. MessageBubble
+ * renders user messages in a right-aligned `div.justify-end` bubble and assistant
+ * messages in a left-aligned `div.justify-start` one. Scoping to the assistant
+ * side is what makes a token assertion prove the model's OUTPUT rather than the
+ * prompt the renderer echoes optimistically (the user message renders before any
+ * assistant frame arrives, so an unscoped match could pass with zero output).
+ */
+function assistantBubble(page: Page, text: string) {
+  return page.locator("div.justify-start").filter({ hasText: text });
+}
+
 async function gotoChat(page: Page): Promise<void> {
   await page
     .getByRole("navigation")
@@ -202,8 +214,9 @@ test.describe("live chat turn", () => {
         page,
         `Reply with a one-sentence greeting that includes the token ${CHAT_TOKEN} and nothing else.`,
       );
-      // The streamed assistant text lands in the transcript.
-      await expect(page.getByText(CHAT_TOKEN)).toBeVisible({
+      // The streamed token lands in the ASSISTANT bubble — proving real model
+      // output, not the prompt the user bubble echoes.
+      await expect(assistantBubble(page, CHAT_TOKEN).first()).toBeVisible({
         timeout: 120_000,
       });
       // The turn ends: the composer returns to its idle "Send" state.
@@ -282,7 +295,7 @@ test.describe("live D1 approval", () => {
       await gotoChat(page);
       await startSession(
         page,
-        'Before doing anything else, use your interactive ask/prompt capability to ask me a single question ("What codeword should I use?") and WAIT for my answer. Then reply with exactly the codeword I give you.',
+        'Before doing anything else, use your interactive ask/prompt capability to ask me a single question ("What codeword should I use?") and WAIT for my answer. Then reply with exactly the codeword I give you and nothing else.',
       );
       const dialog = page.getByRole("dialog");
       // Not every omp build/model surfaces an interactive request — treat its
@@ -297,19 +310,35 @@ test.describe("live D1 approval", () => {
         !appeared,
         "this omp build/model did not surface an interactive input/select request",
       );
+
+      // Answer with a value the prompt does NOT contain, so the assistant's echo
+      // below can only come from the value round-tripping through the child.
       const input = dialog.getByRole("textbox");
       const listbox = dialog.getByRole("listbox");
+      let answer = "";
       if (await input.isVisible().catch(() => false)) {
-        await input.fill("ROUNDTRIP-OK");
+        answer = "ROUNDTRIP-OK-5K3W";
+        await input.fill(answer);
         await dialog.getByRole("button", { name: "Submit" }).click();
       } else if (await listbox.isVisible().catch(() => false)) {
-        await listbox.getByRole("option").first().click();
+        const option = listbox.getByRole("option").first();
+        answer = ((await option.textContent()) ?? "").trim();
+        await option.click();
         await dialog.getByRole("button", { name: "Select" }).click();
-      } else {
-        test.skip(true, "an unexpected dialog kind appeared");
       }
-      // The answer round-tripping to the child dequeues the request → modal gone.
+      test.skip(answer === "", "no input/select control surfaced to answer");
+
+      // The renderer dequeues the request once it posts the response…
       await expect(dialog).toBeHidden({ timeout: 30_000 });
+      // …and the CHILD actually consumed the value: the agent echoes it back in
+      // its output and the turn returns to idle. (Dialog-hide alone would pass
+      // before the child ever received the value, so it is not sufficient.)
+      await expect(assistantBubble(page, answer).first()).toBeVisible({
+        timeout: 120_000,
+      });
+      await expect(page.getByRole("button", { name: "Send" })).toBeVisible({
+        timeout: 120_000,
+      });
     } finally {
       await app.close().catch(() => undefined);
       cleanup(dirs);
@@ -331,7 +360,8 @@ test.describe("live D3 resume", () => {
     seedSettings(userDataDir, { project: cwd, approvalMode: "always-ask" });
     try {
       // First launch: create a session and finish a turn so its descriptor
-      // (with a sessionFile) persists to settings.json under userDataDir.
+      // (with a sessionFile) persists to settings.json under userDataDir, and
+      // the assistant's reply lands in the JSONL transcript.
       const first = await launch(userDataDir);
       try {
         await gotoChat(first.page);
@@ -339,9 +369,9 @@ test.describe("live D3 resume", () => {
           first.page,
           `Reply with exactly this token and nothing else: ${RESUME_TOKEN}`,
         );
-        await expect(first.page.getByText(RESUME_TOKEN)).toBeVisible({
-          timeout: 120_000,
-        });
+        await expect(
+          assistantBubble(first.page, RESUME_TOKEN).first(),
+        ).toBeVisible({ timeout: 120_000 });
         await expect(
           first.page.getByRole("button", { name: "Send" }),
         ).toBeVisible({ timeout: 120_000 });
@@ -358,11 +388,12 @@ test.describe("live D3 resume", () => {
           .getByRole("button")
           .filter({ hasText: "Hibernated" });
         await expect(hibernated).toBeVisible({ timeout: 30_000 });
-        // Reopening it resumes the chat and rehydrates the prior transcript.
+        // Reopening it resumes the chat and rehydrates the prior transcript —
+        // the assistant reply (not just the user prompt) comes back from JSONL.
         await hibernated.click();
-        await expect(second.page.getByText(RESUME_TOKEN)).toBeVisible({
-          timeout: 90_000,
-        });
+        await expect(
+          assistantBubble(second.page, RESUME_TOKEN).first(),
+        ).toBeVisible({ timeout: 90_000 });
       } finally {
         await second.app.close().catch(() => undefined);
       }
@@ -391,7 +422,9 @@ test.describe("live D2 concurrency", () => {
         page,
         `Reply with exactly this token and nothing else: ${ALPHA}`,
       );
-      await expect(page.getByText(ALPHA)).toBeVisible({ timeout: 120_000 });
+      await expect(assistantBubble(page, ALPHA).first()).toBeVisible({
+        timeout: 120_000,
+      });
       await expect(page.getByRole("button", { name: "Send" })).toBeVisible({
         timeout: 120_000,
       });
@@ -402,7 +435,9 @@ test.describe("live D2 concurrency", () => {
         page,
         `Reply with exactly this token and nothing else: ${BETA}`,
       );
-      await expect(page.getByText(BETA)).toBeVisible({ timeout: 120_000 });
+      await expect(assistantBubble(page, BETA).first()).toBeVisible({
+        timeout: 120_000,
+      });
       await expect(page.getByRole("button", { name: "Send" })).toBeVisible({
         timeout: 120_000,
       });
@@ -410,13 +445,14 @@ test.describe("live D2 concurrency", () => {
       const rows = rail(page).locator("div.group");
       await expect(rows).toHaveCount(2);
 
-      // Switching keeps both children alive and swaps the visible transcript.
+      // Switching keeps both children alive and swaps the visible transcript:
+      // each session shows its OWN assistant output and not the other's.
       await rows.nth(0).getByRole("button").first().click();
-      await expect(page.getByText(ALPHA)).toBeVisible();
-      await expect(page.getByText(BETA)).toHaveCount(0);
+      await expect(assistantBubble(page, ALPHA).first()).toBeVisible();
+      await expect(assistantBubble(page, BETA)).toHaveCount(0);
       await rows.nth(1).getByRole("button").first().click();
-      await expect(page.getByText(BETA)).toBeVisible();
-      await expect(page.getByText(ALPHA)).toHaveCount(0);
+      await expect(assistantBubble(page, BETA).first()).toBeVisible();
+      await expect(assistantBubble(page, ALPHA)).toHaveCount(0);
 
       // With S2 active and streaming, close the OTHER (idle, background) session.
       await page
@@ -436,7 +472,7 @@ test.describe("live D2 concurrency", () => {
         timeout: 120_000,
       });
       await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
-      await expect(page.getByText(BETA)).toBeVisible();
+      await expect(assistantBubble(page, BETA).first()).toBeVisible();
     } finally {
       await app.close().catch(() => undefined);
       cleanup(dirs);
