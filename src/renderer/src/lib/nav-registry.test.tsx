@@ -17,6 +17,7 @@ const ALL_ROUTES = [
   "mcp",
   "agents",
   "github",
+  "linear",
   "settings",
 ] as const;
 

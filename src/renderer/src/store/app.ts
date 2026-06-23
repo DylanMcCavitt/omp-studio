@@ -11,6 +11,7 @@ export type Route =
   | "mcp"
   | "agents"
   | "github"
+  | "linear"
   | "settings";
 
 /** A request to open a specific session transcript scrolled to a message. */

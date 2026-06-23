@@ -8,6 +8,7 @@ import {
   Plug,
   Settings,
   Sparkles,
+  SquareKanban,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import type { Route } from "@/store/app";
@@ -15,6 +16,7 @@ import Agents from "@/views/Agents";
 import Chat from "@/views/Chat";
 import Dashboard from "@/views/Dashboard";
 import GitHub from "@/views/GitHub";
+import Linear from "@/views/Linear";
 import Mcp from "@/views/Mcp";
 import Sessions from "@/views/Sessions";
 import SettingsView from "@/views/Settings";
@@ -67,6 +69,12 @@ const NAV_REGISTRY = {
     label: "GitHub",
     icon: Github,
     view: GitHub,
+    group: "integrations",
+  },
+  linear: {
+    label: "Linear",
+    icon: SquareKanban,
+    view: Linear,
     group: "integrations",
   },
   settings: {
