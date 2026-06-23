@@ -1,5 +1,6 @@
 import { type ComponentType, useEffect } from "react";
 import { Layout } from "@/components/Layout";
+import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { type Route, useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
@@ -37,6 +38,7 @@ export default function App() {
   return (
     <Layout>
       <View />
+      <GlobalSearch />
     </Layout>
   );
 }

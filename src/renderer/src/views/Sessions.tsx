@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@shared/domain";
+import type { SessionSearchHit, SessionSummary } from "@shared/domain";
 import type {
   ContentBlock,
   OmpMessage,
@@ -14,7 +14,8 @@ import {
   Search,
   TriangleAlert,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Highlight } from "@/components/search/Highlight";
 import { Badge, EmptyState, IconButton, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
@@ -24,6 +25,8 @@ import {
   formatRelativeTime,
 } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { useAppStore } from "@/store/app";
 
 interface SessionGroup {
   project: string;
@@ -127,11 +130,33 @@ function MessageBlock({ message }: { message: OmpMessage }) {
   );
 }
 
-function SessionDetail({ path }: { path: string }) {
+function SessionDetail({
+  path,
+  focusIndex,
+}: {
+  path: string;
+  focusIndex: number | null;
+}) {
   const { data, loading, error } = useAsync(
     () => window.omp.readSession(path),
     [path],
   );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [flashIndex, setFlashIndex] = useState<number | null>(null);
+
+  // After the transcript loads, scroll the focused message into view and flash
+  // it briefly so a search jump lands the reader on the exact match.
+  useEffect(() => {
+    if (loading || !data || focusIndex == null || focusIndex < 0) return;
+    const el = containerRef.current?.querySelector<HTMLElement>(
+      `[data-msg-index="${focusIndex}"]`,
+    );
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    setFlashIndex(focusIndex);
+    const t = setTimeout(() => setFlashIndex(null), 1600);
+    return () => clearTimeout(t);
+  }, [data, loading, focusIndex]);
 
   if (loading) {
     return (
@@ -155,7 +180,7 @@ function SessionDetail({ path }: { path: string }) {
 
   const { summary, messages } = data;
   return (
-    <div className="p-6">
+    <div ref={containerRef} className="p-6">
       <div className="mb-4 border-b border-border pb-3">
         <h2 className="text-base font-semibold text-ink">
           {summary.title || "(untitled)"}
@@ -182,7 +207,16 @@ function SessionDetail({ path }: { path: string }) {
       ) : (
         <div className="space-y-4">
           {messages.map((message, i) => (
-            <MessageBlock key={i} message={message} />
+            <div
+              key={i}
+              data-msg-index={i}
+              className={cn(
+                "scroll-mt-6 rounded-md transition-colors",
+                flashIndex === i && "bg-accent-soft/60 p-2 ring-1 ring-accent",
+              )}
+            >
+              <MessageBlock message={message} />
+            </div>
           ))}
         </div>
       )}
@@ -196,20 +230,61 @@ export default function Sessions() {
   );
   const [query, setQuery] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const debouncedQuery = useDebouncedValue(query, 200);
+
+  const sessionFocus = useAppStore((s) => s.sessionFocus);
+  const clearSessionFocus = useAppStore((s) => s.clearSessionFocus);
+
+  // Consume a cross-route focus request (from the Cmd+K overlay): open the
+  // requested transcript scrolled to the matched message.
+  useEffect(() => {
+    if (!sessionFocus) return;
+    setSelectedPath(sessionFocus.path);
+    setFocusIndex(
+      sessionFocus.messageIndex >= 0 ? sessionFocus.messageIndex : null,
+    );
+    clearSessionFocus();
+  }, [sessionFocus, clearSessionFocus]);
+
+  // A non-empty query switches the left panel from the summary list to grouped
+  // transcript hits from searchSessions (debounced, server-capped by F2).
+  const searchMode = query.trim().length > 0;
+  const hitsState = useAsync<SessionSearchHit[]>(
+    () =>
+      debouncedQuery.trim()
+        ? window.omp.searchSessions(debouncedQuery)
+        : Promise.resolve([]),
+    [debouncedQuery],
+  );
+  const hitGroups = useMemo(() => {
+    const byPath = new Map<
+      string,
+      { session: SessionSummary; hits: SessionSearchHit[] }
+    >();
+    for (const h of hitsState.data ?? []) {
+      const g = byPath.get(h.session.path);
+      if (g) g.hits.push(h);
+      else byPath.set(h.session.path, { session: h.session, hits: [h] });
+    }
+    return [...byPath.values()];
+  }, [hitsState.data]);
+  // "Searching" spans the debounce gap (query ahead of the fired request) and
+  // the in-flight scan, so an interim "no matches" never flickers mid-type.
+  const searching = query.trim() !== debouncedQuery.trim() || hitsState.loading;
+
+  const openHit = (hit: SessionSearchHit) => {
+    setSelectedPath(hit.session.path);
+    setFocusIndex(hit.messageIndex);
+  };
+  const openSummary = (path: string) => {
+    setSelectedPath(path);
+    setFocusIndex(null);
+  };
 
   const groups = useMemo<SessionGroup[]>(() => {
-    const list = data ?? [];
-    const q = query.trim().toLowerCase();
-    const filtered = q
-      ? list.filter(
-          (s) =>
-            (s.title ?? "").toLowerCase().includes(q) ||
-            s.project.toLowerCase().includes(q) ||
-            (s.model ?? "").toLowerCase().includes(q),
-        )
-      : list;
     const byProject = new Map<string, SessionSummary[]>();
-    for (const s of filtered) {
+    for (const s of data ?? []) {
       const arr = byProject.get(s.project);
       if (arr) arr.push(s);
       else byProject.set(s.project, [s]);
@@ -221,7 +296,7 @@ export default function Sessions() {
     }
     result.sort((a, b) => b.lastActive.localeCompare(a.lastActive));
     return result;
-  }, [data, query]);
+  }, [data]);
 
   return (
     <div className="flex h-full flex-col">
@@ -245,13 +320,70 @@ export default function Sessions() {
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search sessions"
+                placeholder="Search transcripts"
                 className="w-full rounded-md border border-border bg-bg-raised py-1.5 pl-8 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
               />
             </div>
           </div>
           <div className="scrollbar min-h-0 flex-1 overflow-auto px-2 pb-3">
-            {loading ? (
+            {searchMode ? (
+              hitsState.error ? (
+                <EmptyState
+                  icon={<TriangleAlert className="h-6 w-6" />}
+                  title="Search failed"
+                  hint={hitsState.error}
+                />
+              ) : hitGroups.length === 0 ? (
+                searching ? (
+                  <div className="flex justify-center p-8">
+                    <Spinner />
+                  </div>
+                ) : (
+                  <EmptyState
+                    icon={<Inbox className="h-6 w-6" />}
+                    title="No transcript matches"
+                    hint={`Nothing matched “${query.trim()}”`}
+                  />
+                )
+              ) : (
+                hitGroups.map((group) => (
+                  <div key={group.session.path}>
+                    <div className="flex items-center gap-2 px-3 pb-0.5 pt-3">
+                      <MessagesSquare className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
+                      <span className="truncate text-xs font-semibold text-ink">
+                        {group.session.title || "(untitled)"}
+                      </span>
+                      <Badge variant="muted">{group.hits.length}</Badge>
+                    </div>
+                    <div className="truncate px-3 pb-1 text-xs text-ink-faint">
+                      {group.session.project} ·{" "}
+                      {formatRelativeTime(group.session.updatedAt)}
+                    </div>
+                    {group.hits.map((hit, i) => (
+                      <button
+                        key={`${hit.messageIndex}-${i}`}
+                        onClick={() => openHit(hit)}
+                        className={cn(
+                          "flex w-full flex-col items-start gap-1 rounded-md border border-transparent px-3 py-2 text-left transition hover:bg-bg-hover",
+                          selectedPath === hit.session.path &&
+                            focusIndex === hit.messageIndex &&
+                            "border-border-strong bg-bg-hover",
+                        )}
+                      >
+                        <Badge
+                          variant={hit.role === "user" ? "accent" : "muted"}
+                        >
+                          {hit.role === "toolResult" ? "tool" : hit.role}
+                        </Badge>
+                        <span className="line-clamp-2 break-words text-xs text-ink-muted">
+                          <Highlight text={hit.snippet} ranges={hit.ranges} />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )
+            ) : loading ? (
               <div className="flex justify-center p-8">
                 <Spinner />
               </div>
@@ -264,7 +396,7 @@ export default function Sessions() {
             ) : groups.length === 0 ? (
               <EmptyState
                 icon={<Inbox className="h-6 w-6" />}
-                title={query ? "No matching sessions" : "No sessions yet"}
+                title="No sessions yet"
               />
             ) : (
               groups.map((group) => (
@@ -279,7 +411,7 @@ export default function Sessions() {
                   {group.items.map((s) => (
                     <button
                       key={s.path}
-                      onClick={() => setSelectedPath(s.path)}
+                      onClick={() => openSummary(s.path)}
                       className={cn(
                         "flex w-full flex-col gap-1 rounded-md border border-transparent px-3 py-2 text-left transition hover:bg-bg-hover",
                         selectedPath === s.path &&
@@ -312,7 +444,7 @@ export default function Sessions() {
 
         <div className="scrollbar min-h-0 flex-1 overflow-auto">
           {selectedPath ? (
-            <SessionDetail path={selectedPath} />
+            <SessionDetail path={selectedPath} focusIndex={focusIndex} />
           ) : (
             <div className="flex h-full items-center justify-center p-8">
               <EmptyState
