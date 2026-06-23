@@ -298,6 +298,134 @@ export interface SubagentInfo {
   [key: string]: unknown;
 }
 
+/**
+ * Provenance of a subagent's agent definition, reported on every subagent frame
+ * (`bundled` = shipped with omp, `user` = user config dir, `project` =
+ * repo-local `.agents`).
+ */
+export type AgentSource = "bundled" | "user" | "project";
+
+/**
+ * Live progress snapshot for a single subagent, mirroring omp's `progress`
+ * payload: the running tool, recent tool history, and token/request counters.
+ * Loose-tailed because omp may append fields the renderer does not model.
+ */
+export interface AgentProgress {
+  index: number;
+  id: string;
+  agent: string;
+  agentSource: AgentSource;
+  status: "pending" | "running" | "completed" | "failed" | "aborted";
+  task: string;
+  assignment?: string;
+  description?: string;
+  lastIntent?: string;
+  currentTool?: string;
+  currentToolArgs?: string;
+  currentToolStartMs?: number;
+  recentTools: Array<{ tool: string; args: string; endMs: number }>;
+  recentOutput: string[];
+  toolCount: number;
+  requests: number;
+  tokens: number;
+  [key: string]: unknown;
+}
+
+/** Payload of a `subagent_lifecycle` frame (subagent started / ended). */
+export interface SubagentLifecyclePayload {
+  id: string;
+  agent: string;
+  agentSource: AgentSource;
+  description?: string;
+  status: "started" | "completed" | "failed" | "aborted";
+  sessionFile?: string;
+  parentToolCallId?: string;
+  index: number;
+  detached?: boolean;
+}
+
+/** Payload of a `subagent_progress` frame (periodic progress update). */
+export interface SubagentProgressPayload {
+  index: number;
+  agent: string;
+  agentSource: AgentSource;
+  task: string;
+  assignment?: string;
+  parentToolCallId?: string;
+  sessionFile?: string;
+  progress: AgentProgress;
+  detached?: boolean;
+}
+
+/**
+ * Payload of a `subagent_event` frame: a raw RPC frame emitted by the named
+ * subagent, forwarded verbatim so the renderer can attribute child events.
+ */
+export interface SubagentEventPayload {
+  id: string;
+  event: RpcFrame;
+}
+
+export interface SubagentLifecycleFrame extends RpcFrame {
+  type: "subagent_lifecycle";
+  payload: SubagentLifecyclePayload;
+}
+
+export interface SubagentProgressFrame extends RpcFrame {
+  type: "subagent_progress";
+  payload: SubagentProgressPayload;
+}
+
+export interface SubagentEventFrame extends RpcFrame {
+  type: "subagent_event";
+  payload: SubagentEventPayload;
+}
+
+/**
+ * Snapshot of a subagent as returned by `get_subagents` — a richer superset of
+ * the legacy {@link SubagentInfo} that the live roster reduces from frames.
+ */
+export interface SubagentSnapshot {
+  id: string;
+  index: number;
+  agent: string;
+  agentSource: AgentSource;
+  description?: string;
+  status: AgentProgress["status"];
+  task?: string;
+  assignment?: string;
+  sessionFile?: string;
+  lastUpdate: number;
+  progress?: AgentProgress;
+  parentToolCallId?: string;
+}
+
+/**
+ * A single raw record from a session JSONL file, mirroring omp's session-entries
+ * union (`SessionHeader | SessionEntry`): tagged by `type` ("session" header,
+ * "message", "model_change", …) and loose-tailed. The renderer prefers the
+ * parsed `messages` from {@link SubagentMessagesResult} and may ignore these.
+ */
+export interface FileEntry {
+  type: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Result of `get_subagent_messages` — a paginated live transcript cursor for a
+ * subagent. `nextByte` resumes incremental tailing; on `reset === true` the
+ * consumer clears its cursor and restarts from `nextByte` (file rotation).
+ * Returns BOTH raw `entries` and parsed `messages`.
+ */
+export interface SubagentMessagesResult {
+  sessionFile: string;
+  fromByte: number;
+  nextByte: number;
+  reset: boolean;
+  entries: FileEntry[];
+  messages: OmpMessage[];
+}
+
 // ---------------------------------------------------------------------------
 // Available slash commands (`available_commands_update`)
 // ---------------------------------------------------------------------------
@@ -306,4 +434,27 @@ export interface AvailableCommand {
   name: string;
   description?: string;
   [key: string]: unknown;
+}
+
+/** Origin of an available slash command, used for source chips in the palette. */
+export type AvailableCommandSource =
+  | "builtin"
+  | "skill"
+  | "extension"
+  | "custom"
+  | "mcp_prompt"
+  | "file";
+
+/**
+ * Precise shape of an entry in `available_commands_update` /
+ * `get_available_commands` — the Commands palette item. Richer than the legacy
+ * {@link AvailableCommand}; both are kept.
+ */
+export interface AvailableSlashCommand {
+  name: string;
+  aliases?: string[];
+  description?: string;
+  input?: { hint?: string };
+  subcommands?: Array<{ name: string; description?: string; usage?: string }>;
+  source: AvailableCommandSource;
 }
