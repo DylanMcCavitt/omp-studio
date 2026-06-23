@@ -24,12 +24,12 @@ import {
 } from "@/components/ui";
 import { formatNumber, formatRelativeTime } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
-import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { useLinearStore } from "@/store/linear";
+import { useShellStore } from "@/store/shell";
 
 export default function Dashboard() {
-  const setRoute = useAppStore((s) => s.setRoute);
+  const setOpenPanel = useShellStore((s) => s.setOpenPanel);
   const newChat = useChatStore((s) => s.newChat);
   const { data, loading, error, reload } = useAsync(() =>
     window.omp.getDashboard(),
@@ -115,7 +115,7 @@ export default function Dashboard() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setRoute("sessions")}
+                    onClick={() => setOpenPanel("sessions")}
                   >
                     View all
                     <ChevronRight size={14} />
@@ -140,7 +140,7 @@ export default function Dashboard() {
                       <li key={s.id}>
                         <button
                           type="button"
-                          onClick={() => setRoute("sessions")}
+                          onClick={() => setOpenPanel("sessions")}
                           className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-hover focus-visible:outline-none focus-visible:bg-bg-hover"
                         >
                           <div className="min-w-0 flex-1">
@@ -242,7 +242,7 @@ export default function Dashboard() {
 // shared issue list here never races the full view. Degrades to a connect
 // prompt when no key is validated.
 function MyLinearIssuesPanel() {
-  const setRoute = useAppStore((s) => s.setRoute);
+  const setOpenPanel = useShellStore((s) => s.setOpenPanel);
   const status = useLinearStore((s) => s.status);
   const issues = useLinearStore((s) => s.issues);
   const loading = useLinearStore((s) => s.loading);
@@ -265,7 +265,11 @@ function MyLinearIssuesPanel() {
       title="My Linear issues"
       bodyClassName="p-0"
       actions={
-        <Button variant="ghost" size="sm" onClick={() => setRoute("linear")}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpenPanel("linear")}
+        >
           Open
           <ChevronRight size={14} />
         </Button>
@@ -282,7 +286,7 @@ function MyLinearIssuesPanel() {
             <Button
               variant="subtle"
               size="sm"
-              onClick={() => setRoute("linear")}
+              onClick={() => setOpenPanel("linear")}
             >
               Connect Linear
             </Button>

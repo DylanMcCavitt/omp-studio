@@ -9,8 +9,8 @@
 import { useState } from "react";
 import { ModalShell } from "@/components/chat/ui-request/ModalShell";
 import { Badge, Button } from "@/components/ui";
-import { useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
+import { useShellStore } from "@/store/shell";
 
 // Mirrors the main settings-service default; used only as a floor if the
 // persisted concurrency value is somehow absent when we flip `enabled`.
@@ -19,10 +19,10 @@ const DEFAULT_TERMINAL_MAX_CONCURRENT = 4;
 export function TerminalGate() {
   const settings = useSettingsStore((s) => s.settings);
   const update = useSettingsStore((s) => s.update);
-  const setRoute = useAppStore((s) => s.setRoute);
+  const closePanel = useShellStore((s) => s.closePanel);
   const [enabling, setEnabling] = useState(false);
 
-  const leave = () => setRoute("dashboard");
+  const leave = () => closePanel();
 
   const enable = async () => {
     if (enabling) return;

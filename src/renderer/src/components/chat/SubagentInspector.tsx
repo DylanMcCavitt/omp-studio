@@ -7,7 +7,7 @@
 //                             incoming frame (event-driven, never polled); a
 //                             reset clears + restarts the buffer (store-owned).
 // "Open in Sessions" hands the absolute sessionFile to the existing focusSession
-// plumbing for the full-width history view.
+// plumbing, which opens the Sessions rail panel scrolled to it.
 
 import type { AgentProgress, RpcFrame, SubagentSnapshot } from "@shared/rpc";
 import {

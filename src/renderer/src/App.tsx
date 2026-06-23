@@ -1,23 +1,20 @@
-import { type ComponentType, useEffect } from "react";
+import { useEffect } from "react";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { Layout } from "@/components/Layout";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
-import { NAV_ENTRIES } from "@/lib/nav-registry";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { useTheme } from "@/lib/useTheme";
-import { type Route, useAppStore } from "@/store/app";
+import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
+import ChatWorkspace from "@/views/Chat";
 
-// Route → view, derived from the single nav registry so adding a destination is
-// one registry entry, never a parallel edit here (D2: shell stays extensible).
-const VIEWS = Object.fromEntries(
-  NAV_ENTRIES.map((e): [Route, ComponentType] => [e.route, e.view]),
-) as Record<Route, ComponentType>;
-
+// The center is ALWAYS the Chat primary surface (the active session's transcript,
+// else a minimal empty state). The 9 nav destinations live only in the right icon
+// rail — `RailPanelHost` renders them off the shell store's `openPanelId`, never
+// `route` (AGE-632). Center file tabs (chat + open files) are AGE-634.
 export default function App() {
-  const route = useAppStore((s) => s.route);
-  const setRoute = useAppStore((s) => s.setRoute);
+  const activeSessionId = useChatStore((s) => s.activeSessionId);
   const loadSettings = useSettingsStore((s) => s.load);
   const ensureSubscribed = useChatStore((s) => s.ensureSubscribed);
   const loadOpenSessions = useChatStore((s) => s.loadOpenSessions);
@@ -46,14 +43,13 @@ export default function App() {
       await loadOpenSessions();
     })();
   }, [loadSettings, ensureSubscribed, loadOpenSessions]);
-  const View = VIEWS[route];
   return (
     <Layout>
-      {/* A crash in the active view shows a fallback, not a blank window; the
-          shell (sidebar/header) and search stay alive. resetKey={route} clears
-          the error when the user navigates away via the sidebar. */}
-      <AppErrorBoundary resetKey={route} onReset={() => setRoute("dashboard")}>
-        <View />
+      {/* A crash in the chat surface shows a fallback, not a blank window; the
+          shell (sidebar / header / rail) and search stay alive. resetKey tracks
+          the active session so opening another chat clears a crashed transcript. */}
+      <AppErrorBoundary resetKey={activeSessionId}>
+        <ChatWorkspace />
       </AppErrorBoundary>
       <GlobalSearch />
     </Layout>
