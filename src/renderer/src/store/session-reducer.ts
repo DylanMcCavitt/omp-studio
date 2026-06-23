@@ -237,6 +237,12 @@ export function reduceSession(
     case "tool_execution_end":
       return state.activeTool === null ? state : { ...state, activeTool: null };
 
+    case "auto_compaction_start":
+      return state.isCompacting ? state : { ...state, isCompacting: true };
+
+    case "auto_compaction_end":
+      return state.isCompacting ? { ...state, isCompacting: false } : state;
+
     case "agent_end":
     case "turn_end":
       return {
@@ -339,7 +345,7 @@ export function deriveSessionBadgeKind(
   for (const u of s.uiRequests) {
     if (!u.responseRequired) continue;
     const m = u.request.method;
-    if (m === "confirm" || m === "select") approval = true;
+    if (m === "confirm" || m === "select" || m === "cancel") approval = true;
     else if (m === "input" || m === "editor") input = true;
   }
   if (approval) return "needs-approval";

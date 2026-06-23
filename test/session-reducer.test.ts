@@ -328,3 +328,26 @@ test("a non-response-required request does not raise a needs badge", () => {
   const s = createSession("s1", { uiRequests: [ui("r1", "notify")] });
   expect(deriveSessionBadgeKind(s)).toBe("ready");
 });
+
+test("a queued cancel request surfaces needs-approval", () => {
+  const s = createSession("s1", { uiRequests: [ui("r1", "cancel")] });
+  expect(deriveSessionBadgeKind(s)).toBe("needs-approval");
+});
+
+test("auto_compaction_start/end track live compaction", () => {
+  const started = reduceSession(createSession("s1"), {
+    type: "auto_compaction_start",
+  });
+  expect(started.isCompacting).toBe(true);
+  expect(deriveSessionBadgeKind(started)).toBe("compacting");
+
+  const ended = reduceSession(started, { type: "auto_compaction_end" });
+  expect(ended.isCompacting).toBe(false);
+  expect(deriveSessionBadgeKind(ended)).toBe("ready");
+});
+
+test("auto_compaction_end clears a seeded compacting flag", () => {
+  const seeded = createSession("s1", { isCompacting: true });
+  const ended = reduceSession(seeded, { type: "auto_compaction_end" });
+  expect(ended.isCompacting).toBe(false);
+});
