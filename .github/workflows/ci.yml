@@ -54,6 +54,12 @@ jobs:
       - name: Unit tests (bun)
         run: bun test
 
+      # Renderer component suite (Vitest + jsdom + Testing Library). Separate
+      # runner from bun: it owns only src/renderer/**/*.test.tsx, so it gates
+      # the render/focus-sensitive UI without overlapping the node suite above.
+      - name: Component tests (Vitest)
+        run: npm run test:ui
+
       - name: Build
         run: npm run build
 
