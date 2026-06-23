@@ -431,14 +431,21 @@ export interface OmpApi {
   };
 
   files: {
-    /** Shallow listing of `relPath` under the active workspace (root when omitted). */
-    readDir(relPath?: string): Promise<FileEntry[]>;
+    /** Shallow listing of `relPath` under `workspaceRoot` (root when omitted). */
+    readDir(
+      relPath?: string,
+      workspaceRoot?: string | null,
+    ): Promise<FileEntry[]>;
     /** Read a workspace-relative file as text; `null` when missing/unreadable. */
-    readFile(relPath: string): Promise<FileContent | null>;
+    readFile(
+      relPath: string,
+      workspaceRoot?: string | null,
+    ): Promise<FileContent | null>;
     /** Atomically write text to a workspace-relative file. */
     writeFile(
       relPath: string,
       text: string,
+      workspaceRoot?: string | null,
     ): Promise<{ ok: boolean; error?: string }>;
   };
 }

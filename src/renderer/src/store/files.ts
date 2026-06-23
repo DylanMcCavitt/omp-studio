@@ -14,9 +14,9 @@ import type { FileContent, FileEntry } from "@shared/domain";
 import { create } from "zustand";
 import { toast } from "@/store/toast";
 
-/** The reserved center-tab id for the chat surface; file tabs use a relPath. */
-export const CHAT_TAB = "chat";
-/** A center tab is either the chat surface or an open file's relative path. */
+/** Reserved center-tab id for chat. NUL cannot appear in a filesystem path. */
+export const CHAT_TAB = "\0chat";
+/** A center tab is either the chat sentinel or an open file's relative path. */
 export type CenterTab = typeof CHAT_TAB | string;
 /** Cache key for the tree root listing (`readDir` with no relPath). */
 export const ROOT_DIR = "";
@@ -24,6 +24,10 @@ export const ROOT_DIR = "";
 export interface FileTab {
   /** Workspace-relative path; the tab key. */
   path: string;
+  /** Workspace root that produced this tab; guards async races on workspace switch. */
+  workspaceRoot: string | null;
+  /** Workspace selection generation that produced this tab (guards ABA switches). */
+  workspaceGeneration: number;
   /** Live editor buffer (diverges from `savedText` while dirty). */
   text: string;
   /** Last loaded/saved text — the dirty baseline. */
@@ -44,6 +48,12 @@ export interface FileTab {
 
 interface FilesState {
   // ---- file tree (lazy, fetched per directory) ----
+  /** Main-validated workspace root selected in the shell; null falls back safely. */
+  workspaceRoot: string | null;
+  /** Monotonic token bumped on every workspace selection change. */
+  workspaceGeneration: number;
+  /** Change workspace root used by subsequent Files IPC calls. */
+  setWorkspaceRoot(root: string | null): void;
   /** Children by directory relPath; root keyed by `ROOT_DIR`. Absent = unloaded. */
   children: Record<string, FileEntry[]>;
   /** Directories currently expanded in the tree. */
@@ -56,6 +66,8 @@ interface FilesState {
   toggleDir(relPath: string): void;
   /** Refetch the root and every expanded directory (the refresh button). */
   refreshTree(): Promise<void>;
+  /** Clear all workspace-scoped tree/editor state before changing workspace. */
+  resetWorkspaceState(): void;
 
   // ---- center editor tabs ----
   /** Open file tabs keyed by workspace-relative path. */
@@ -83,6 +95,16 @@ export function fileBasename(relPath: string): string {
 }
 
 export const useFilesStore = create<FilesState>((set, get) => ({
+  workspaceRoot: null,
+  workspaceGeneration: 0,
+
+  setWorkspaceRoot(root) {
+    set((s) => ({
+      workspaceRoot: root,
+      workspaceGeneration: s.workspaceGeneration + 1,
+    }));
+  },
+
   children: {},
   expanded: {},
   dirLoading: {},
@@ -90,13 +112,19 @@ export const useFilesStore = create<FilesState>((set, get) => ({
   async loadDir(relPath) {
     if (get().dirLoading[relPath]) return;
     set((s) => ({ dirLoading: { ...s.dirLoading, [relPath]: true } }));
+    const workspaceRoot = get().workspaceRoot;
+    const workspaceGeneration = get().workspaceGeneration;
     let entries: FileEntry[] = [];
     try {
       // The service defaults to "." for the root; pass undefined for ROOT_DIR.
-      entries = await window.omp.files.readDir(relPath || undefined);
+      entries = await window.omp.files.readDir(
+        relPath || undefined,
+        workspaceRoot,
+      );
     } catch {
       entries = [];
     }
+    if (get().workspaceGeneration !== workspaceGeneration) return;
     set((s) => ({
       children: { ...s.children, [relPath]: entries },
       dirLoading: { ...s.dirLoading, [relPath]: false },
@@ -122,6 +150,17 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     ]);
   },
 
+  resetWorkspaceState() {
+    set({
+      children: {},
+      expanded: {},
+      dirLoading: {},
+      tabs: {},
+      order: [],
+      activeTab: CHAT_TAB,
+    });
+  },
+
   tabs: {},
   order: [],
   activeTab: CHAT_TAB,
@@ -136,9 +175,13 @@ export const useFilesStore = create<FilesState>((set, get) => ({
       set({ activeTab: relPath });
       return;
     }
+    const workspaceRoot = get().workspaceRoot;
+    const workspaceGeneration = get().workspaceGeneration;
     // Optimistically add a loading tab and focus it, then resolve the read.
     const pending: FileTab = {
       path: relPath,
+      workspaceRoot,
+      workspaceGeneration,
       text: "",
       savedText: "",
       dirty: false,
@@ -156,16 +199,27 @@ export const useFilesStore = create<FilesState>((set, get) => ({
 
     let content: FileContent | null = null;
     try {
-      content = await window.omp.files.readFile(relPath);
+      content = await window.omp.files.readFile(relPath, workspaceRoot);
     } catch {
       content = null;
     }
-    // The tab may have been closed while the read was in flight.
-    if (!get().tabs[relPath]) return;
+    // The tab may have been closed or replaced under another workspace while the
+    // read was in flight.
+    const current = get().tabs[relPath];
+    if (
+      !current ||
+      current.workspaceRoot !== workspaceRoot ||
+      current.workspaceGeneration !== workspaceGeneration ||
+      get().workspaceGeneration !== workspaceGeneration
+    ) {
+      return;
+    }
 
     const resolved: FileTab = content
       ? {
           path: relPath,
+          workspaceRoot,
+          workspaceGeneration,
           text: content.text,
           savedText: content.text,
           dirty: false,
@@ -214,10 +268,12 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     if (!tab || tab.loading || tab.tooLarge || tab.binary || tab.error) return;
     if (!tab.dirty) return;
     const text = tab.text;
+    const workspaceRoot = tab.workspaceRoot;
+    const workspaceGeneration = tab.workspaceGeneration;
 
     let result: { ok: boolean; error?: string };
     try {
-      result = await window.omp.files.writeFile(relPath, text);
+      result = await window.omp.files.writeFile(relPath, text, workspaceRoot);
     } catch (err) {
       result = { ok: false, error: (err as Error).message };
     }
@@ -227,7 +283,8 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     }
     set((s) => {
       const current = s.tabs[relPath];
-      if (!current) return s;
+      if (!current || current.workspaceGeneration !== workspaceGeneration)
+        return s;
       // Clear dirty only if the buffer is unchanged since the write started.
       return {
         tabs: {
@@ -243,6 +300,31 @@ export const useFilesStore = create<FilesState>((set, get) => ({
     toast.success(`Saved ${fileBasename(relPath)}`);
   },
 }));
+
+/**
+ * Clear workspace-scoped Files state before switching workspaces.
+ * Dirty editors require an explicit user confirmation so a workspace switch does
+ * not either discard unsaved edits silently or save them into the next workspace.
+ */
+export function resetWorkspaceFilesWithConfirm(
+  workspaceRoot: string | null,
+): boolean {
+  const hasDirtyFiles = Object.values(useFilesStore.getState().tabs).some(
+    (tab) => tab.dirty,
+  );
+  if (
+    hasDirtyFiles &&
+    !window.confirm(
+      "Switching workspaces will close unsaved file tabs. Continue?",
+    )
+  ) {
+    return false;
+  }
+  const files = useFilesStore.getState();
+  files.setWorkspaceRoot(workspaceRoot);
+  files.resetWorkspaceState();
+  return true;
+}
 
 /**
  * Confirm-then-close a file tab: prompts before discarding unsaved edits.

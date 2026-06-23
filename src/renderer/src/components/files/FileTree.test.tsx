@@ -59,7 +59,11 @@ it("lists the root, expands a directory on click, and opens a file in a tab", as
   // Expanding the directory lazily fetches and reveals its child.
   await user.click(screen.getByText("src"));
   expect(await screen.findByText("index.ts")).toBeInTheDocument();
-  expect(readDir).toHaveBeenCalledWith("src");
+  const rootRow = screen.getByRole("treeitem", { name: /src/i });
+  const nestedRow = screen.getByRole("treeitem", { name: /index\.ts/i });
+  expect(rootRow).toHaveStyle({ paddingLeft: "8px" });
+  expect(nestedRow).toHaveStyle({ paddingLeft: "20px" });
+  expect(readDir).toHaveBeenCalledWith("src", null);
 
   // Clicking a file opens and focuses a center tab for it.
   await user.click(screen.getByText("index.ts"));

@@ -206,11 +206,12 @@ const api: OmpApi = {
   },
 
   files: {
-    readDir: (relPath?: string) => ipcRenderer.invoke(CH.filesReadDir, relPath),
-    readFile: (relPath: string) =>
-      ipcRenderer.invoke(CH.filesReadFile, relPath),
-    writeFile: (relPath: string, text: string) =>
-      ipcRenderer.invoke(CH.filesWriteFile, relPath, text),
+    readDir: (relPath?: string, workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(CH.filesReadDir, relPath, workspaceRoot),
+    readFile: (relPath: string, workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(CH.filesReadFile, relPath, workspaceRoot),
+    writeFile: (relPath: string, text: string, workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(CH.filesWriteFile, relPath, text, workspaceRoot),
   },
 };
 

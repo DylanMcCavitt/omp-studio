@@ -121,6 +121,7 @@ function TreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
             : "text-ink-muted hover:bg-bg-hover hover:text-ink",
           entry.isHidden && "opacity-60",
         )}
+        style={{ paddingLeft: indent }}
       >
         {isDir ? (
           <ChevronRight

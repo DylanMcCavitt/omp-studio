@@ -109,9 +109,10 @@ void app.whenReady().then(async () => {
   // the renderer resumes them on demand (D3r).
   registry.hydrate((await loadSettings()).openSessions);
   registerDataIpc(ipcMain, () => activeSessionCwd());
-  // FS access scoped to the active workspace cwd (same resolver as data IPC);
-  // the service path-contains every renderer-supplied path under that root.
-  registerFilesIpc(ipcMain, () => activeSessionCwd());
+  // FS access is scoped only to a renderer-selected workspace root validated
+  // against main-owned settings. No selected workspace => safe-empty, never a
+  // fallback to an unrelated active chat cwd.
+  registerFilesIpc(ipcMain);
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);
   registerLinearIpc(ipcMain);

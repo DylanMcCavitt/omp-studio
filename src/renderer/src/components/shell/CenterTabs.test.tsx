@@ -12,6 +12,8 @@ import { CHAT_TAB, type FileTab, useFilesStore } from "@/store/files";
 function tab(path: string, over: Partial<FileTab> = {}): FileTab {
   return {
     path,
+    workspaceRoot: null,
+    workspaceGeneration: 0,
     text: "",
     savedText: "",
     dirty: false,
@@ -37,6 +39,8 @@ function seedTabs(tabs: FileTab[], active: string) {
 
 beforeEach(() => {
   useFilesStore.setState({
+    workspaceRoot: null,
+    workspaceGeneration: 0,
     children: {},
     expanded: {},
     dirLoading: {},

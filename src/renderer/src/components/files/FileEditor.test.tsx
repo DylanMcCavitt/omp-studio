@@ -9,6 +9,8 @@ import { CHAT_TAB, type FileTab, useFilesStore } from "@/store/files";
 
 function seedTab(over: Partial<FileTab> & { path: string }) {
   const tab: FileTab = {
+    workspaceRoot: null,
+    workspaceGeneration: 0,
     text: "",
     savedText: "",
     dirty: false,
@@ -28,6 +30,8 @@ function seedTab(over: Partial<FileTab> & { path: string }) {
 
 beforeEach(() => {
   useFilesStore.setState({
+    workspaceRoot: null,
+    workspaceGeneration: 0,
     children: {},
     expanded: {},
     dirLoading: {},
