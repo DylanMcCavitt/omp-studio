@@ -22,11 +22,12 @@ const ALL_ROUTES = [
 
 // `never` (and so an un-compilable assignment below) unless ALL_ROUTES lists the
 // Route union exactly — no missing routes, no stray ones.
-type ExhaustiveRoutes = Exclude<Route, (typeof ALL_ROUTES)[number]> extends never
-  ? Exclude<(typeof ALL_ROUTES)[number], Route> extends never
-    ? typeof ALL_ROUTES
-    : never
-  : never;
+type ExhaustiveRoutes =
+  Exclude<Route, (typeof ALL_ROUTES)[number]> extends never
+    ? Exclude<(typeof ALL_ROUTES)[number], Route> extends never
+      ? typeof ALL_ROUTES
+      : never
+    : never;
 const EXPECTED_ROUTES: ExhaustiveRoutes = ALL_ROUTES;
 
 describe("nav-registry", () => {

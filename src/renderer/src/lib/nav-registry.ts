@@ -1,4 +1,3 @@
-import type { ComponentType } from "react";
 import {
   Bot,
   Github,
@@ -10,6 +9,7 @@ import {
   Settings,
   Sparkles,
 } from "lucide-react";
+import type { ComponentType } from "react";
 import type { Route } from "@/store/app";
 import Agents from "@/views/Agents";
 import Chat from "@/views/Chat";
@@ -78,6 +78,6 @@ const NAV_REGISTRY = {
 } satisfies Record<Route, Omit<NavEntry, "route">>;
 
 /** Every nav destination in display order (derived from `NAV_REGISTRY`). */
-export const NAV_ENTRIES: readonly NavEntry[] = Object.entries(NAV_REGISTRY).map(
-  ([route, def]) => ({ route: route as Route, ...def }),
-);
+export const NAV_ENTRIES: readonly NavEntry[] = Object.entries(
+  NAV_REGISTRY,
+).map(([route, def]) => ({ route: route as Route, ...def }));

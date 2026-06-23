@@ -110,15 +110,15 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
 
   const routeResults = useMemo<FlatResult[]>(() => {
     const q = trimmed.toLowerCase();
-    return NAV_ENTRIES.filter((n) => !q || n.label.toLowerCase().includes(q)).map(
-      (n) => ({
-        kind: "route",
-        key: `route:${n.route}`,
-        route: n.route,
-        label: n.label,
-        icon: n.icon,
-      }),
-    );
+    return NAV_ENTRIES.filter(
+      (n) => !q || n.label.toLowerCase().includes(q),
+    ).map((n) => ({
+      kind: "route",
+      key: `route:${n.route}`,
+      route: n.route,
+      label: n.label,
+      icon: n.icon,
+    }));
   }, [trimmed]);
 
   const liveResults = useMemo<FlatResult[]>(() => {
