@@ -15,11 +15,11 @@ import {
   useRef,
   useState,
 } from "react";
-import { NAV } from "@/components/Sidebar";
 import { Highlight } from "@/components/search/Highlight";
 import { Badge, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
+import { NAV_ENTRIES } from "@/lib/nav-registry";
 import {
   type LiveSessionHit,
   messageText,
@@ -110,7 +110,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
 
   const routeResults = useMemo<FlatResult[]>(() => {
     const q = trimmed.toLowerCase();
-    return NAV.filter((n) => !q || n.label.toLowerCase().includes(q)).map(
+    return NAV_ENTRIES.filter((n) => !q || n.label.toLowerCase().includes(q)).map(
       (n) => ({
         kind: "route",
         key: `route:${n.route}`,
