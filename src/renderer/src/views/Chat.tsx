@@ -4,18 +4,24 @@
 // subagent rails on the right, reading the active session's slice from the
 // normalized multi-session store.
 
+import type { ChatUiRequestEvent } from "@shared/ipc";
 import type { RpcModel, ThinkingLevel } from "@shared/rpc";
 import { FolderOpen, MessageSquarePlus, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
+import {
+  closeSessionWithConfirm,
+  SessionRail,
+  SessionStatusBadge,
+} from "@/components/chat/SessionRail";
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { Badge, Button, Panel, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
 import { useAppStore } from "@/store/app";
-import { type ChatStatus, useActiveSession, useChatStore } from "@/store/chat";
+import { useActiveSession, useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
 
 const THINKING_LEVELS: ThinkingLevel[] = [
@@ -27,10 +33,39 @@ const THINKING_LEVELS: ThinkingLevel[] = [
   "xhigh",
 ];
 
-export default function Chat() {
+/** Stable empty queue so the no-active-session selectors keep a steady ref. */
+const NO_UI: ChatUiRequestEvent[] = [];
+
+export default function ChatWorkspace() {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
-  if (!activeSessionId) return <StartPanel />;
-  return <ChatSession sessionId={activeSessionId} />;
+
+  // Cmd/Ctrl+W closes the active session's row (close ≠ delete). Scoped to the
+  // chat workspace — the listener unmounts when the route changes.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "w" || e.key === "W")) {
+        const id = useChatStore.getState().activeSessionId;
+        if (!id) return;
+        e.preventDefault();
+        closeSessionWithConfirm(id);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  return (
+    <div className="flex h-full min-h-0">
+      <SessionRail />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {activeSessionId ? (
+          <ChatSession key={activeSessionId} sessionId={activeSessionId} />
+        ) : (
+          <StartPanel />
+        )}
+      </div>
+    </div>
+  );
 }
 
 function StartPanel() {
@@ -192,6 +227,8 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const setModel = useChatStore((s) => s.setModel);
   const setThinking = useChatStore((s) => s.setThinking);
   const error = useActiveSession((s) => s?.error);
+  const uiRequests = useActiveSession((s) => s?.uiRequests ?? NO_UI);
+  const isCompacting = useActiveSession((s) => s?.isCompacting ?? false);
 
   // Safety net: if the active session isn't registered yet (e.g. selected from
   // another surface), open it now. start() registers before activating, so this
@@ -226,7 +263,11 @@ function ChatSession({ sessionId }: { sessionId: string }) {
           <Badge variant="muted" className="capitalize">
             {thinkingLevel}
           </Badge>
-          <StatusBadge status={status} />
+          <SessionStatusBadge
+            status={status}
+            uiRequests={uiRequests}
+            isCompacting={isCompacting}
+          />
           {contextUsage && (
             <span className="ml-auto text-xs text-ink-faint">
               {Math.round(contextUsage.percent)}% context
@@ -250,22 +291,6 @@ function ChatSession({ sessionId }: { sessionId: string }) {
       </aside>
     </div>
   );
-}
-
-function StatusBadge({ status }: { status: ChatStatus }) {
-  if (status === "streaming") {
-    return (
-      <Badge variant="accent">
-        <span className="flex items-center gap-1.5">
-          <Spinner size={12} />
-          Streaming
-        </span>
-      </Badge>
-    );
-  }
-  if (status === "spawning") return <Badge variant="warn">Starting</Badge>;
-  if (status === "error") return <Badge variant="danger">Error</Badge>;
-  return <Badge variant="success">Ready</Badge>;
 }
 
 function ModelPanel({

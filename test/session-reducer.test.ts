@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   createSession,
+  deriveSessionBadgeKind,
   reduceSession,
   sessionFromState,
   studioFrame,
@@ -257,4 +258,96 @@ test("sessionFromState seeds status and fields from a get_state snapshot", () =>
   expect(s.status).toBe("streaming");
   expect(s.thinkingLevel).toBe("low");
   expect(s.contextUsage?.percent).toBe(50);
+});
+
+test("badge kind maps each lifecycle status", () => {
+  expect(deriveSessionBadgeKind(createSession("s1"))).toBe("ready");
+  expect(
+    deriveSessionBadgeKind(createSession("s1", { status: "spawning" })),
+  ).toBe("starting");
+  expect(
+    deriveSessionBadgeKind(createSession("s1", { status: "streaming" })),
+  ).toBe("streaming");
+  expect(deriveSessionBadgeKind(createSession("s1", { status: "error" }))).toBe(
+    "error",
+  );
+  expect(
+    deriveSessionBadgeKind(createSession("s1", { status: "exited" })),
+  ).toBe("exited");
+});
+
+test("compacting wins over the streaming lifecycle", () => {
+  const s = createSession("s1", { status: "streaming", isCompacting: true });
+  expect(deriveSessionBadgeKind(s)).toBe("compacting");
+});
+
+test("a pending confirm/select request surfaces needs-approval even mid-stream", () => {
+  for (const method of ["confirm", "select"]) {
+    const s = createSession("s1", {
+      status: "streaming",
+      uiRequests: [ui("r1", method)],
+    });
+    expect(deriveSessionBadgeKind(s)).toBe("needs-approval");
+  }
+});
+
+test("a pending input/editor request surfaces needs-input", () => {
+  for (const method of ["input", "editor"]) {
+    const s = createSession("s1", { uiRequests: [ui("r1", method)] });
+    expect(deriveSessionBadgeKind(s)).toBe("needs-input");
+  }
+});
+
+test("approval outranks input when both are queued", () => {
+  const s = createSession("s1", {
+    uiRequests: [ui("r1", "input"), ui("r2", "confirm")],
+  });
+  expect(deriveSessionBadgeKind(s)).toBe("needs-approval");
+});
+
+test("terminal error/exited outrank a stale pending request", () => {
+  expect(
+    deriveSessionBadgeKind(
+      createSession("s1", {
+        status: "error",
+        uiRequests: [ui("r1", "confirm")],
+      }),
+    ),
+  ).toBe("error");
+  expect(
+    deriveSessionBadgeKind(
+      createSession("s1", {
+        status: "exited",
+        uiRequests: [ui("r1", "input")],
+      }),
+    ),
+  ).toBe("exited");
+});
+
+test("a non-response-required request does not raise a needs badge", () => {
+  const s = createSession("s1", { uiRequests: [ui("r1", "notify")] });
+  expect(deriveSessionBadgeKind(s)).toBe("ready");
+});
+
+test("a queued cancel request surfaces needs-approval", () => {
+  const s = createSession("s1", { uiRequests: [ui("r1", "cancel")] });
+  expect(deriveSessionBadgeKind(s)).toBe("needs-approval");
+});
+
+test("auto_compaction_start/end track live compaction", () => {
+  const started = reduceSession(createSession("s1"), {
+    type: "auto_compaction_start",
+  });
+  expect(started.isCompacting).toBe(true);
+  expect(deriveSessionBadgeKind(started)).toBe("compacting");
+
+  const ended = reduceSession(started, { type: "auto_compaction_end" });
+  expect(ended.isCompacting).toBe(false);
+  expect(deriveSessionBadgeKind(ended)).toBe("ready");
+});
+
+test("auto_compaction_end clears a seeded compacting flag", () => {
+  const seeded = createSession("s1", { isCompacting: true });
+  const ended = reduceSession(seeded, { type: "auto_compaction_end" });
+  expect(ended.isCompacting).toBe(false);
 });

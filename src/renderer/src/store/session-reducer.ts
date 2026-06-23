@@ -31,7 +31,7 @@ import type {
 } from "@shared/rpc";
 
 /** High-level lifecycle of a single session as the renderer presents it. */
-export type ChatStatus = "idle" | "spawning" | "streaming" | "error";
+export type ChatStatus = "idle" | "spawning" | "streaming" | "error" | "exited";
 
 /**
  * Everything the UI needs to render ONE chat session. The multi-session store
@@ -43,6 +43,14 @@ export interface LiveSessionState {
   /** Studio session id (the record key, duplicated here for convenience). */
   sessionId: string;
   status: ChatStatus;
+  /** Working directory the session runs in (rail title fallback). */
+  cwd?: string;
+  /** omp session name from get_state (preferred rail title). */
+  sessionName?: string;
+  /** Epoch ms of the last slice change; the store stamps it (rail "last activity"). */
+  lastActivityAt: number;
+  /** True while omp is compacting this session's context (Compacting badge). */
+  isCompacting: boolean;
   /** Authoritative transcript (reconciled from get_messages on turn end). */
   messages: OmpMessage[];
   /** In-progress assistant text delta accumulator for the streaming bubble. */
@@ -73,6 +81,10 @@ export function createSession(
   return {
     sessionId,
     status: "idle",
+    cwd: undefined,
+    sessionName: undefined,
+    lastActivityAt: 0,
+    isCompacting: false,
     messages: [],
     liveText: "",
     liveThinking: "",
@@ -102,6 +114,8 @@ export function sessionFromState(
     todoPhases: state.todoPhases ?? [],
     contextUsage: state.contextUsage,
     queuedCount: state.queuedMessageCount ?? 0,
+    sessionName: state.sessionName,
+    isCompacting: state.isCompacting,
   });
 }
 
@@ -223,6 +237,12 @@ export function reduceSession(
     case "tool_execution_end":
       return state.activeTool === null ? state : { ...state, activeTool: null };
 
+    case "auto_compaction_start":
+      return state.isCompacting ? state : { ...state, isCompacting: true };
+
+    case "auto_compaction_end":
+      return state.isCompacting ? { ...state, isCompacting: false } : state;
+
     case "agent_end":
     case "turn_end":
       return {
@@ -250,6 +270,8 @@ export function reduceSession(
         todoPhases: rpc.todoPhases ?? state.todoPhases,
         contextUsage: rpc.contextUsage ?? state.contextUsage,
         queuedCount: rpc.queuedMessageCount ?? state.queuedCount,
+        sessionName: rpc.sessionName ?? state.sessionName,
+        isCompacting: rpc.isCompacting ?? state.isCompacting,
       };
     }
 
@@ -292,4 +314,44 @@ export function reduceSession(
     default:
       return state;
   }
+}
+
+/**
+ * A stable, framework-free classification of a session's headline status for
+ * the SessionRail / pane header badge. UI labels and colors are mapped from
+ * this kind in the view layer. Priority is deliberate: terminal states
+ * (error/exited) win, then a pending UI request the user must answer
+ * (approval before input), then compaction, then the streaming lifecycle.
+ * "Needs approval"/"Needs input" are derived from the per-session uiRequests
+ * queue (only response-required requests count).
+ */
+export type SessionBadgeKind =
+  | "ready"
+  | "starting"
+  | "streaming"
+  | "compacting"
+  | "needs-approval"
+  | "needs-input"
+  | "error"
+  | "exited";
+
+export function deriveSessionBadgeKind(
+  s: Pick<LiveSessionState, "status" | "uiRequests" | "isCompacting">,
+): SessionBadgeKind {
+  if (s.status === "error") return "error";
+  if (s.status === "exited") return "exited";
+  let approval = false;
+  let input = false;
+  for (const u of s.uiRequests) {
+    if (!u.responseRequired) continue;
+    const m = u.request.method;
+    if (m === "confirm" || m === "select" || m === "cancel") approval = true;
+    else if (m === "input" || m === "editor") input = true;
+  }
+  if (approval) return "needs-approval";
+  if (input) return "needs-input";
+  if (s.isCompacting) return "compacting";
+  if (s.status === "streaming") return "streaming";
+  if (s.status === "spawning") return "starting";
+  return "ready";
 }
