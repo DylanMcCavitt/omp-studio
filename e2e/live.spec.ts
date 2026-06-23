@@ -177,20 +177,27 @@ async function startSession(page: Page, prompt: string): Promise<void> {
  * the turn ends (the composer returns to its idle "Send a message…" state). In
  * always-ask mode a turn can raise several tool approvals; this resolves each
  * the same way so the assertion afterwards is unambiguous.
+ *
+ * omp surfaces a tool approval as a `select` extension UI request, so the
+ * renderer shows a SelectRequestDialog: a listbox of "Approve"/"Deny" options
+ * plus a footer "Select" button (NOT a confirm dialog with an "Approve once"
+ * button). We highlight the matching option, then submit it via "Select".
  */
 async function resolveApprovals(
   page: Page,
-  decision: "Approve once" | "Deny",
+  decision: "Approve" | "Deny",
 ): Promise<void> {
   const idle = page.getByPlaceholder("Send a message…");
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     if (await idle.isVisible().catch(() => false)) return;
-    const button = page.getByRole("dialog").getByRole("button", {
-      name: decision,
-    });
-    if (await button.isVisible().catch(() => false)) {
-      await button.click();
+    const dialog = page.getByRole("dialog");
+    const option = dialog.getByRole("option", { name: decision, exact: true });
+    if (await option.isVisible().catch(() => false)) {
+      // Click highlights the option; the footer "Select" button submits it as
+      // {value:"Approve"|"Deny"}. (Enter on the focused listbox submits too.)
+      await option.click();
+      await dialog.getByRole("button", { name: "Select", exact: true }).click();
       continue;
     }
     await page.waitForTimeout(400);
@@ -247,13 +254,14 @@ test.describe("live D1 approval", () => {
         page,
         "Use your file-writing tool to create a file named approved-by-e2e.txt in the current working directory containing the text ok. Do not ask me any questions.",
       );
-      // always-ask raises the C3 approval dialog before the write runs.
+      // always-ask raises the C3 approval dialog before the write runs. omp
+      // surfaces it as a `select` request: a listbox with "Approve"/"Deny".
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible({ timeout: 120_000 });
       await expect(
-        dialog.getByRole("button", { name: "Approve once" }),
+        dialog.getByRole("option", { name: "Approve", exact: true }),
       ).toBeVisible();
-      await resolveApprovals(page, "Approve once");
+      await resolveApprovals(page, "Approve");
       // The approved write actually landed on disk (cwd started empty).
       await expect
         .poll(() => readdirSync(cwd).length, { timeout: 30_000 })
@@ -276,7 +284,9 @@ test.describe("live D1 approval", () => {
       );
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible({ timeout: 120_000 });
-      await expect(dialog.getByRole("button", { name: "Deny" })).toBeVisible();
+      await expect(
+        dialog.getByRole("option", { name: "Deny", exact: true }),
+      ).toBeVisible();
       await resolveApprovals(page, "Deny");
       // The denied write never happened — the temp project dir stays empty.
       expect(readdirSync(cwd)).toHaveLength(0);
@@ -295,7 +305,7 @@ test.describe("live D1 approval", () => {
       await gotoChat(page);
       await startSession(
         page,
-        'Before doing anything else, use your interactive ask/prompt capability to ask me a single question ("What codeword should I use?") and WAIT for my answer. Then reply with exactly the codeword I give you and nothing else.',
+        'Before doing anything else, use your interactive ask/prompt tool to ask me a single free-text question ("What codeword should I use?") and WAIT for my answer. Then reply with exactly the answer I give you and nothing else.',
       );
       const dialog = page.getByRole("dialog");
       // Not every omp build/model surfaces an interactive request — treat its
@@ -311,20 +321,49 @@ test.describe("live D1 approval", () => {
         "this omp build/model did not surface an interactive input/select request",
       );
 
-      // Answer with a value the prompt does NOT contain, so the assistant's echo
-      // below can only come from the value round-tripping through the child.
-      const input = dialog.getByRole("textbox");
+      // omp's `ask` surfaces the question as a SELECT whose options include an
+      // injected "Other (type your own)" free-text escape; choosing it opens a
+      // follow-up INPUT modal ("Enter your response:"). Some builds may surface a
+      // text input directly. Handle both, always driving a NOVEL value absent
+      // from the prompt so the echo below can only come from the value
+      // round-tripping through the child (not the prompt the renderer echoes).
+      const NOVEL = "ROUNDTRIP-OK-5K3W";
+      const directInput = dialog.getByRole("textbox");
       const listbox = dialog.getByRole("listbox");
       let answer = "";
-      if (await input.isVisible().catch(() => false)) {
-        answer = "ROUNDTRIP-OK-5K3W";
-        await input.fill(answer);
-        await dialog.getByRole("button", { name: "Submit" }).click();
+      if (await directInput.isVisible().catch(() => false)) {
+        answer = NOVEL;
+        await directInput.fill(answer);
+        await dialog
+          .getByRole("button", { name: "Submit", exact: true })
+          .click();
       } else if (await listbox.isVisible().catch(() => false)) {
-        const option = listbox.getByRole("option").first();
-        answer = ((await option.textContent()) ?? "").trim();
-        await option.click();
-        await dialog.getByRole("button", { name: "Select" }).click();
+        const freeTextEscape = dialog
+          .getByRole("option")
+          .filter({ hasText: "Other" })
+          .first();
+        if (await freeTextEscape.isVisible().catch(() => false)) {
+          // Free-text escape → follow-up input modal we can type a novel value into.
+          await freeTextEscape.click();
+          await dialog
+            .getByRole("button", { name: "Select", exact: true })
+            .click();
+          const followInput = dialog.getByRole("textbox");
+          await expect(followInput).toBeVisible({ timeout: 30_000 });
+          answer = NOVEL;
+          await followInput.fill(answer);
+          await dialog
+            .getByRole("button", { name: "Submit", exact: true })
+            .click();
+        } else {
+          // No free-text escape: the chosen option string is itself the answer.
+          const option = dialog.getByRole("option").first();
+          answer = ((await option.textContent()) ?? "").trim();
+          await option.click();
+          await dialog
+            .getByRole("button", { name: "Select", exact: true })
+            .click();
+        }
       }
       test.skip(answer === "", "no input/select control surfaced to answer");
 
@@ -430,7 +469,9 @@ test.describe("live D2 concurrency", () => {
       });
 
       // Session 2 (same project; rows are distinguished by transcript content).
-      await page.getByRole("button", { name: "New chat" }).click();
+      // Scope to the rail: "New chat" exists in BOTH the Sidebar nav and the
+      // rail's draft row, so an unscoped getByRole would be strict-mode ambiguous.
+      await rail(page).getByRole("button", { name: "New chat" }).click();
       await startSession(
         page,
         `Reply with exactly this token and nothing else: ${BETA}`,
