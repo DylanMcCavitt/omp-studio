@@ -111,6 +111,13 @@ export function registerChatIpc(
   handle(CH.chatGetState, (id: string) => lookup(id).getState());
   handle(CH.chatGetMessages, (id: string) => lookup(id).getMessages());
   handle(CH.chatGetSubagents, (id: string) => lookup(id).getSubagents());
+  // E2: session stats + compaction. getSessionStats degrades to empty stats on
+  // an omp build without the command; compact resolves when compaction finishes
+  // while live auto-compaction progress streams via the session's frames.
+  handle(CH.chatGetSessionStats, (id: string) => lookup(id).getSessionStats());
+  handle(CH.chatCompact, (id: string, instructions?: string) =>
+    lookup(id).compact(instructions),
+  );
   handle(CH.chatDispose, (id: string) => registry.dispose(id));
   // E1: list persisted/open descriptors, resume a hibernated chat, and close
   // (hibernate) a live chat. These sit alongside C2's ui-request handlers.

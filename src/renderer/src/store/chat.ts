@@ -58,9 +58,15 @@ interface ChatActions {
   openChat(id: string): void;
   /** Start a brand-new (unspawned) chat in the chat route. */
   newChat(): void;
+  /** Dispose a session's child and drop its slice (transcript untouched). */
+  closeSession(id: string): Promise<void>;
 
   /** Register/refresh a session slice from a get_state snapshot + hydrate it. */
-  openSession(sessionId: string, state: RpcState): Promise<void>;
+  openSession(
+    sessionId: string,
+    state: RpcState,
+    init?: Partial<LiveSessionState>,
+  ): Promise<void>;
   /** Spawn a new rpc-ui session, register it, and make it active. */
   start(opts: ChatCreateOptions): Promise<void>;
 
@@ -139,13 +145,40 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     useAppStore.getState().setRoute("chat");
   },
 
-  async openSession(sessionId, state) {
+  async closeSession(id) {
+    // close() disposes the child; the on-disk transcript is untouched (close ≠
+    // delete). Best-effort so a failed IPC still drops the slice and the rail
+    // reflects the close. The other open children keep their subscriptions and
+    // keep streaming — closing one never touches another.
+    try {
+      await window.omp.chat.close(id);
+    } catch {
+      // main may have already torn the child down; fall through to drop it
+    }
+    set((s) => {
+      if (!s.openSessions[id]) return s;
+      const rest = Object.fromEntries(
+        Object.entries(s.openSessions).filter(([key]) => key !== id),
+      );
+      const activeSessionId =
+        s.activeSessionId === id
+          ? (Object.keys(rest)[0] ?? null)
+          : s.activeSessionId;
+      return { openSessions: rest, activeSessionId };
+    });
+  },
+
+  async openSession(sessionId, state, init = {}) {
     // Register the slice synchronously so streamed frames route immediately and
     // the pane can render before the transcript finishes hydrating.
     set((s) => ({
       openSessions: {
         ...s.openSessions,
-        [sessionId]: sessionFromState(sessionId, state),
+        [sessionId]: {
+          ...sessionFromState(sessionId, state),
+          lastActivityAt: Date.now(),
+          ...init,
+        },
       },
     }));
 
@@ -177,7 +210,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       set({ creating: false });
       // Register + activate before hydrating so the new pane shows instantly.
       get().openChat(sessionId);
-      await get().openSession(sessionId, state);
+      await get().openSession(sessionId, state, { cwd: opts.cwd });
     } catch (e) {
       set({ creating: false, createError: errorMessage(e) });
     }
@@ -313,7 +346,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     } else if (e.status === "exited") {
       get()._patch(e.sessionId, (s) => ({
         ...s,
-        status: "idle",
+        status: "exited",
         activeTool: null,
       }));
     }
@@ -331,6 +364,11 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       if (!cur) return s;
       const next = fn(cur);
       if (next === cur) return s;
+      // `next` is a freshly-built slice (the reducer/patch fns never return a
+      // shared reference when they change state), so stamping the activity time
+      // in place is copy-free — it powers the SessionRail "last activity"
+      // column and keeps non-active sessions' rows live as frames arrive.
+      next.lastActivityAt = Date.now();
       return { openSessions: { ...s.openSessions, [sessionId]: next } };
     });
   },
