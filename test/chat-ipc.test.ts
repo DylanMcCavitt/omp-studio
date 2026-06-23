@@ -2,18 +2,20 @@ import { afterAll, expect, test } from "bun:test";
 import { EventEmitter } from "node:events";
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import type { BrowserWindow, IpcMain } from "electron";
 import { registerChatIpc } from "../src/main/ipc/chat";
 import { SessionRegistry } from "../src/main/omp/registry";
 import { OmpRpcSession } from "../src/main/omp/rpc-session";
-import { sessionsDir } from "../src/main/paths";
 import type { ChatCreateOptions, ChatUiRequestEvent } from "../src/shared/ipc";
 import { CH } from "../src/shared/ipc";
 import type {
@@ -273,7 +275,22 @@ test("chat:create forwards only known fields to registry.create (drops a rendere
 // Feature 4: subagent drill-in handler wiring + sessionFile path containment.
 // These exercise registerChatIpc against the stubbed seams (no omp child); the
 // FakeSession records exactly what each handler forwards to the session.
+//
+// A real temp agent dir backs sessionsDir() so containment is checked against
+// an actual on-disk root: the guard canonicalizes via realpathSync, so a
+// symlink planted under the root that points outside it must be rejected.
 // ---------------------------------------------------------------------------
+
+const agentRoot = mkdtempSync(join(tmpdir(), "omp-studio-agent-"));
+mkdirSync(join(agentRoot, "sessions"), { recursive: true });
+const sessionsRoot = realpathSync(join(agentRoot, "sessions"));
+const prevAgentDir = process.env.PI_CODING_AGENT_DIR;
+process.env.PI_CODING_AGENT_DIR = agentRoot;
+afterAll(() => {
+  if (prevAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+  else process.env.PI_CODING_AGENT_DIR = prevAgentDir;
+  rmSync(agentRoot, { recursive: true, force: true });
+});
 
 async function wiredSession(): Promise<{
   invoke: (channel: string, ...args: unknown[]) => unknown;
@@ -294,15 +311,15 @@ async function wiredSession(): Promise<{
 
 test("chat:getSubagentMessages forwards a normalized, contained sessionFile to the session", async () => {
   const { invoke, session, sessionId } = await wiredSession();
-  const file = join(sessionsDir(), "proj-abc", "agent.jsonl");
+  const file = join(sessionsRoot, "proj-abc", "agent.jsonl");
   const result = (await invoke(CH.chatGetSubagentMessages, sessionId, {
     sessionFile: file,
     fromByte: 10,
   })) as SubagentMessagesResult;
   expect(session.subagentMessagesCalls).toHaveLength(1);
-  expect(session.subagentMessagesCalls[0]?.sessionFile).toBe(resolve(file));
+  expect(session.subagentMessagesCalls[0]?.sessionFile).toBe(file);
   expect(session.subagentMessagesCalls[0]?.fromByte).toBe(10);
-  expect(result.sessionFile).toBe(resolve(file));
+  expect(result.sessionFile).toBe(file);
 });
 
 test("chat:getSubagentMessages passes a subagentId selector through without a path check", async () => {
@@ -315,7 +332,7 @@ test("chat:getSubagentMessages passes a subagentId selector through without a pa
 
 test("chat:getSubagentMessages rejects a sessionFile that escapes sessionsDir()", async () => {
   const { invoke, session, sessionId } = await wiredSession();
-  const traversal = join(sessionsDir(), "..", "evil.jsonl");
+  const traversal = join(sessionsRoot, "..", "evil.jsonl");
   await expect(
     invoke(CH.chatGetSubagentMessages, sessionId, { sessionFile: traversal }),
   ).rejects.toThrow(/escapes the sessions directory/);
@@ -325,6 +342,22 @@ test("chat:getSubagentMessages rejects a sessionFile that escapes sessionsDir()"
     }),
   ).rejects.toThrow(/escapes the sessions directory/);
   // A rejected path never reaches the child reader.
+  expect(session.subagentMessagesCalls).toHaveLength(0);
+});
+
+test("chat:getSubagentMessages rejects a symlink under sessionsDir() pointing outside (canonical containment)", async () => {
+  const { invoke, session, sessionId } = await wiredSession();
+  const outsideDir = join(agentRoot, "outside");
+  mkdirSync(outsideDir, { recursive: true });
+  const secret = join(outsideDir, "secret.jsonl");
+  writeFileSync(secret, "{}\n");
+  // link.jsonl lives lexically INSIDE the sessions root but resolves outside it;
+  // a purely lexical resolve()+relative() check would wrongly accept it.
+  const link = join(sessionsRoot, "link.jsonl");
+  symlinkSync(secret, link);
+  await expect(
+    invoke(CH.chatGetSubagentMessages, sessionId, { sessionFile: link }),
+  ).rejects.toThrow(/escapes the sessions directory/);
   expect(session.subagentMessagesCalls).toHaveLength(0);
 });
 

@@ -4,7 +4,15 @@
 // pushed to the renderer over `evt:rpc` / `evt:lifecycle` / `evt:ui-request`;
 // the renderer answers UI requests back over `chat:uiRespond`.
 
-import { isAbsolute, relative, resolve } from "node:path";
+import { realpathSync } from "node:fs";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "node:path";
 import type {
   ChatCreateOptions,
   ChatCreateResult,
@@ -173,13 +181,39 @@ export function registerChatIpc(
 // A live drill-in transcript path always lives under the sessions root (it
 // comes from get_subagents / subagent lifecycle frames), so anything escaping
 // it is a malformed or hostile request and must never reach the child reader.
-// Returns the normalized, contained absolute path; throws otherwise.
+//
+// The check is on the CANONICAL (symlink-resolved) paths, not the lexical ones:
+// a symlink planted under the sessions root that points outside it would slip
+// past a plain resolve()+relative() check, so both the root and the candidate
+// are realpath'd first. Returns the contained real path; throws otherwise.
 function containedSessionFile(sessionFile: string): string {
-  const root = sessionsDir();
-  const resolved = resolve(sessionFile);
-  const rel = relative(root, resolved);
+  const root = canonicalize(sessionsDir());
+  const real = canonicalize(sessionFile);
+  const rel = relative(root, real);
   if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
     throw new Error("sessionFile escapes the sessions directory");
   }
-  return resolved;
+  return real;
+}
+
+// Resolve a path to its real, symlink-free absolute form. When the target does
+// not exist yet, canonicalize the nearest existing ancestor and re-append the
+// remainder — so a symlinked ANCESTOR still cannot smuggle the path out of tree
+// (realpathSync resolves the ancestor link). A dangling leaf symlink falls back
+// to the lexical path, but reading through it just fails ENOENT — no data leak.
+function canonicalize(path: string): string {
+  let current = resolve(path);
+  const tail: string[] = [];
+  for (;;) {
+    try {
+      return tail.length === 0
+        ? realpathSync(current)
+        : join(realpathSync(current), ...tail);
+    } catch {
+      const parent = dirname(current);
+      if (parent === current) return resolve(path);
+      tail.unshift(basename(current));
+      current = parent;
+    }
+  }
 }
