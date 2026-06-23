@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- An **embedded browser panel** (feature 8, renderer surface). A `Browser` view
+  renders only the chrome (`BrowserChrome`: back/forward/reload, an editable
+  address bar for free-text navigation, and a `Combobox` history dropdown) plus
+  an empty placeholder `div`; the actual page is the main-owned, sandboxed
+  `WebContentsView` overlaid on that rect, so the privileged renderer window
+  never loads remote content (its CSP stays `'self'`). `useBrowserBounds`
+  streams the placeholder's rect to `browser.setBounds` on layout/resize/scroll
+  (ResizeObserver + window listeners), and `store/browser.ts` reduces the
+  `browser.onState` pushes (url/title/loading/can-go-*) into nav state + a
+  deduped visited-URL history behind one global subscription, forwarding
+  create/navigate/back/forward/reload/destroy to `window.omp.browser.*`. Off by
+  default (`settings.browser.enabled`): when disabled, an honest enable gate
+  states that it loads untrusted remote content in a separate sandboxed view —
+  it is explicitly **not** called a "secure" browser. The view is destroyed on
+  unmount. Uses the existing `browser:*` channels — no new IPC.
 - A **draggable / rearrangeable shell layout** (feature 5). The sidebar|main
   and chat transcript|right-rail splits are now resizable via
   `react-resizable-panels` (`ResizeHandle` with double-click-to-reset);
