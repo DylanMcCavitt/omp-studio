@@ -85,14 +85,21 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
   const trimmed = query.trim();
   const trimmedDebounced = debouncedQuery.trim();
 
-  // Historical transcript hits (debounced IPC). Empty query → no scan.
-  const history = useAsync<SessionSearchHit[]>(
-    () =>
-      trimmedDebounced
-        ? window.omp.searchSessions(debouncedQuery)
-        : Promise.resolve([]),
-    [debouncedQuery],
-  );
+  // Historical transcript hits (debounced IPC). Empty query → no scan. The
+  // result is tagged with the query that produced it so stale data (useAsync
+  // keeps previous data while a new query loads) is never shown or activated.
+  const history = useAsync<{
+    query: string;
+    hits: SessionSearchHit[];
+  }>(async () => {
+    const q = debouncedQuery;
+    const hits = q.trim() ? await window.omp.searchSessions(q) : [];
+    return { query: q, hits };
+  }, [debouncedQuery]);
+  // "Searching" spans the debounce gap and the in-flight scan so a query never
+  // flashes "No matches" or stale history before the new hits land.
+  const searching =
+    trimmed.length > 0 && (trimmed !== trimmedDebounced || history.loading);
 
   const routeResults = useMemo<FlatResult[]>(() => {
     const q = trimmed.toLowerCase();
@@ -135,15 +142,16 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
     }));
   }, [openSessions, query, trimmed]);
 
-  const historyResults = useMemo<FlatResult[]>(
-    () =>
-      (history.data ?? []).map((hit, i) => ({
-        kind: "history",
-        key: `hist:${hit.session.path}:${hit.messageIndex}:${i}`,
-        hit,
-      })),
-    [history.data],
-  );
+  const historyResults = useMemo<FlatResult[]>(() => {
+    // Suppress stale/loading history so a click never jumps to a non-matching
+    // message; routes + live stay live since they derive from the query directly.
+    if (searching || history.data?.query !== debouncedQuery) return [];
+    return history.data.hits.map((hit, i) => ({
+      kind: "history",
+      key: `hist:${hit.session.path}:${hit.messageIndex}:${i}`,
+      hit,
+    }));
+  }, [searching, history.data, debouncedQuery]);
 
   const results = useMemo<FlatResult[]>(
     () => [...routeResults, ...liveResults, ...historyResults],
@@ -199,11 +207,6 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
       if (r) activate(r);
     }
   };
-
-  // "Searching" spans the debounce gap and the in-flight scan so a query with
-  // no route/live match never flashes "No matches" before history lands.
-  const searching =
-    trimmed.length > 0 && (trimmed !== trimmedDebounced || history.loading);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-[12vh]">

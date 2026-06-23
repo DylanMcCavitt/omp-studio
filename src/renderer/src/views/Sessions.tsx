@@ -250,25 +250,30 @@ export default function Sessions() {
   // A non-empty query switches the left panel from the summary list to grouped
   // transcript hits from searchSessions (debounced, server-capped by F2).
   const searchMode = query.trim().length > 0;
-  const hitsState = useAsync<SessionSearchHit[]>(
-    () =>
-      debouncedQuery.trim()
-        ? window.omp.searchSessions(debouncedQuery)
-        : Promise.resolve([]),
-    [debouncedQuery],
-  );
+  const hitsState = useAsync<{
+    query: string;
+    hits: SessionSearchHit[];
+  }>(async () => {
+    const q = debouncedQuery;
+    const hits = q.trim() ? await window.omp.searchSessions(q) : [];
+    return { query: q, hits };
+  }, [debouncedQuery]);
+  // useAsync keeps the previous data while a new query loads; bind hits to the
+  // query that produced them so a stale result set is never shown or clicked.
   const hitGroups = useMemo(() => {
+    const hits =
+      hitsState.data?.query === debouncedQuery ? hitsState.data.hits : [];
     const byPath = new Map<
       string,
       { session: SessionSummary; hits: SessionSearchHit[] }
     >();
-    for (const h of hitsState.data ?? []) {
+    for (const h of hits) {
       const g = byPath.get(h.session.path);
       if (g) g.hits.push(h);
       else byPath.set(h.session.path, { session: h.session, hits: [h] });
     }
     return [...byPath.values()];
-  }, [hitsState.data]);
+  }, [hitsState.data, debouncedQuery]);
   // "Searching" spans the debounce gap (query ahead of the fired request) and
   // the in-flight scan, so an interim "no matches" never flickers mid-type.
   const searching = query.trim() !== debouncedQuery.trim() || hitsState.loading;
@@ -327,24 +332,22 @@ export default function Sessions() {
           </div>
           <div className="scrollbar min-h-0 flex-1 overflow-auto px-2 pb-3">
             {searchMode ? (
-              hitsState.error ? (
+              searching ? (
+                <div className="flex justify-center p-8">
+                  <Spinner />
+                </div>
+              ) : hitsState.error ? (
                 <EmptyState
                   icon={<TriangleAlert className="h-6 w-6" />}
                   title="Search failed"
                   hint={hitsState.error}
                 />
               ) : hitGroups.length === 0 ? (
-                searching ? (
-                  <div className="flex justify-center p-8">
-                    <Spinner />
-                  </div>
-                ) : (
-                  <EmptyState
-                    icon={<Inbox className="h-6 w-6" />}
-                    title="No transcript matches"
-                    hint={`Nothing matched “${query.trim()}”`}
-                  />
-                )
+                <EmptyState
+                  icon={<Inbox className="h-6 w-6" />}
+                  title="No transcript matches"
+                  hint={`Nothing matched “${query.trim()}”`}
+                />
               ) : (
                 hitGroups.map((group) => (
                   <div key={group.session.path}>
