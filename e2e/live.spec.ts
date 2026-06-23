@@ -178,26 +178,25 @@ async function startSession(page: Page, prompt: string): Promise<void> {
  * always-ask mode a turn can raise several tool approvals; this resolves each
  * the same way so the assertion afterwards is unambiguous.
  *
- * omp surfaces a tool approval as a `select` extension UI request, so the
- * renderer shows a SelectRequestDialog: a listbox of "Approve"/"Deny" options
- * plus a footer "Select" button (NOT a confirm dialog with an "Approve once"
- * button). We highlight the matching option, then submit it via "Select".
+ * omp surfaces a tool approval as an Approve/Deny `select` extension UI request,
+ * which the studio routes to the rich ApprovalRequestDialog (AGE-608): explicit
+ * "Deny" / "Approve once" buttons (Deny is the focused default), NOT a listbox
+ * of options. We click the button matching the decision; the dialog maps it
+ * back to the select's {value:"Approve"|"Deny"} response.
  */
 async function resolveApprovals(
   page: Page,
   decision: "Approve" | "Deny",
 ): Promise<void> {
+  const button = decision === "Approve" ? "Approve once" : "Deny";
   const idle = page.getByPlaceholder("Send a message…");
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     if (await idle.isVisible().catch(() => false)) return;
     const dialog = page.getByRole("dialog");
-    const option = dialog.getByRole("option", { name: decision, exact: true });
-    if (await option.isVisible().catch(() => false)) {
-      // Click highlights the option; the footer "Select" button submits it as
-      // {value:"Approve"|"Deny"}. (Enter on the focused listbox submits too.)
-      await option.click();
-      await dialog.getByRole("button", { name: "Select", exact: true }).click();
+    const action = dialog.getByRole("button", { name: button, exact: true });
+    if (await action.isVisible().catch(() => false)) {
+      await action.click();
       continue;
     }
     await page.waitForTimeout(400);
@@ -255,11 +254,12 @@ test.describe("live D1 approval", () => {
         "Use your file-writing tool to create a file named approved-by-e2e.txt in the current working directory containing the text ok. Do not ask me any questions.",
       );
       // always-ask raises the C3 approval dialog before the write runs. omp
-      // surfaces it as a `select` request: a listbox with "Approve"/"Deny".
+      // surfaces it as an Approve/Deny `select`, which the studio routes to the
+      // rich ApprovalRequestDialog (AGE-608): "Deny"/"Approve once" buttons.
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible({ timeout: 120_000 });
       await expect(
-        dialog.getByRole("option", { name: "Approve", exact: true }),
+        dialog.getByRole("button", { name: "Approve once", exact: true }),
       ).toBeVisible();
       await resolveApprovals(page, "Approve");
       // The approved write actually landed on disk (cwd started empty).
@@ -285,7 +285,7 @@ test.describe("live D1 approval", () => {
       const dialog = page.getByRole("dialog");
       await expect(dialog).toBeVisible({ timeout: 120_000 });
       await expect(
-        dialog.getByRole("option", { name: "Deny", exact: true }),
+        dialog.getByRole("button", { name: "Deny", exact: true }),
       ).toBeVisible();
       await resolveApprovals(page, "Deny");
       // The denied write never happened — the temp project dir stays empty.

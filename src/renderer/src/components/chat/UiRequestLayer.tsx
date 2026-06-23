@@ -4,8 +4,11 @@
 //   - renders the oldest response-required request as a focused modal dialog
 //     (confirm/select/input/editor), responding via the store's respondUi so the
 //     correct {confirmed}|{value}|{cancelled} shape reaches the originating child;
-//   - auto-approves a confirm whose stable key is on the session allowlist
-//     ("Always allow for this session") instead of re-prompting;
+//   - routes an approval-shaped `select` (omp delivers tool approvals as an
+//     Approve/Deny select, not a confirm) to the rich ApprovalRequestDialog and
+//     maps its decision back to the select's {value} response;
+//   - auto-approves a confirm or approval-select whose stable key is on the
+//     session allowlist ("Always allow for this session") instead of re-prompting;
 //   - dismisses a request when the agent sends a `cancel` for it;
 //   - surfaces passive hints as toasts and open_url as an explicit-action banner;
 //   - drops the modal when the session exits or a request's timeout elapses
@@ -28,9 +31,12 @@ import { EditorRequestDialog } from "./ui-request/EditorRequestDialog";
 import { InputRequestDialog } from "./ui-request/InputRequestDialog";
 import {
   approvalKey,
+  approvalSelectKey,
+  approvalSelectShape,
   asString,
   collectResponseRequiredTimeouts,
   isAllowed,
+  isSelectApprovalAllowed,
   partitionUiRequests,
 } from "./ui-request/logic";
 import { SelectRequestDialog } from "./ui-request/SelectRequestDialog";
@@ -80,12 +86,25 @@ export function UiRequestLayer() {
     [uiRequests],
   );
 
-  // A confirm already covered by the session allowlist is auto-approved without
-  // ever rendering a dialog (computed synchronously so the modal never flashes).
+  // An approval-shaped `select` (omp delivers tool approvals as a select, not a
+  // confirm) routes to the rich ApprovalRequestDialog; null for generic selects.
+  const approvalSelect = useMemo(
+    () =>
+      modal?.request.method === "select"
+        ? approvalSelectShape(modal.request)
+        : null,
+    [modal],
+  );
+
+  // A tool approval already covered by the session allowlist is auto-approved
+  // without ever rendering a dialog (computed synchronously so it never
+  // flashes). Covers both `confirm` and the approval-shaped `select`.
   const suppressed =
     modal !== null &&
-    modal.request.method === "confirm" &&
-    isAllowed(allowKeys, modal.request);
+    ((modal.request.method === "confirm" &&
+      isAllowed(allowKeys, modal.request)) ||
+      (approvalSelect !== null &&
+        isSelectApprovalAllowed(allowKeys, modal.request)));
 
   // Tracks request ids already auto-resolved (auto-approve / cancel handling) so
   // a re-render never double-fires the side effect.
@@ -97,7 +116,8 @@ export function UiRequestLayer() {
     new Map(),
   );
 
-  // Auto-approve allowlisted confirms.
+  // Auto-approve allowlisted tool approvals. A select-approval answers with the
+  // approve OPTION ({value:"Approve"}); a confirm with {confirmed:true}.
   useEffect(() => {
     if (!modal || !suppressed) return;
     const id = modal.request.id;
@@ -106,9 +126,11 @@ export function UiRequestLayer() {
     void respondUi({
       sessionId: modal.sessionId,
       requestId: id,
-      response: { confirmed: true },
+      response: approvalSelect
+        ? { value: approvalSelect.approve }
+        : { confirmed: true },
     });
-  }, [modal, suppressed, respondUi]);
+  }, [modal, suppressed, approvalSelect, respondUi]);
 
   // Honor `cancel` requests: drop the targeted request (the agent withdrew it)
   // and ack the cancel itself, both with a cancelled response.
@@ -218,10 +240,41 @@ export function UiRequestLayer() {
           />
         );
       }
-      case "select":
+      case "select": {
+        // omp surfaces tool approvals as an Approve/Deny select: render those
+        // with the rich approval dialog, mapping its Deny/Approve decision back
+        // to the select's {value} response. Every other select stays generic.
+        if (approvalSelect) {
+          const key = approvalSelectKey(modal.request);
+          const decide = (approved: boolean): ExtensionUiResponse => ({
+            value: approved ? approvalSelect.approve : approvalSelect.deny,
+          });
+          return (
+            <ApprovalRequestDialog
+              request={modal.request}
+              onResolve={resolve}
+              decide={decide}
+              canAlwaysAllow={key !== null}
+              onAlwaysAllow={() => {
+                if (key && activeSessionId) {
+                  // No structured tool identity on a select-approval frame, so
+                  // the action-specific title is the readable rule label.
+                  const label = asString(modal.request.title) ?? "tool approval";
+                  addRule(activeSessionId, {
+                    key,
+                    label,
+                    createdAt: Date.now(),
+                  });
+                }
+                resolve(decide(true));
+              }}
+            />
+          );
+        }
         return (
           <SelectRequestDialog request={modal.request} onResolve={resolve} />
         );
+      }
       case "input":
         return (
           <InputRequestDialog request={modal.request} onResolve={resolve} />

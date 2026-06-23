@@ -15,6 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   two-session concurrency. They are skipped by default so `npm run test:e2e` and
   CI stay non-live, and run against the installed `omp` only when the flag is set.
 
+### Changed
+
+- Real tool approvals now render with the rich approval dialog. omp surfaces an
+  `always-ask` tool approval as an Approve/Deny `select` (not a `confirm`), so
+  the studio detects that shape and routes it to `ApprovalRequestDialog` — Deny
+  default-focus, danger styling, and session-scoped "Always allow" — mapping the
+  chosen affordance back to the select's `{value}` response. Generic (non
+  approval) selects keep the plain `SelectRequestDialog`.
+
 ## [0.1.0] - 2026-06-19
 
 Initial release.
