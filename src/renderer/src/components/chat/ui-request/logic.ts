@@ -90,6 +90,85 @@ export function isAllowed(
 }
 
 // ---------------------------------------------------------------------------
+// Approval-shaped `select` requests.
+//
+// omp (verified live against 16.x) surfaces a tool approval NOT as `confirm`
+// but as a `select`: title `Allow tool: <name> …`, options ["Approve", "Deny"]
+// (agent runtime: formatApprovalPrompt + uiContext.select → a bare
+// {method:"select", title, options} frame with no structured tool fields). The
+// studio must render these with the rich ApprovalRequestDialog (Deny default,
+// danger styling, Always-allow) while keeping every OTHER select on the generic
+// SelectRequestDialog.
+//
+// Detection requires BOTH of omp's signals: the canonical `Allow tool:` title
+// prefix (the marker formatApprovalPrompt always emits) AND a two-option
+// Approve/Deny set. The option pair alone is too weak — a generic interactive
+// select could legitimately offer Approve/Deny; routing THAT to the rich dialog
+// would expose Always-allow and a title-keyed rule that then auto-approves
+// unrelated prompts sharing the title. The `Allow tool:` prefix is a deliberate
+// protocol marker (not arbitrary prose), so gating on it is precise, not the
+// generic title-guessing approvalKey rightly refuses. The Approve/Deny pair is
+// still needed to resolve the exact option strings the {value} response echoes.
+// ---------------------------------------------------------------------------
+
+const APPROVE_OPTION = /^approve$/i;
+const DENY_OPTION = /^deny$/i;
+const ALLOW_TOOL_TITLE = /^allow tool:/i;
+
+export interface ApprovalSelectShape {
+  /** The exact option string that approves (echoed back verbatim as {value}). */
+  approve: string;
+  /** The exact option string that denies. */
+  deny: string;
+}
+
+export function approvalSelectShape(
+  req: ExtensionUiRequest,
+): ApprovalSelectShape | null {
+  if (req.method !== "select") return null;
+  // The `Allow tool:` marker gates the whole approval path: no marker → generic
+  // select (never routed to the rich dialog, never allowlistable).
+  const title = asString(req.title);
+  if (!title || !ALLOW_TOOL_TITLE.test(title.trim())) return null;
+  const options = Array.isArray(req.options)
+    ? req.options.filter((o): o is string => typeof o === "string")
+    : [];
+  // Exactly the canonical two-option Approve/Deny set. A richer multi-choice
+  // select that merely happens to include "Approve" stays generic so its other
+  // options are never silently dropped behind a two-button approval dialog.
+  if (options.length !== 2) return null;
+  const approve = options.find((o) => APPROVE_OPTION.test(o.trim()));
+  const deny = options.find((o) => DENY_OPTION.test(o.trim()));
+  if (!approve || !deny) return null;
+  return { approve, deny };
+}
+
+// Session-scoped Always-allow key for an approval-shaped select. omp's
+// select-approval frame carries NO structured tool identity (approvalKey is
+// null for it), so we fall back to the dialog title. Unlike a generic `confirm`
+// title (often just "Confirm" — why approvalKey refuses to key on a title), the
+// approval-select title IS the action signature (`Allow tool: <name>` plus the
+// rendered args), so keying on it neither leaks between unrelated actions nor
+// re-approves a different call. A structured key still wins when present, so
+// this stays forward-compatible with an omp that adds tool fields to the frame.
+export function approvalSelectKey(req: ExtensionUiRequest): string | null {
+  if (approvalSelectShape(req) === null) return null;
+  const structured = approvalKey(req);
+  if (structured) return structured;
+  const title = asString(req.title);
+  return title ? `approval-select:${title}` : null;
+}
+
+/** An approval-shaped select whose key is already allowlisted auto-approves. */
+export function isSelectApprovalAllowed(
+  allowKeys: ReadonlySet<string>,
+  req: ExtensionUiRequest,
+): boolean {
+  const key = approvalSelectKey(req);
+  return key !== null && allowKeys.has(key);
+}
+
+// ---------------------------------------------------------------------------
 // Queue partitioning. The store keeps EVERY ui-request (modal + hint) in one
 // per-session `uiRequests` array; the layer splits it into the surfaces that
 // render each kind. `modal` is the single oldest response-required dialog so

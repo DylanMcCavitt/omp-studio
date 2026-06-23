@@ -141,6 +141,85 @@ describe("ApprovalRequestDialog", () => {
   });
 });
 
+// omp delivers a tool approval as an Approve/Deny `select`, which the layer
+// routes to this same rich dialog with a `decide` mapping that turns the
+// Deny/Approve decision into the select's {value} reply instead of {confirmed}.
+describe("ApprovalRequestDialog — select-approval mapping (decide)", () => {
+  const selectApproval = makeRequest("select", {
+    title: "Allow tool: write",
+    options: ["Approve", "Deny"],
+  });
+  // The layer passes this for an approval-shaped select.
+  const decide = (approved: boolean) => ({
+    value: approved ? "Approve" : "Deny",
+  });
+
+  it("maps a Deny click to {value:'Deny'}", async () => {
+    const user = userEvent.setup();
+    const onResolve = vi.fn();
+    render(
+      <ApprovalRequestDialog
+        request={selectApproval}
+        onResolve={onResolve}
+        onAlwaysAllow={vi.fn()}
+        canAlwaysAllow={false}
+        decide={decide}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Deny" }));
+    expectCalledOnceWith(onResolve, { value: "Deny" });
+  });
+
+  it("maps an Approve once click to {value:'Approve'}", async () => {
+    const user = userEvent.setup();
+    const onResolve = vi.fn();
+    render(
+      <ApprovalRequestDialog
+        request={selectApproval}
+        onResolve={onResolve}
+        onAlwaysAllow={vi.fn()}
+        canAlwaysAllow={false}
+        decide={decide}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Approve once" }));
+    expectCalledOnceWith(onResolve, { value: "Approve" });
+  });
+
+  it("maps a reflexive Escape to {value:'Deny'} — never approves", async () => {
+    const user = userEvent.setup();
+    const onResolve = vi.fn();
+    render(
+      <ApprovalRequestDialog
+        request={selectApproval}
+        onResolve={onResolve}
+        onAlwaysAllow={vi.fn()}
+        canAlwaysAllow={false}
+        decide={decide}
+      />,
+    );
+    await user.keyboard("{Escape}");
+    expectCalledOnceWith(onResolve, { value: "Deny" });
+  });
+
+  it("maps the Cmd/Ctrl+Enter accelerator to {value:'Approve'}", async () => {
+    const user = userEvent.setup();
+    const onResolve = vi.fn();
+    render(
+      <ApprovalRequestDialog
+        request={selectApproval}
+        onResolve={onResolve}
+        onAlwaysAllow={vi.fn()}
+        canAlwaysAllow={false}
+        decide={decide}
+      />,
+    );
+    screen.getByRole("dialog").focus();
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expectCalledOnceWith(onResolve, { value: "Approve" });
+  });
+});
+
 describe("SelectRequestDialog", () => {
   const options = ["alpha", "beta", "gamma"];
 
