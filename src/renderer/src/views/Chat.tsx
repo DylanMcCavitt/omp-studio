@@ -102,7 +102,7 @@ function NoActiveSession() {
   return (
     <div className="flex h-full items-center justify-center p-8">
       <EmptyState
-        icon={<MessageSquarePlus className="h-7 w-7" />}
+        icon={<MessageSquarePlus className="h-6 w-6" />}
         title="No chat open"
         hint="Pick one from the sidebar or start a new chat."
         action={
@@ -316,7 +316,7 @@ function RightRail({
   return (
     <div className="flex h-full min-h-0 flex-col bg-bg-panel/40">
       <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-3 py-2">
-        <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
           Panels
         </span>
         <div className="flex items-center gap-0.5">
@@ -452,7 +452,7 @@ function RailIconStrip({ onExpand }: { onExpand: () => void }) {
       <IconButton
         label="Expand panel rail"
         onClick={onExpand}
-        className="h-8 w-8"
+        className="h-9 w-9"
       >
         <PanelRightOpen className="h-4 w-4" />
       </IconButton>
@@ -464,7 +464,7 @@ function RailIconStrip({ onExpand }: { onExpand: () => void }) {
             key={panel.id}
             label={RAIL_PANEL_TITLE[panel.id]}
             onClick={onExpand}
-            className="h-8 w-8"
+            className="h-9 w-9"
           >
             <Icon className="h-4 w-4" />
           </IconButton>

@@ -36,7 +36,7 @@ export function RightRail() {
                 : "text-ink-muted hover:bg-bg-hover hover:text-ink",
             )}
           >
-            <Icon size={18} className="shrink-0" />
+            <Icon size={16} className="shrink-0" />
           </button>
         );
       })}
