@@ -1,11 +1,9 @@
 // Persisted collapse state for the §3 disclosure primitives (Collapsible and
 // the extended Panel). The collapse map lives under `settings.ui.collapsed[key]`
-// (the v2 UiPrefs bump). That field is not on StudioSettingsV1 yet, so we
-// read/write it structurally and degrade gracefully: the toggle is always
-// instant (optimistic local state) and the write-through to settings is
-// best-effort + debounced, so a burst of toggles collapses to one persist.
+// (the v2 `UiPrefs` shape). The toggle is always instant (optimistic local
+// state) and the write-through to settings is best-effort + debounced, so a
+// burst of toggles collapses to one persist.
 
-import type { StudioSettingsV1 } from "@shared/ipc";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSettingsStore } from "@/store/settings";
 
@@ -62,7 +60,7 @@ export function useCollapsePref(
 
   const set = useCallback(
     (next: boolean) => {
-      setLocal(next); // optimistic — instant, works even before v2 persists
+      setLocal(next); // optimistic — instant
       if (!key) return;
       lastPersisted.current = next;
       clearTimeout(timer.current);
@@ -71,9 +69,7 @@ export function useCollapsePref(
         const patch = {
           ui: { ...ui, collapsed: { ...ui.collapsed, [key]: next } },
         };
-        // `ui` is not on StudioSettingsV1 yet (lands with the v2 settings bump);
-        // cast defensively so this compiles today and persists once it does.
-        void update(patch as unknown as Partial<StudioSettingsV1>);
+        void update(patch);
       }, PERSIST_DEBOUNCE_MS);
     },
     [key, update],
