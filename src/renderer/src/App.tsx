@@ -2,30 +2,18 @@ import { type ComponentType, useEffect } from "react";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { Layout } from "@/components/Layout";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
+import { NAV_ENTRIES } from "@/lib/nav-registry";
 import { useShortcuts } from "@/lib/useShortcuts";
 import { useTheme } from "@/lib/useTheme";
 import { type Route, useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
-import Agents from "@/views/Agents";
-import Chat from "@/views/Chat";
-import Dashboard from "@/views/Dashboard";
-import GitHub from "@/views/GitHub";
-import Mcp from "@/views/Mcp";
-import Sessions from "@/views/Sessions";
-import Settings from "@/views/Settings";
-import Skills from "@/views/Skills";
 
-const VIEWS: Record<Route, ComponentType> = {
-  dashboard: Dashboard,
-  chat: Chat,
-  sessions: Sessions,
-  skills: Skills,
-  mcp: Mcp,
-  agents: Agents,
-  github: GitHub,
-  settings: Settings,
-};
+// Route → view, derived from the single nav registry so adding a destination is
+// one registry entry, never a parallel edit here (D2: shell stays extensible).
+const VIEWS = Object.fromEntries(
+  NAV_ENTRIES.map((e): [Route, ComponentType] => [e.route, e.view]),
+) as Record<Route, ComponentType>;
 
 export default function App() {
   const route = useAppStore((s) => s.route);
