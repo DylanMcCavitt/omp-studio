@@ -14,13 +14,13 @@ import { cn } from "@/lib/cn";
 import { type Route, useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 
-interface NavItem {
+export interface NavItem {
   route: Route;
   label: string;
   icon: LucideIcon;
 }
 
-const NAV: NavItem[] = [
+export const NAV: NavItem[] = [
   { route: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { route: "chat", label: "Chat", icon: MessagesSquare },
   { route: "sessions", label: "Sessions", icon: History },
