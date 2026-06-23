@@ -350,3 +350,197 @@ test("pending UI requests are cleared on child exit with no late write", async (
     session.dispose();
   }
 }, 15000);
+
+// ---------------------------------------------------------------------------
+// Non-live session stats + compaction bridge tests (E2).
+//
+// Same fake-omp child: we read the request frame the bridge wrote to stdin,
+// then echo a correlated `response` (or an id-less unknown-command failure, the
+// way real omp replies for commands a build doesn't implement) back via __emit.
+// ---------------------------------------------------------------------------
+
+// Every frame the bridge wrote to the child's stdin (commands + injected lines).
+function outgoing(writes: string[]): Record<string, unknown>[] {
+  const frames: Record<string, unknown>[] = [];
+  for (const line of writes) {
+    try {
+      frames.push(JSON.parse(line.trim()) as Record<string, unknown>);
+    } catch {
+      // not JSON (partial write) — skip it.
+    }
+  }
+  return frames;
+}
+
+// Ask the fake child to surface an arbitrary frame (response or event) to the
+// bridge, mirroring emitUiRequest but for non-UI frames.
+function emitFrame(
+  session: OmpRpcSession,
+  frame: Record<string, unknown>,
+): void {
+  childStdin(session).write(JSON.stringify({ type: "__emit", frame }) + "\n");
+}
+
+function collectFrames(session: OmpRpcSession): RpcFrame[] {
+  const frames: RpcFrame[] = [];
+  session.on("frame", (f: RpcFrame) => frames.push(f));
+  return frames;
+}
+
+async function waitUntil(
+  predicate: () => boolean,
+  timeoutMs = 2000,
+): Promise<void> {
+  const start = Date.now();
+  while (!predicate()) {
+    if (Date.now() - start > timeoutMs) throw new Error("waitUntil timed out");
+    await delay(5);
+  }
+}
+
+test("getSessionStats sends get_session_stats and returns the parsed stats", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getSessionStats();
+    // send() writes the request synchronously, so it is already captured.
+    const req = outgoing(writes).find((f) => f.type === "get_session_stats");
+    expect(req).toBeDefined();
+
+    const stats = {
+      tokens: 1234,
+      cost: 0.05,
+      contextUsage: { tokens: 1100, contextWindow: 200000, percent: 0.55 },
+    };
+    emitFrame(session, {
+      type: "response",
+      command: "get_session_stats",
+      id: req?.id as string,
+      success: true,
+      data: stats,
+    });
+    await expect(pending).resolves.toEqual(stats);
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("getSessionStats degrades to empty stats on an unknown command", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getSessionStats();
+    expect(outgoing(writes).some((f) => f.type === "get_session_stats")).toBe(
+      true,
+    );
+    // Real omp drops the id and reports success:false for unknown commands; the
+    // bridge must correlate by command name and degrade instead of hanging.
+    emitFrame(session, {
+      type: "response",
+      command: "get_session_stats",
+      success: false,
+      error: "Unknown command: get_session_stats",
+    });
+    await expect(pending).resolves.toEqual({});
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("compact sends the compact command with custom instructions", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.compact("keep the API decisions");
+    const req = outgoing(writes).find((f) => f.type === "compact");
+    expect(req).toBeDefined();
+    expect(req?.customInstructions).toBe("keep the API decisions");
+    emitFrame(session, {
+      type: "response",
+      command: "compact",
+      id: req?.id as string,
+      success: true,
+      data: {},
+    });
+    await expect(pending).resolves.toBeUndefined();
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("compact omits customInstructions when none are given", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.compact();
+    const req = outgoing(writes).find((f) => f.type === "compact");
+    expect(req).toBeDefined();
+    // undefined is dropped by JSON.stringify, matching the optional wire field.
+    expect(req?.customInstructions).toBeUndefined();
+    emitFrame(session, {
+      type: "response",
+      command: "compact",
+      id: req?.id as string,
+      success: true,
+    });
+    await expect(pending).resolves.toBeUndefined();
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("compact degrades on an unknown command", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.compact();
+    expect(outgoing(writes).some((f) => f.type === "compact")).toBe(true);
+    emitFrame(session, {
+      type: "response",
+      command: "compact",
+      success: false,
+      error: "Unknown command: compact",
+    });
+    await expect(pending).resolves.toBeUndefined();
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("isCompacting tracks auto_compaction_start/end and still forwards the frames", async () => {
+  const { session } = fakeSession();
+  try {
+    await session.whenReady();
+    const frames = collectFrames(session);
+    expect(session.isCompacting()).toBe(false);
+
+    emitFrame(session, {
+      type: "auto_compaction_start",
+      reason: "threshold",
+      action: "context-full",
+    });
+    await waitUntil(() =>
+      frames.some((f) => f.type === "auto_compaction_start"),
+    );
+    expect(session.isCompacting()).toBe(true);
+
+    emitFrame(session, {
+      type: "auto_compaction_end",
+      action: "context-full",
+      aborted: false,
+    });
+    await waitUntil(() => frames.some((f) => f.type === "auto_compaction_end"));
+    expect(session.isCompacting()).toBe(false);
+
+    // The renderer reads compaction state from these forwarded frames (evt:rpc).
+    const compaction = frames
+      .map((f) => f.type)
+      .filter((t) => typeof t === "string" && t.startsWith("auto_compaction"));
+    expect(compaction).toEqual([
+      "auto_compaction_start",
+      "auto_compaction_end",
+    ]);
+  } finally {
+    session.dispose();
+  }
+}, 15000);
