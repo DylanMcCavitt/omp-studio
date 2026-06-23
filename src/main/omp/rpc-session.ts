@@ -27,7 +27,10 @@ import type {
   SubagentInfo,
   ThinkingLevel,
 } from "@shared/rpc";
+import { scoped } from "../logger";
 import { augmentedEnv, ompBinary } from "../paths";
+
+const log = scoped("omp-rpc");
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -241,7 +244,7 @@ export class OmpRpcSession extends EventEmitter {
     try {
       stdin.write(JSON.stringify(frame) + "\n");
     } catch (error) {
-      console.warn("[omp-rpc] failed to write frame:", error);
+      log.warn("failed to write frame", { error });
     }
   }
 
@@ -249,11 +252,11 @@ export class OmpRpcSession extends EventEmitter {
     this.child.stdout?.on("data", (chunk: Buffer) => this.onStdout(chunk));
     // Drain + surface stderr so a chatty child never deadlocks on backpressure.
     this.child.stderr?.on("data", (chunk: Buffer) =>
-      console.warn("[omp-rpc] stderr:", chunk.toString("utf8").trimEnd()),
+      log.warn(`stderr: ${chunk.toString("utf8").trimEnd()}`),
     );
     // Swallow EPIPE etc. on a closing stdin; termination is handled via exit.
     this.child.stdin?.on("error", (error) =>
-      console.warn("[omp-rpc] stdin error:", error),
+      log.warn("stdin error", { error }),
     );
     this.child.on("error", (error: Error) =>
       this.settleTermination("error", error.message),
@@ -283,7 +286,7 @@ export class OmpRpcSession extends EventEmitter {
     try {
       frame = JSON.parse(line) as RpcFrame;
     } catch (error) {
-      console.warn("[omp-rpc] failed to parse frame:", line, error);
+      log.warn("failed to parse frame", { line, error });
       return;
     }
 
