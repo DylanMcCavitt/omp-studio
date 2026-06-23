@@ -5,6 +5,7 @@ import {
   type LucideIcon,
   MessagesSquare,
   Search,
+  TriangleAlert,
 } from "lucide-react";
 import {
   Fragment,
@@ -102,6 +103,10 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
   // flashes "No matches" or stale history before the new hits land.
   const searching =
     trimmed.length > 0 && (trimmed !== trimmedDebounced || history.loading);
+  // A failed transcript scan must never read as "no matches": surface it as an
+  // explicit error notice once the in-flight/debounce window has settled.
+  const historyError =
+    trimmed.length > 0 && !searching && Boolean(history.error);
 
   const routeResults = useMemo<FlatResult[]>(() => {
     const q = trimmed.toLowerCase();
@@ -243,14 +248,25 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
           aria-label="Search results"
           className="scrollbar min-h-0 flex-1 overflow-auto p-1.5"
         >
-          {results.length === 0 ? (
-            <div className="px-3 py-8 text-center text-sm text-ink-faint">
-              {searching
-                ? "Searching…"
-                : trimmed
-                  ? "No matches"
-                  : "Type to search"}
+          {historyError && (
+            <div
+              role="alert"
+              className="mx-1 mb-1 flex items-start gap-2 rounded-md border border-danger/30 bg-danger/10 px-2.5 py-2 text-xs text-danger"
+            >
+              <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>Transcript search failed. {history.error}</span>
             </div>
+          )}
+          {results.length === 0 ? (
+            historyError ? null : (
+              <div className="px-3 py-8 text-center text-sm text-ink-faint">
+                {searching
+                  ? "Searching…"
+                  : trimmed
+                    ? `No results for “${trimmed}”`
+                    : "Type to search"}
+              </div>
+            )
           ) : (
             results.map((r, i) => {
               const showHeader = i === 0 || results[i - 1]?.kind !== r.kind;

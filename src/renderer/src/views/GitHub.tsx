@@ -1,5 +1,6 @@
 import {
   CircleDot,
+  FolderOpen,
   GitBranch,
   GitPullRequest,
   Inbox,
@@ -8,7 +9,13 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useState } from "react";
-import { Badge, EmptyState, IconButton, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  IconButton,
+  Spinner,
+} from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { formatNumber, formatRelativeTime } from "@/lib/format";
 import { useAsync } from "@/lib/useAsync";
@@ -86,9 +93,13 @@ function ReposTab() {
 function IssuesTab() {
   const selectedProject = useAppStore((s) => s.selectedProject);
   const { data, loading, error } = useAsync(
-    () => window.omp.github.listIssues(undefined, selectedProject ?? undefined),
+    () =>
+      selectedProject
+        ? window.omp.github.listIssues(undefined, selectedProject)
+        : Promise.resolve([]),
     [selectedProject],
   );
+  if (!selectedProject) return <NeedsProject kind="issues" />;
   if (loading) return <Centered />;
   if (error) return <Failed hint={error} />;
   const issues = data ?? [];
@@ -141,12 +152,12 @@ function PrsTab() {
   const selectedProject = useAppStore((s) => s.selectedProject);
   const { data, loading, error } = useAsync(
     () =>
-      window.omp.github.listPullRequests(
-        undefined,
-        selectedProject ?? undefined,
-      ),
+      selectedProject
+        ? window.omp.github.listPullRequests(undefined, selectedProject)
+        : Promise.resolve([]),
     [selectedProject],
   );
+  if (!selectedProject) return <NeedsProject kind="pull requests" />;
   if (loading) return <Centered />;
   if (error) return <Failed hint={error} />;
   const prs = data ?? [];
@@ -226,6 +237,31 @@ function Failed({ hint }: { hint: string }) {
       icon={<TriangleAlert className="h-6 w-6" />}
       title="Failed to load"
       hint={hint}
+    />
+  );
+}
+
+function NeedsProject({ kind }: { kind: "issues" | "pull requests" }) {
+  const setSelectedProject = useAppStore((s) => s.setSelectedProject);
+  return (
+    <EmptyState
+      icon={<FolderOpen className="h-6 w-6" />}
+      title="No project selected"
+      hint={`Choose a project directory to see its ${kind}.`}
+      action={
+        <Button
+          variant="subtle"
+          size="sm"
+          onClick={() => {
+            void window.omp.pickDirectory().then((dir) => {
+              if (dir) setSelectedProject(dir);
+            });
+          }}
+        >
+          <FolderOpen className="h-3.5 w-3.5" />
+          Choose project
+        </Button>
+      }
     />
   );
 }
