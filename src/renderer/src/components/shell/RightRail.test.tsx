@@ -83,7 +83,10 @@ describe("RightRail", () => {
     expect(
       screen.queryByRole("button", { name: "Chat" }),
     ).not.toBeInTheDocument();
-    // The destinations the old sidebar nav owned are still reachable here.
+    expect(
+      screen.queryByRole("button", { name: "Sessions" }),
+    ).not.toBeInTheDocument();
+    // The v3 rail keeps Dashboard and Settings as icon destinations.
     expect(
       screen.getByRole("button", { name: "Dashboard" }),
     ).toBeInTheDocument();

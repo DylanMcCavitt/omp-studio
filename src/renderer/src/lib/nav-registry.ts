@@ -114,24 +114,26 @@ export const NAV_ENTRIES: readonly NavEntry[] = Object.entries(
 ).map(([route, def]) => ({ route: route as Route, ...def }));
 
 /**
- * The destinations shown in the right icon rail: every nav entry that is not a
- * `primary` surface (i.e. everything except `chat`). The rail is the only way
- * these are reached now that the flat sidebar nav list is gone (AGE-630).
+ * The destinations shown in the right icon rail. Chat is the primary center
+ * surface, and Sessions stays panel-renderable for existing history/deep links
+ * without occupying one of the nine v3 rail icons.
  */
 export const RAIL_ENTRIES: readonly NavEntry[] = NAV_ENTRIES.filter(
-  (e) => !e.primary,
+  (e) => !e.primary && e.route !== "sessions",
 );
 
-/** Rail entries keyed by route — a small static lookup for the panel host. */
-const RAIL_ENTRY_BY_ROUTE: Partial<Record<Route, NavEntry>> =
-  Object.fromEntries(RAIL_ENTRIES.map((e) => [e.route, e]));
+/** Panel entries keyed by route — a small static lookup for the panel host. */
+const PANEL_ENTRY_BY_ROUTE: Partial<Record<Route, NavEntry>> =
+  Object.fromEntries(
+    NAV_ENTRIES.filter((e) => !e.primary).map((e) => [e.route, e]),
+  );
 
-/** The rail entry for `route`, or undefined when it is not a rail destination. */
+/** The panel entry for `route`, or undefined when it is not panel-renderable. */
 export function railEntry(route: Route): NavEntry | undefined {
-  return RAIL_ENTRY_BY_ROUTE[route];
+  return PANEL_ENTRY_BY_ROUTE[route];
 }
 
-/** Whether `route` is a right-rail destination (railable, not a primary surface). */
+/** Whether `route` can render in the right-side docked panel host. */
 export function isRailRoute(route: Route): boolean {
-  return RAIL_ENTRY_BY_ROUTE[route] !== undefined;
+  return PANEL_ENTRY_BY_ROUTE[route] !== undefined;
 }
