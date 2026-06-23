@@ -6,6 +6,8 @@ import type {
   AgentInfo,
   BrowserViewState,
   DashboardData,
+  FileContent,
+  FileEntry,
   GhIssue,
   GhPr,
   GhRepo,
@@ -124,6 +126,10 @@ export const CH = {
   browserSetBounds: "browser:setBounds",
   browserDestroy: "browser:destroy",
   evtBrowserState: "evt:browser-state",
+  // feature 4 — files (req/resp; FS access scoped to the active workspace cwd)
+  filesReadDir: "files:readDir",
+  filesReadFile: "files:readFile",
+  filesWriteFile: "files:writeFile",
 } as const;
 
 export type ChannelName = (typeof CH)[keyof typeof CH];
@@ -418,5 +424,17 @@ export interface OmpApi {
     unarchive(path: string): Promise<void>;
     reveal(path: string): Promise<void>;
     exportHtml(path: string): Promise<string>;
+  };
+
+  files: {
+    /** Shallow listing of `relPath` under the active workspace (root when omitted). */
+    readDir(relPath?: string): Promise<FileEntry[]>;
+    /** Read a workspace-relative file as text; `null` when missing/unreadable. */
+    readFile(relPath: string): Promise<FileContent | null>;
+    /** Atomically write text to a workspace-relative file. */
+    writeFile(
+      relPath: string,
+      text: string,
+    ): Promise<{ ok: boolean; error?: string }>;
   };
 }
