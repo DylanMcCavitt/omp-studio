@@ -407,8 +407,8 @@ export interface OmpApi {
   };
 
   settings: {
-    get(): Promise<StudioSettingsV1>;
-    update(patch: Partial<StudioSettingsV1>): Promise<StudioSettingsV1>;
+    get(): Promise<StudioSettings>;
+    update(patch: Partial<StudioSettings>): Promise<StudioSettings>;
   };
 
   session: {

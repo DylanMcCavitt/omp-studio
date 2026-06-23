@@ -5,17 +5,20 @@
 // non-electron contexts such as `bun test`).
 //
 // Hard rule: settings NEVER hold secrets. Persistence only ever writes the
-// known `StudioSettingsV1` keys — unknown keys (including any token-shaped
+// known `StudioSettings` (V2) keys — unknown keys (including any token-shaped
 // data a future caller might pass) are dropped on read and on update.
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
+  LayoutSettings,
   OpenSessionDescriptor,
   RecentProject,
-  StudioSettingsV1,
+  StudioSettings,
   ThemeMode,
+  UiPrefs,
+  Workspace,
 } from "@shared/ipc";
 import type { ApprovalMode, ApprovalPolicy, ThinkingLevel } from "@shared/rpc";
 import { scoped } from "../logger";
@@ -37,6 +40,11 @@ const THINKING_LEVELS = [
   "xhigh",
 ] as const;
 const SESSION_STATUSES = ["open", "hibernated", "closed"] as const;
+
+// Default concurrency cap for the (off-by-default) terminal capability. Only
+// materialised on a fresh install; an upgraded V1 file leaves `terminal`
+// undefined until the user opts in.
+const DEFAULT_TERMINAL_MAX_CONCURRENT = 4;
 
 // ---------------------------------------------------------------------------
 // Settings directory (injected at startup; env override for plain-node use)
@@ -67,10 +75,16 @@ function resolveSettingsDir(): string {
 // Defaults
 // ---------------------------------------------------------------------------
 
-/** A fresh copy of the v1 defaults. Each call returns a new object. */
-export function defaultSettings(): StudioSettingsV1 {
+/**
+ * A fresh copy of the V2 defaults. Each call returns a new object. The
+ * capability flags are minted here with secure-by-default values (terminal +
+ * browser disabled, Linear writes disabled); a fresh install is therefore
+ * self-documenting, while an upgraded V1 file leaves these namespaces
+ * undefined (still disabled) — see {@link migrate}.
+ */
+export function defaultSettings(): StudioSettings {
   return {
-    version: 1,
+    version: 2,
     theme: "system",
     defaultProject: null,
     defaultModel: null,
@@ -80,6 +94,12 @@ export function defaultSettings(): StudioSettingsV1 {
     liveSessionLimit: 4,
     recentProjects: [],
     openSessions: [],
+    linear: { writesEnabled: false },
+    terminal: {
+      enabled: false,
+      maxConcurrent: DEFAULT_TERMINAL_MAX_CONCURRENT,
+    },
+    browser: { enabled: false },
   };
 }
 
@@ -174,49 +194,209 @@ function coerceOpenSessions(
   return out;
 }
 
-/**
- * Merge only the KNOWN settings keys from `patch` onto `base`, coercing each
- * value and dropping anything unknown or invalid. Used both to normalize an
- * on-disk v1 object (base = defaults) and to apply a renderer update patch
- * (base = current settings). The result is always a clean `StudioSettingsV1`.
- */
-function mergeKnown(
-  base: StudioSettingsV1,
-  patch: Record<string, unknown>,
-): StudioSettingsV1 {
-  const next: StudioSettingsV1 = { ...base, version: 1 };
+// ---- V2 namespace coercers ------------------------------------------------
+// Each returns `undefined` when the input is missing or the wrong shape, so a
+// caller only overrides its base value when the patch carries a valid one.
+// Every coercer rebuilds a fresh object from known fields only, so any extra
+// (e.g. token-shaped) keys are structurally dropped — secrets can never ride
+// along inside a known namespace.
 
-  if (isOneOf<ThemeMode>(patch.theme, THEME_MODES)) next.theme = patch.theme;
+function coerceWorkspaces(value: unknown): Workspace[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: Workspace[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const { id, cwd, label, pinned, lastUsedAt } = item;
+    if (
+      typeof id === "string" &&
+      typeof cwd === "string" &&
+      typeof label === "string" &&
+      typeof pinned === "boolean" &&
+      typeof lastUsedAt === "string"
+    ) {
+      out.push({ id, cwd, label, pinned, lastUsedAt });
+    }
+  }
+  return out;
+}
+
+function coerceStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((v): v is string => typeof v === "string");
+}
+
+function coerceLayout(value: unknown): LayoutSettings | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: LayoutSettings = {};
+  if (
+    typeof value.sidebarWidthPct === "number" &&
+    Number.isFinite(value.sidebarWidthPct)
+  ) {
+    out.sidebarWidthPct = value.sidebarWidthPct;
+  }
+  if (
+    typeof value.chatRailWidthPct === "number" &&
+    Number.isFinite(value.chatRailWidthPct)
+  ) {
+    out.chatRailWidthPct = value.chatRailWidthPct;
+  }
+  if (typeof value.chatRailCollapsed === "boolean") {
+    out.chatRailCollapsed = value.chatRailCollapsed;
+  }
+  const navOrder = coerceStringArray(value.navOrder);
+  if (navOrder) out.navOrder = navOrder;
+  const navHidden = coerceStringArray(value.navHidden);
+  if (navHidden) out.navHidden = navHidden;
+  if (Array.isArray(value.chatRailPanels)) {
+    const panels: { id: string; visible: boolean }[] = [];
+    for (const item of value.chatRailPanels) {
+      if (
+        isRecord(item) &&
+        typeof item.id === "string" &&
+        typeof item.visible === "boolean"
+      ) {
+        panels.push({ id: item.id, visible: item.visible });
+      }
+    }
+    out.chatRailPanels = panels;
+  }
+  return out;
+}
+
+function coerceUiPrefs(value: unknown): UiPrefs | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: UiPrefs = {};
+  if (isRecord(value.collapsed)) {
+    const collapsed: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(value.collapsed)) {
+      if (typeof v === "boolean") collapsed[k] = v;
+    }
+    out.collapsed = collapsed;
+  }
+  const pinnedCommands = coerceStringArray(value.pinnedCommands);
+  if (pinnedCommands) out.pinnedCommands = pinnedCommands;
+  return out;
+}
+
+/**
+ * NON-SECRET Linear metadata only. The API key lives in the OS keychain and
+ * MUST never be persisted here, so we copy `writesEnabled`/`defaultTeamId`
+ * explicitly and drop everything else (including any `apiKey`/`token` field a
+ * caller might smuggle in).
+ */
+function coerceLinearMeta(
+  value: unknown,
+): StudioSettings["linear"] | undefined {
+  if (!isRecord(value) || typeof value.writesEnabled !== "boolean") {
+    return undefined;
+  }
+  const out: NonNullable<StudioSettings["linear"]> = {
+    writesEnabled: value.writesEnabled,
+  };
+  const teamId = value.defaultTeamId;
+  if (teamId === null || typeof teamId === "string") {
+    out.defaultTeamId = teamId;
+  }
+  return out;
+}
+
+function coerceTerminal(
+  value: unknown,
+): StudioSettings["terminal"] | undefined {
+  if (!isRecord(value) || typeof value.enabled !== "boolean") return undefined;
+  const mc = value.maxConcurrent;
+  const maxConcurrent =
+    typeof mc === "number" && Number.isFinite(mc) && mc >= 1
+      ? Math.floor(mc)
+      : DEFAULT_TERMINAL_MAX_CONCURRENT;
+  return { enabled: value.enabled, maxConcurrent };
+}
+
+function coerceBrowser(value: unknown): StudioSettings["browser"] | undefined {
+  if (!isRecord(value) || typeof value.enabled !== "boolean") return undefined;
+  return { enabled: value.enabled };
+}
+
+/** One pinned-false workspace per recent project (1:1, used by the V1→V2 migration). */
+function workspaceFromRecent(project: RecentProject): Workspace {
+  return {
+    id: randomUUID(),
+    cwd: project.cwd,
+    label: project.label,
+    pinned: false,
+    lastUsedAt: project.lastUsedAt,
+  };
+}
+
+/**
+ * Coerce the legacy V1 fields from `patch` onto `target` in place, dropping
+ * anything unknown or invalid. Shared by {@link mergeKnown} and the V1→V2
+ * migration (which applies ONLY these fields).
+ */
+function applyV1Keys(
+  target: StudioSettings,
+  patch: Record<string, unknown>,
+): void {
+  if (isOneOf<ThemeMode>(patch.theme, THEME_MODES)) target.theme = patch.theme;
 
   if ("defaultProject" in patch) {
     const v = patch.defaultProject;
-    if (v === null || typeof v === "string") next.defaultProject = v;
+    if (v === null || typeof v === "string") target.defaultProject = v;
   }
   if ("defaultModel" in patch) {
     const v = patch.defaultModel;
-    if (v === null || typeof v === "string") next.defaultModel = v;
+    if (v === null || typeof v === "string") target.defaultModel = v;
   }
   if (isOneOf<ThinkingLevel>(patch.defaultThinkingLevel, THINKING_LEVELS)) {
-    next.defaultThinkingLevel = patch.defaultThinkingLevel;
+    target.defaultThinkingLevel = patch.defaultThinkingLevel;
   }
   if (isOneOf<ApprovalMode>(patch.defaultApprovalMode, APPROVAL_MODES)) {
-    next.defaultApprovalMode = patch.defaultApprovalMode;
+    target.defaultApprovalMode = patch.defaultApprovalMode;
   }
   if (typeof patch.defaultAutoApprove === "boolean") {
-    next.defaultAutoApprove = patch.defaultAutoApprove;
+    target.defaultAutoApprove = patch.defaultAutoApprove;
   }
   if (
     typeof patch.liveSessionLimit === "number" &&
     Number.isFinite(patch.liveSessionLimit) &&
     patch.liveSessionLimit >= 1
   ) {
-    next.liveSessionLimit = Math.floor(patch.liveSessionLimit);
+    target.liveSessionLimit = Math.floor(patch.liveSessionLimit);
   }
 
   const recentProjects = coerceRecentProjects(patch.recentProjects);
-  if (recentProjects) next.recentProjects = recentProjects;
+  if (recentProjects) target.recentProjects = recentProjects;
   const openSessions = coerceOpenSessions(patch.openSessions);
-  if (openSessions) next.openSessions = openSessions;
+  if (openSessions) target.openSessions = openSessions;
+}
+
+/**
+ * Merge only the KNOWN settings keys (V1 + the V2 namespaces) from `patch` onto
+ * `base`, coercing each value and dropping anything unknown, invalid, or
+ * token-shaped. Used both to normalize an on-disk V2 object (base = defaults)
+ * and to apply a renderer update patch (base = current settings). The result is
+ * always a clean `StudioSettings` (V2).
+ */
+function mergeKnown(
+  base: StudioSettings,
+  patch: Record<string, unknown>,
+): StudioSettings {
+  const next: StudioSettings = { ...base, version: 2 };
+
+  applyV1Keys(next, patch);
+
+  const workspaces = coerceWorkspaces(patch.workspaces);
+  if (workspaces) next.workspaces = workspaces;
+  const layout = coerceLayout(patch.layout);
+  if (layout) next.layout = layout;
+  const ui = coerceUiPrefs(patch.ui);
+  if (ui) next.ui = ui;
+  const linear = coerceLinearMeta(patch.linear);
+  if (linear) next.linear = linear;
+  const terminal = coerceTerminal(patch.terminal);
+  if (terminal) next.terminal = terminal;
+  const browser = coerceBrowser(patch.browser);
+  if (browser) next.browser = browser;
 
   return next;
 }
@@ -226,15 +406,17 @@ function mergeKnown(
 // ---------------------------------------------------------------------------
 
 /**
- * Normalize an arbitrary parsed-JSON value into a valid `StudioSettingsV1`.
- * Switches on the stored `version`; the current (v1) shape is coerced field by
- * field, and any other/missing version falls back to defaults with a logged
- * warning. Never throws.
+ * Normalize an arbitrary parsed-JSON value into a valid `StudioSettings` (V2).
+ * Switches on the stored `version`: a V2 file is coerced field by field; a
+ * legacy V1 file is upgraded ({@link migrateV1}); any other/missing version
+ * falls back to defaults with a logged warning. Never throws.
  */
-export function migrate(raw: unknown): StudioSettingsV1 {
+export function migrate(raw: unknown): StudioSettings {
   if (!isRecord(raw)) return defaultSettings();
   switch (raw.version) {
     case 1:
+      return migrateV1(raw);
+    case 2:
       return mergeKnown(defaultSettings(), raw);
     default:
       log.warn("unknown settings version; using defaults", {
@@ -242,6 +424,26 @@ export function migrate(raw: unknown): StudioSettingsV1 {
       });
       return defaultSettings();
   }
+}
+
+/**
+ * Upgrade a legacy V1 file to V2. Only the V1 fields are coerced; the new V2
+ * namespaces are intentionally left undefined (an upgrading user opts into
+ * capabilities explicitly, so any V2-shaped keys smuggled into a V1 file are
+ * ignored — still secure). `workspaces` is synthesised 1:1 from the migrated
+ * recent projects (pinned: false), the one new field we materialise.
+ */
+function migrateV1(raw: Record<string, unknown>): StudioSettings {
+  const next: StudioSettings = {
+    ...defaultSettings(),
+    version: 2,
+    linear: undefined,
+    terminal: undefined,
+    browser: undefined,
+  };
+  applyV1Keys(next, raw);
+  next.workspaces = next.recentProjects.map(workspaceFromRecent);
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,7 +454,7 @@ export function migrate(raw: unknown): StudioSettingsV1 {
  * Read `<userData>/settings.json`. Returns defaults when the file is missing,
  * unreadable, or corrupt — and never throws.
  */
-export async function loadSettings(): Promise<StudioSettingsV1> {
+export async function loadSettings(): Promise<StudioSettings> {
   try {
     const raw = await readFile(
       join(resolveSettingsDir(), SETTINGS_FILE),
@@ -266,10 +468,10 @@ export async function loadSettings(): Promise<StudioSettingsV1> {
 
 /**
  * Persist settings atomically: write a sibling temp file, then rename over the
- * target (atomic on a single filesystem). Only the known v1 keys are written,
+ * target (atomic on a single filesystem). Only the known V2 keys are written,
  * so secrets can never be persisted even if present on the input object.
  */
-export async function saveSettings(settings: StudioSettingsV1): Promise<void> {
+export async function saveSettings(settings: StudioSettings): Promise<void> {
   const clean = mergeKnown(
     defaultSettings(),
     settings as unknown as Record<string, unknown>,
@@ -292,8 +494,8 @@ export async function saveSettings(settings: StudioSettingsV1): Promise<void> {
  * unknown/invalid dropped), persist atomically, and return the new settings.
  */
 export async function updateSettings(
-  patch: Partial<StudioSettingsV1>,
-): Promise<StudioSettingsV1> {
+  patch: Partial<StudioSettings>,
+): Promise<StudioSettings> {
   const current = await loadSettings();
   const next = mergeKnown(current, patch as Record<string, unknown>);
   await saveSettings(next);

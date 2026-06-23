@@ -3,18 +3,18 @@
 // pessimistic — it persists through the bridge and adopts the canonical
 // settings the main process returns, so the UI never drifts from disk.
 
-import type { StudioSettingsV1 } from "@shared/ipc";
+import type { StudioSettings } from "@shared/ipc";
 import { create } from "zustand";
 import { upsertRecentProject } from "@/lib/recent-projects";
 
 interface SettingsState {
-  settings: StudioSettingsV1 | null;
+  settings: StudioSettings | null;
   loading: boolean;
   error: string | undefined;
   /** Fetch settings from the bridge. Safe to call repeatedly (idempotent). */
   load(): Promise<void>;
   /** Persist a patch and adopt the returned canonical settings. */
-  update(patch: Partial<StudioSettingsV1>): Promise<void>;
+  update(patch: Partial<StudioSettings>): Promise<void>;
   /** Bump a project to the front of the recents list (best-effort). */
   recordProject(cwd: string): Promise<void>;
 }

@@ -3,7 +3,7 @@ import type {
   ProviderAuthStatus,
   ProviderInfo,
 } from "@shared/domain";
-import type { StudioSettingsV1, ThemeMode } from "@shared/ipc";
+import type { StudioSettings, ThemeMode } from "@shared/ipc";
 import type { ApprovalMode, ThinkingLevel } from "@shared/rpc";
 import {
   Boxes,
@@ -428,7 +428,7 @@ function ProjectsPanel() {
                 <IconButton
                   label="Remove project"
                   onClick={() => {
-                    const patch: Partial<StudioSettingsV1> = {
+                    const patch: Partial<StudioSettings> = {
                       recentProjects: recentProjects.filter(
                         (p) => p.cwd !== project.cwd,
                       ),

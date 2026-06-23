@@ -12,7 +12,7 @@ import type {
   OmpApi,
   OpenSessionDescriptor,
   PromptOptions,
-  StudioSettingsV1,
+  StudioSettings,
 } from "@shared/ipc";
 import { CH } from "@shared/ipc";
 import type { SubagentSubscriptionLevel, ThinkingLevel } from "@shared/rpc";
@@ -188,7 +188,7 @@ const api: OmpApi = {
 
   settings: {
     get: () => ipcRenderer.invoke(CH.settingsGet),
-    update: (patch: Partial<StudioSettingsV1>) =>
+    update: (patch: Partial<StudioSettings>) =>
       ipcRenderer.invoke(CH.settingsUpdate, patch),
   },
 

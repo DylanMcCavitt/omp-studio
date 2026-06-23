@@ -3,14 +3,14 @@
 // the persisted `settings.ui.collapsed` map, and writes a toggle back through a
 // debounced settings update. Behaviour + roles only.
 
-import type { StudioSettingsV1 } from "@shared/ipc";
+import type { StudioSettings } from "@shared/ipc";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSettingsStore } from "@/store/settings";
 import { Collapsible } from "./Collapsible";
 
-const BASE: StudioSettingsV1 = {
-  version: 1,
+const BASE: StudioSettings = {
+  version: 2,
   theme: "system",
   defaultProject: null,
   defaultModel: null,
@@ -24,7 +24,7 @@ const BASE: StudioSettingsV1 = {
 
 function seedCollapsed(collapsed: Record<string, boolean>) {
   useSettingsStore.setState({
-    settings: { ...BASE, ui: { collapsed } } as unknown as StudioSettingsV1,
+    settings: { ...BASE, ui: { collapsed } },
     loading: false,
     error: undefined,
   });
