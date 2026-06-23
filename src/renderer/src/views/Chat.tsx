@@ -6,8 +6,24 @@
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
 import type { ImageContent, RpcModel, ThinkingLevel } from "@shared/rpc";
-import { MessageSquarePlus, Plus, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  Brain,
+  Check,
+  Cpu,
+  Gauge,
+  GripVertical,
+  ListTodo,
+  type LucideIcon,
+  MessageSquarePlus,
+  MoreHorizontal,
+  PanelRightClose,
+  PanelRightOpen,
+  Plus,
+  Sparkles,
+  Users,
+} from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { PanelGroup, Panel as ResizablePanel } from "react-resizable-panels";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
 import { PromptComposer } from "@/components/chat/PromptComposer";
@@ -19,9 +35,34 @@ import {
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
-import { Badge, Button, Combobox, Panel, Spinner } from "@/components/ui";
+import { ResizeHandle } from "@/components/layout/ResizeHandle";
+import { useDragReorder } from "@/components/layout/useDragReorder";
+import { usePersistedPanelLayout } from "@/components/layout/usePersistedPanelLayout";
+import {
+  Badge,
+  Button,
+  Combobox,
+  EmptyState,
+  IconButton,
+  Menu,
+  MenuItem,
+  Panel,
+  Spinner,
+} from "@/components/ui";
 import { AddWorkspaceDialog } from "@/components/workspace/AddWorkspaceDialog";
 import { cn } from "@/lib/cn";
+import {
+  CHAT_RAIL_MAX_PCT,
+  CHAT_RAIL_MIN_PCT,
+  CHAT_TRANSCRIPT_MIN_PCT,
+  DEFAULT_CHAT_RAIL_WIDTH_PCT,
+  type RailPanelId,
+  type RailPanelState,
+  reorder,
+  resolveRailPanels,
+  roundPct,
+  setRailPanelVisible,
+} from "@/lib/layout";
 import { useAsync } from "@/lib/useAsync";
 import { sortWorkspaces } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
@@ -221,6 +262,31 @@ function StartPanel() {
   );
 }
 
+const RAIL_PANEL_TITLE: Record<RailPanelId, string> = {
+  model: "Model",
+  thinking: "Thinking",
+  stats: "Usage",
+  todos: "Plan",
+  subagents: "Subagents",
+};
+
+const RAIL_PANEL_ICON: Record<RailPanelId, LucideIcon> = {
+  model: Cpu,
+  thinking: Brain,
+  stats: Gauge,
+  todos: ListTodo,
+  subagents: Users,
+};
+
+/** Everything a rail panel needs to render its live controls. */
+interface RailContext {
+  sessionId: string;
+  model: RpcModel | null;
+  onModelChange: (provider: string, id: string) => void;
+  thinkingLevel: ThinkingLevel;
+  onThinkingChange: (level: ThinkingLevel) => void;
+}
+
 function ChatSession({ sessionId }: { sessionId: string }) {
   const open = useChatStore((s) => Boolean(s.openSessions[sessionId]));
   const openSession = useChatStore((s) => s.openSession);
@@ -232,6 +298,11 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const error = useActiveSession((s) => s?.error);
   const uiRequests = useActiveSession((s) => s?.uiRequests ?? NO_UI);
   const isCompacting = useActiveSession((s) => s?.isCompacting ?? false);
+  const railCollapsed = useSettingsStore(
+    (s) => s.settings?.layout?.chatRailCollapsed ?? false,
+  );
+  const settingsLoaded = useSettingsStore((s) => s.settings != null);
+  const setLayout = useSettingsStore((s) => s.setLayout);
 
   // Safety net: if the active session isn't registered yet (e.g. selected from
   // another surface), open it now. start() registers before activating, so this
@@ -256,49 +327,340 @@ function ChatSession({ sessionId }: { sessionId: string }) {
     ? (model.name ?? `${model.provider}/${model.id}`)
     : "—";
 
-  return (
-    <div className="flex h-full min-h-0">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b border-border-subtle px-4 py-2.5">
-          <span className="truncate font-mono text-sm text-ink">
-            {modelName}
-          </span>
-          <Badge variant="muted" className="capitalize">
-            {thinkingLevel}
-          </Badge>
-          <SessionStatusBadge
-            status={status}
-            uiRequests={uiRequests}
-            isCompacting={isCompacting}
-          />
-          <ContextMeterChip />
-        </header>
-        {error && status === "error" && (
-          <div className="border-b border-danger/30 bg-danger/10 px-4 py-1.5 text-xs text-danger">
-            {error}
-          </div>
-        )}
-        <MessageList />
-        <Composer />
-      </div>
-
-      <aside className="scrollbar w-80 shrink-0 space-y-4 overflow-y-auto border-l border-border-subtle bg-bg-panel/40 p-4">
-        <ModelPanel model={model} onChange={setModel} />
-        <ThinkingPanel level={thinkingLevel} onChange={setThinking} />
-        <SessionStatsPanel sessionId={sessionId} />
-        <TodoPanel />
-        <SubagentTree />
-      </aside>
+  const transcript = (
+    <div className="flex h-full min-w-0 flex-col">
+      <header className="flex items-center gap-3 border-b border-border-subtle px-4 py-2.5">
+        <span className="truncate font-mono text-sm text-ink">{modelName}</span>
+        <Badge variant="muted" className="capitalize">
+          {thinkingLevel}
+        </Badge>
+        <SessionStatusBadge
+          status={status}
+          uiRequests={uiRequests}
+          isCompacting={isCompacting}
+        />
+        <ContextMeterChip />
+      </header>
+      {error && status === "error" && (
+        <div className="border-b border-danger/30 bg-danger/10 px-4 py-1.5 text-xs text-danger">
+          {error}
+        </div>
+      )}
+      <MessageList />
+      <Composer />
     </div>
   );
+
+  if (railCollapsed) {
+    return (
+      <div className="flex h-full min-h-0">
+        <div className="min-w-0 flex-1">{transcript}</div>
+        <RailIconStrip
+          onExpand={() => setLayout({ chatRailCollapsed: false })}
+        />
+      </div>
+    );
+  }
+
+  const rail = (
+    <RightRail
+      sessionId={sessionId}
+      model={model}
+      onModelChange={setModel}
+      thinkingLevel={thinkingLevel}
+      onThinkingChange={setThinking}
+      onCollapse={() => setLayout({ chatRailCollapsed: true })}
+    />
+  );
+
+  return (
+    <ChatRailSplit
+      key={settingsLoaded ? "ready" : "boot"}
+      transcript={transcript}
+      rail={rail}
+    />
+  );
+}
+
+function ChatRailSplit({
+  transcript,
+  rail,
+}: {
+  transcript: ReactNode;
+  rail: ReactNode;
+}) {
+  const { initialLayout, groupRef, onLayout, reset } = usePersistedPanelLayout({
+    defaultLayout: [
+      100 - DEFAULT_CHAT_RAIL_WIDTH_PCT,
+      DEFAULT_CHAT_RAIL_WIDTH_PCT,
+    ],
+    read: (l) =>
+      l.chatRailWidthPct != null
+        ? [100 - l.chatRailWidthPct, l.chatRailWidthPct]
+        : undefined,
+    toPatch: ([, railPct = DEFAULT_CHAT_RAIL_WIDTH_PCT]) => ({
+      chatRailWidthPct: roundPct(railPct),
+    }),
+  });
+
+  return (
+    <PanelGroup
+      ref={groupRef}
+      direction="horizontal"
+      onLayout={onLayout}
+      className="flex h-full min-h-0"
+    >
+      <ResizablePanel
+        order={1}
+        defaultSize={initialLayout[0]}
+        minSize={CHAT_TRANSCRIPT_MIN_PCT}
+        className="flex min-h-0"
+      >
+        {transcript}
+      </ResizablePanel>
+      <ResizeHandle ariaLabel="Resize panel rail" onReset={reset} />
+      <ResizablePanel
+        order={2}
+        defaultSize={initialLayout[1]}
+        minSize={CHAT_RAIL_MIN_PCT}
+        maxSize={CHAT_RAIL_MAX_PCT}
+        className="flex min-h-0"
+      >
+        {rail}
+      </ResizablePanel>
+    </PanelGroup>
+  );
+}
+
+function RightRail({
+  onCollapse,
+  ...ctx
+}: RailContext & { onCollapse: () => void }) {
+  const panelsSetting = useSettingsStore(
+    (s) => s.settings?.layout?.chatRailPanels,
+  );
+  const setLayout = useSettingsStore((s) => s.setLayout);
+  const panels = useMemo(
+    () => resolveRailPanels(panelsSetting),
+    [panelsSetting],
+  );
+  const visible = panels.filter((p) => p.visible);
+
+  const dnd = useDragReorder((from, to) => {
+    const fromId = visible[from]?.id;
+    const toId = visible[to]?.id;
+    if (!fromId || !toId) return;
+    setLayout({
+      chatRailPanels: reorder(
+        panels,
+        panels.findIndex((p) => p.id === fromId),
+        panels.findIndex((p) => p.id === toId),
+      ),
+    });
+  });
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-bg-panel/40">
+      <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-3 py-2">
+        <span className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+          Panels
+        </span>
+        <div className="flex items-center gap-0.5">
+          <RailCustomizeMenu
+            panels={panels}
+            onToggle={(id, vis) =>
+              setLayout({
+                chatRailPanels: setRailPanelVisible(panels, id, vis),
+              })
+            }
+          />
+          <IconButton
+            label="Collapse panel rail"
+            onClick={onCollapse}
+            className="h-7 w-7"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </IconButton>
+        </div>
+      </div>
+      <div className="scrollbar flex-1 space-y-4 overflow-y-auto p-4">
+        {visible.length === 0 ? (
+          <EmptyState
+            icon={<MoreHorizontal className="h-5 w-5" />}
+            title="No panels shown"
+            hint="Enable panels from the Customize menu."
+          />
+        ) : (
+          visible.map((panel, index) => (
+            <div
+              key={panel.id}
+              {...dnd.zoneProps(index)}
+              className={cn(
+                "rounded-xl",
+                dnd.dragIndex === index && "opacity-50",
+                dnd.overIndex === index &&
+                  dnd.dragIndex !== index &&
+                  "ring-2 ring-accent/40",
+              )}
+            >
+              {renderRailPanel(
+                panel.id,
+                ctx,
+                <RailDragHandle
+                  label={RAIL_PANEL_TITLE[panel.id]}
+                  handleProps={dnd.handleProps(index)}
+                />,
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RailDragHandle({
+  label,
+  handleProps,
+}: {
+  label: string;
+  handleProps: React.ComponentProps<"button">;
+}) {
+  return (
+    <button
+      type="button"
+      {...handleProps}
+      aria-label={`Reorder ${label}`}
+      title="Drag to reorder"
+      className="-ml-1 flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded text-ink-faint transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+}
+
+function RailCustomizeMenu({
+  panels,
+  onToggle,
+}: {
+  panels: RailPanelState[];
+  onToggle: (id: RailPanelId, visible: boolean) => void;
+}) {
+  return (
+    <Menu
+      align="end"
+      aria-label="Customize panels"
+      trigger={({ open, toggle, triggerRef }) => (
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-label="Customize panels"
+          title="Customize panels"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      )}
+    >
+      {panels.map((p) => (
+        <MenuItem
+          key={p.id}
+          icon={
+            p.visible ? (
+              <Check className="h-3.5 w-3.5" />
+            ) : (
+              <span className="block h-3.5 w-3.5" />
+            )
+          }
+          onClick={() => onToggle(p.id, !p.visible)}
+        >
+          {RAIL_PANEL_TITLE[p.id]}
+        </MenuItem>
+      ))}
+    </Menu>
+  );
+}
+
+function RailIconStrip({ onExpand }: { onExpand: () => void }) {
+  const panelsSetting = useSettingsStore(
+    (s) => s.settings?.layout?.chatRailPanels,
+  );
+  const panels = useMemo(
+    () => resolveRailPanels(panelsSetting),
+    [panelsSetting],
+  );
+  const visible = panels.filter((p) => p.visible);
+  return (
+    <div className="flex h-full w-12 shrink-0 flex-col items-center gap-1 border-l border-border-subtle bg-bg-panel/40 py-2">
+      <IconButton
+        label="Expand panel rail"
+        onClick={onExpand}
+        className="h-8 w-8"
+      >
+        <PanelRightOpen className="h-4 w-4" />
+      </IconButton>
+      {visible.length > 0 && <div className="my-1 h-px w-6 bg-border-subtle" />}
+      {visible.map((panel) => {
+        const Icon = RAIL_PANEL_ICON[panel.id];
+        return (
+          <IconButton
+            key={panel.id}
+            label={RAIL_PANEL_TITLE[panel.id]}
+            onClick={onExpand}
+            className="h-8 w-8"
+          >
+            <Icon className="h-4 w-4" />
+          </IconButton>
+        );
+      })}
+    </div>
+  );
+}
+
+function renderRailPanel(
+  id: RailPanelId,
+  ctx: RailContext,
+  handle: ReactNode,
+): ReactNode {
+  switch (id) {
+    case "model":
+      return (
+        <ModelPanel
+          model={ctx.model}
+          onChange={ctx.onModelChange}
+          headerLeading={handle}
+        />
+      );
+    case "thinking":
+      return (
+        <ThinkingPanel
+          level={ctx.thinkingLevel}
+          onChange={ctx.onThinkingChange}
+          headerLeading={handle}
+        />
+      );
+    case "stats":
+      return (
+        <SessionStatsPanel sessionId={ctx.sessionId} headerLeading={handle} />
+      );
+    case "todos":
+      return <TodoPanel headerLeading={handle} />;
+    case "subagents":
+      return <SubagentTree headerLeading={handle} />;
+  }
 }
 
 function ModelPanel({
   model,
   onChange,
+  headerLeading,
 }: {
   model: RpcModel | null;
   onChange: (provider: string, id: string) => void;
+  headerLeading?: ReactNode;
 }) {
   const { data: models } = useAsync(() => window.omp.listModels(), []);
   const current = models?.find(
@@ -306,7 +668,12 @@ function ModelPanel({
   );
 
   return (
-    <Panel title="Model">
+    <Panel
+      title="Model"
+      collapsible
+      persistKey="chat.rail.model"
+      headerLeading={headerLeading}
+    >
       <select
         value={current?.selector ?? ""}
         disabled={!models}
@@ -334,12 +701,19 @@ function ModelPanel({
 function ThinkingPanel({
   level,
   onChange,
+  headerLeading,
 }: {
   level: ThinkingLevel;
   onChange: (level: ThinkingLevel) => void;
+  headerLeading?: ReactNode;
 }) {
   return (
-    <Panel title="Thinking">
+    <Panel
+      title="Thinking"
+      collapsible
+      persistKey="chat.rail.thinking"
+      headerLeading={headerLeading}
+    >
       <div className="flex flex-wrap gap-1">
         {THINKING_LEVELS.map((l) => (
           <button

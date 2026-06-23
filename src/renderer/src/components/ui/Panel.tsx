@@ -6,6 +6,12 @@ import { useCollapsePref } from "./useCollapsePref";
 export interface PanelProps {
   title?: ReactNode;
   actions?: ReactNode;
+  /**
+   * Node pinned to the very start of the header, before the collapse chevron /
+   * title (e.g. a drag handle for a reorderable rail panel). Renders the header
+   * even when there's no title/actions.
+   */
+  headerLeading?: ReactNode;
   className?: string;
   bodyClassName?: string;
   children?: ReactNode;
@@ -20,6 +26,7 @@ export interface PanelProps {
 export function Panel({
   title,
   actions,
+  headerLeading,
   className,
   bodyClassName,
   children,
@@ -41,40 +48,43 @@ export function Panel({
         className,
       )}
     >
-      {(title || actions || collapsible) && (
+      {(title || actions || collapsible || headerLeading) && (
         <header
           className={cn(
             "flex items-center justify-between gap-3 px-4 py-3",
             open && "border-b border-border-subtle",
           )}
         >
-          {collapsible ? (
-            <button
-              type="button"
-              onClick={() => setCollapsed(!collapsed)}
-              aria-expanded={open}
-              aria-controls={bodyId}
-              className="-ml-1 flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-            >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 shrink-0 text-ink-faint transition-transform",
-                  open && "rotate-90",
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {headerLeading}
+            {collapsible ? (
+              <button
+                type="button"
+                onClick={() => setCollapsed(!collapsed)}
+                aria-expanded={open}
+                aria-controls={bodyId}
+                className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              >
+                <ChevronRight
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-ink-faint transition-transform",
+                    open && "rotate-90",
+                  )}
+                />
+                {title && (
+                  <h2 className="truncate text-sm font-semibold text-ink">
+                    {title}
+                  </h2>
                 )}
-              />
-              {title ? (
+              </button>
+            ) : (
+              title && (
                 <h2 className="truncate text-sm font-semibold text-ink">
                   {title}
                 </h2>
-              ) : (
-                <span />
-              )}
-            </button>
-          ) : title ? (
-            <h2 className="text-sm font-semibold text-ink">{title}</h2>
-          ) : (
-            <span />
-          )}
+              )
+            )}
+          </div>
           {actions && (
             <div className="flex items-center gap-1.5">{actions}</div>
           )}

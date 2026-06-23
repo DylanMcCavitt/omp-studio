@@ -3,6 +3,7 @@
 
 import type { TodoPhase, TodoStatus } from "@shared/rpc";
 import { CheckCircle2, Circle, ListTodo, Loader, XCircle } from "lucide-react";
+import type { ReactNode } from "react";
 import { EmptyState, Panel } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useActiveSession } from "@/store/chat";
@@ -26,12 +27,21 @@ function TodoIcon({ status }: { status: TodoStatus }) {
 
 const EMPTY_TODOS: TodoPhase[] = [];
 
-export function TodoPanel() {
+export function TodoPanel({
+  headerLeading,
+}: {
+  headerLeading?: ReactNode;
+} = {}) {
   const phases = useActiveSession((s) => s?.todoPhases ?? EMPTY_TODOS);
   const hasTasks = phases.some((p) => p.tasks.length > 0);
 
   return (
-    <Panel title="Plan">
+    <Panel
+      title="Plan"
+      collapsible
+      persistKey="chat.rail.todos"
+      headerLeading={headerLeading}
+    >
       {!hasTasks ? (
         <EmptyState
           icon={<ListTodo className="h-5 w-5" />}

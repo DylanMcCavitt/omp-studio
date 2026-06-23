@@ -18,6 +18,7 @@ import {
   Pin,
   Plus,
   RefreshCw,
+  RotateCcw,
   ShieldAlert,
   SlidersHorizontal,
   SquareKanban,
@@ -316,6 +317,7 @@ function DefaultsPanel({
 function AppearancePanel() {
   const settings = useSettingsStore((s) => s.settings);
   const update = useSettingsStore((s) => s.update);
+  const resetLayout = useSettingsStore((s) => s.resetLayout);
 
   const title = (
     <span className="flex items-center gap-2">
@@ -348,6 +350,15 @@ function AppearancePanel() {
             </option>
           ))}
         </select>
+      </Field>
+      <Field
+        label="Layout"
+        hint="Restore the sidebar, chat rail, panel order, and visibility to their defaults."
+      >
+        <Button variant="subtle" onClick={() => void resetLayout()}>
+          <RotateCcw className="h-4 w-4" />
+          Reset layout
+        </Button>
       </Field>
     </Panel>
   );

@@ -170,7 +170,13 @@ export function ContextMeterChip() {
   );
 }
 
-export function SessionStatsPanel({ sessionId }: { sessionId: string }) {
+export function SessionStatsPanel({
+  sessionId,
+  headerLeading,
+}: {
+  sessionId: string;
+  headerLeading?: ReactNode;
+}) {
   const view = useStatsView();
   const messageCount = useActiveSession((s) => s?.messages.length ?? 0);
   const queuedCount = useActiveSession((s) => s?.queuedCount ?? 0);
@@ -201,6 +207,9 @@ export function SessionStatsPanel({ sessionId }: { sessionId: string }) {
   return (
     <Panel
       title="Usage"
+      collapsible
+      persistKey="chat.rail.stats"
+      headerLeading={headerLeading}
       actions={
         <IconButton
           label="Refresh stats"

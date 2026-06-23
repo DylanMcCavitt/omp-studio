@@ -14,7 +14,7 @@ import type {
   ToolExecutionFrame,
 } from "@shared/rpc";
 import { Eye, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import type { BadgeVariant } from "@/components/ui";
 import {
   Badge,
@@ -191,7 +191,11 @@ function NodeView({
 const EMPTY_SUBAGENTS: SubagentInfo[] = [];
 const EMPTY_EVENTS: Record<string, SubagentLiveState> = {};
 
-export function SubagentTree() {
+export function SubagentTree({
+  headerLeading,
+}: {
+  headerLeading?: ReactNode;
+} = {}) {
   const roster = useActiveSession((s) => s?.subagents ?? EMPTY_SUBAGENTS);
   const events = useActiveSession((s) => s?.subagentEvents ?? EMPTY_EVENTS);
   const sessionId = useActiveSession((s) => s?.sessionId);
@@ -220,7 +224,12 @@ export function SubagentTree() {
   }
 
   return (
-    <Panel title="Subagents">
+    <Panel
+      title="Subagents"
+      collapsible
+      persistKey="chat.rail.subagents"
+      headerLeading={headerLeading}
+    >
       {tree.length === 0 ? (
         <EmptyState
           icon={<Users className="h-5 w-5" />}
