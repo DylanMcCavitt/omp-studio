@@ -204,6 +204,14 @@ const api: OmpApi = {
     exportHtml: (path: string) =>
       ipcRenderer.invoke(CH.sessionExportHtml, path),
   },
+
+  files: {
+    readDir: (relPath?: string) => ipcRenderer.invoke(CH.filesReadDir, relPath),
+    readFile: (relPath: string) =>
+      ipcRenderer.invoke(CH.filesReadFile, relPath),
+    writeFile: (relPath: string, text: string) =>
+      ipcRenderer.invoke(CH.filesWriteFile, relPath, text),
+  },
 };
 
 if (process.contextIsolated) {

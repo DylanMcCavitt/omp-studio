@@ -268,3 +268,35 @@ export interface BrowserViewState {
   canGoForward: boolean;
   loading: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Files (feature 4) — workspace file tree + editor. All FS access happens in
+// the main process, path-contained under the active workspace cwd; the renderer
+// only ever sees these shapes. `readDir` returns a shallow (one-level) listing
+// for lazy tree expansion; every `path` is workspace-relative (POSIX-style).
+// ---------------------------------------------------------------------------
+
+export interface FileEntry {
+  /** Base name of the entry (no directory component). */
+  name: string;
+  /** Workspace-relative path to the entry. */
+  path: string;
+  kind: "file" | "dir";
+  /** Byte size for files; omitted for directories. */
+  size?: number;
+  /** True for dotfiles / OS-hidden entries. */
+  isHidden?: boolean;
+}
+
+export interface FileContent {
+  /** Workspace-relative path that was read. */
+  path: string;
+  /** Decoded UTF-8 text; empty when `binary` or `tooLarge`. */
+  text: string;
+  /** True when the file exceeded the read cap and `text` holds only a prefix. */
+  truncated: boolean;
+  /** True when the file is larger than the hard size limit and was not read. */
+  tooLarge: boolean;
+  /** True when the file looks binary (NUL bytes) and was not decoded. */
+  binary: boolean;
+}
