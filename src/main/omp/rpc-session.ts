@@ -23,6 +23,7 @@ import type {
   OmpMessage,
   RpcFrame,
   RpcState,
+  SessionStats,
   SubagentInfo,
   ThinkingLevel,
 } from "@shared/rpc";
@@ -31,6 +32,8 @@ import { augmentedEnv, ompBinary } from "../paths";
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
+  /** Command type, used to correlate id-less unknown-command failures. */
+  command: string;
 }
 
 interface OutgoingCommand {
@@ -70,6 +73,8 @@ export class OmpRpcSession extends EventEmitter {
   private isReady = false;
   private terminated = false;
   private disposed = false;
+  // Mid-compaction flag, tracked from auto_compaction_start/end event frames.
+  private compacting = false;
 
   constructor(opts: {
     cwd: string;
@@ -185,6 +190,38 @@ export class OmpRpcSession extends EventEmitter {
     await this.send({ type: "set_thinking_level", level });
   }
 
+  // Permissive session stats (tokens / cost / contextUsage + unknown future
+  // keys). omp builds that predate `get_session_stats` reply with an id-less
+  // "Unknown command" failure (rpc-mode emits these with id: undefined); we
+  // degrade to empty stats so the UI shows "no stats" instead of an error.
+  async getSessionStats(): Promise<SessionStats> {
+    try {
+      const data = await this.send({ type: "get_session_stats" });
+      return (data ?? {}) as SessionStats;
+    } catch (error) {
+      if (isUnknownCommand(error)) return {};
+      throw error;
+    }
+  }
+
+  // Compact the session context, optionally steering the summary. The command
+  // resolves when compaction finishes; auto-compaction progress (not the manual
+  // path) is surfaced via the auto_compaction_* frames -> isCompacting().
+  async compact(customInstructions?: string): Promise<void> {
+    try {
+      await this.send({ type: "compact", customInstructions });
+    } catch (error) {
+      if (isUnknownCommand(error)) return;
+      throw error;
+    }
+  }
+
+  // Whether omp is mid-compaction, derived from the auto_compaction_start/end
+  // event frames. The same frames are forwarded to the renderer over evt:rpc.
+  isCompacting(): boolean {
+    return this.compacting;
+  }
+
   // ---- internals --------------------------------------------------------
 
   private send(command: OutgoingCommand): Promise<unknown> {
@@ -193,7 +230,7 @@ export class OmpRpcSession extends EventEmitter {
     }
     const id = "req_" + this.sequence++;
     return new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      this.pending.set(id, { resolve, reject, command: command.type });
       this.writeFrame({ ...command, id });
     });
   }
@@ -259,6 +296,8 @@ export class OmpRpcSession extends EventEmitter {
       return;
     }
     if (frame.type === "ready") this.markReady();
+    else if (frame.type === "auto_compaction_start") this.compacting = true;
+    else if (frame.type === "auto_compaction_end") this.compacting = false;
     this.emit("frame", frame);
   }
 
@@ -281,10 +320,29 @@ export class OmpRpcSession extends EventEmitter {
 
   private resolveResponse(frame: RpcFrame): void {
     const id = frame.id;
-    if (typeof id !== "string") return;
-    const pending = this.pending.get(id);
-    if (!pending) return;
-    this.pending.delete(id);
+    if (typeof id === "string") {
+      const pending = this.pending.get(id);
+      if (!pending) return;
+      this.pending.delete(id);
+      this.settle(pending, frame);
+      return;
+    }
+    // omp emits unknown-command (and parse) failures with id: undefined, so
+    // they can't be matched by id. Reject the earliest in-flight request of the
+    // same command instead, so callers (e.g. getSessionStats) degrade rather
+    // than hang forever on a command the installed omp doesn't implement.
+    if (frame.success !== false || typeof frame.command !== "string") return;
+    for (const [pendingId, pending] of this.pending) {
+      if (pending.command === frame.command) {
+        this.pending.delete(pendingId);
+        this.settle(pending, frame);
+        return;
+      }
+    }
+  }
+
+  // Resolve or reject a correlated pending request from its response frame.
+  private settle(pending: PendingRequest, frame: RpcFrame): void {
     if (frame.success === false) {
       const error =
         typeof frame.error === "string" ? frame.error : "RPC command failed";
@@ -370,4 +428,11 @@ export class OmpRpcSession extends EventEmitter {
     for (const pending of this.pending.values()) pending.reject(error);
     this.pending.clear();
   }
+}
+
+// omp replies "Unknown command: <type>" for commands a given build doesn't
+// implement (rpc-mode default case). Detect it so optional bridge methods can
+// degrade gracefully instead of surfacing an error the host can't act on.
+function isUnknownCommand(error: unknown): boolean {
+  return error instanceof Error && /unknown command/i.test(error.message);
 }
