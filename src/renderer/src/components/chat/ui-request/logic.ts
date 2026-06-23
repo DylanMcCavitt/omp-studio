@@ -68,14 +68,15 @@ function stableSignature(value: unknown): string {
 }
 
 export function approvalKey(req: ExtensionUiRequest): string | null {
+  // ONLY a structured tool identity (+ argument signature) is a stable key. We
+  // never key on the prose `title`/`message`: two unrelated actions can share a
+  // generic title (e.g. "Confirm"), so a title-keyed allow rule would leak an
+  // approval from one action to another. No structured identity → no key → the
+  // "Always allow" affordance is disabled for that request.
   const tool = asString(req.toolName) ?? asString(req.tool);
-  if (tool) {
-    const sig = stableSignature(req.arguments ?? req.args);
-    return sig ? `tool:${tool}:${sig}` : `tool:${tool}`;
-  }
-  const title = asString(req.title);
-  if (title) return `confirm:${title}`;
-  return null;
+  if (!tool) return null;
+  const sig = stableSignature(req.arguments ?? req.args);
+  return sig ? `tool:${tool}:${sig}` : `tool:${tool}`;
 }
 
 /** A confirm whose key is already on the session allowlist auto-approves. */
@@ -126,4 +127,36 @@ export function partitionUiRequests(
     }
   }
   return { modal, hints, openUrls, cancels };
+}
+
+// ---------------------------------------------------------------------------
+// Cross-session timeout collection. Every response-required request fail-closes
+// on the bridge after its timeout, but the bridge writes only to the child — it
+// never tells the renderer. So the layer must independently expire stale
+// requests across ALL open sessions (not just the visible one), or a background
+// session's answered-on-the-bridge request would leave a dangling modal when
+// the user switches to it.
+// ---------------------------------------------------------------------------
+
+export interface PendingTimeout {
+  sessionId: string;
+  requestId: string;
+  timeoutMs: number;
+}
+
+export function collectResponseRequiredTimeouts(
+  openSessions: Record<string, { uiRequests: readonly ChatUiRequestEvent[] }>,
+  defaultMs: number,
+): PendingTimeout[] {
+  const out: PendingTimeout[] = [];
+  for (const [sessionId, slice] of Object.entries(openSessions)) {
+    for (const event of slice.uiRequests) {
+      if (!event.responseRequired) continue;
+      const requested = event.request.timeout;
+      const timeoutMs =
+        typeof requested === "number" && requested > 0 ? requested : defaultMs;
+      out.push({ sessionId, requestId: event.request.id, timeoutMs });
+    }
+  }
+  return out;
 }

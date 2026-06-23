@@ -29,6 +29,7 @@ import { InputRequestDialog } from "./ui-request/InputRequestDialog";
 import {
   approvalKey,
   asString,
+  collectResponseRequiredTimeouts,
   isAllowed,
   partitionUiRequests,
 } from "./ui-request/logic";
@@ -90,6 +91,12 @@ export function UiRequestLayer() {
   // a re-render never double-fires the side effect.
   const handledRef = useRef<Set<string>>(new Set());
 
+  // Per-request fail-closed timeout timers, keyed by request id across all
+  // sessions (managed by the cross-session timeout sweeper effect below).
+  const timeoutTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
+
   // Auto-approve allowlisted confirms.
   useEffect(() => {
     if (!modal || !suppressed) return;
@@ -139,20 +146,44 @@ export function UiRequestLayer() {
     }
   }, [status, activeSessionId, dismissUi]);
 
-  // Orphan handling — timeout: drop a stale modal once its timeout elapses. The
-  // bridge answers the child on its own timer; we only clear the dialog here.
+  // Orphan handling — timeout, across ALL sessions (not just the active modal).
+  // Each response-required request fail-closes on the bridge after its timeout,
+  // but the bridge writes only to the child; without this a background
+  // session's request would leave a dangling modal on switch. We arm one timer
+  // per request when first observed and clear it once the request resolves.
+  // Subscribing imperatively (not via render) keeps this independent of which
+  // session is active.
   useEffect(() => {
-    if (!modal || suppressed) return;
-    const requested = modal.request.timeout;
-    const ms =
-      typeof requested === "number" && requested > 0
-        ? requested
-        : DEFAULT_UI_REQUEST_TIMEOUT_MS;
-    const sessionId = modal.sessionId;
-    const id = modal.request.id;
-    const timer = setTimeout(() => dismissUi(sessionId, id), ms);
-    return () => clearTimeout(timer);
-  }, [modal, suppressed, dismissUi]);
+    const timers = timeoutTimersRef.current;
+    const reconcile = () => {
+      const pending = collectResponseRequiredTimeouts(
+        useChatStore.getState().openSessions,
+        DEFAULT_UI_REQUEST_TIMEOUT_MS,
+      );
+      const present = new Set<string>();
+      for (const { sessionId, requestId, timeoutMs } of pending) {
+        present.add(requestId);
+        if (timers.has(requestId)) continue;
+        const timer = setTimeout(() => {
+          timers.delete(requestId);
+          useChatStore.getState().dismissUiRequest(sessionId, requestId);
+        }, timeoutMs);
+        timers.set(requestId, timer);
+      }
+      for (const [id, timer] of timers) {
+        if (present.has(id)) continue;
+        clearTimeout(timer);
+        timers.delete(id);
+      }
+    };
+    reconcile();
+    const unsubscribe = useChatStore.subscribe(reconcile);
+    return () => {
+      unsubscribe();
+      for (const timer of timers.values()) clearTimeout(timer);
+      timers.clear();
+    };
+  }, []);
 
   const renderModal = () => {
     if (!modal) return null;
@@ -172,12 +203,14 @@ export function UiRequestLayer() {
             canAlwaysAllow={key !== null}
             onAlwaysAllow={() => {
               if (key && activeSessionId) {
-                const label =
+                // A rule only exists when a tool key exists, so the label is
+                // the tool identity (with its title as a readable suffix).
+                const tool =
                   asString(modal.request.toolName) ??
                   asString(modal.request.tool) ??
-                  asString(modal.request.title) ??
-                  asString(modal.request.message) ??
-                  "Approval";
+                  "tool";
+                const title = asString(modal.request.title);
+                const label = title ? `${tool} — ${title}` : tool;
                 addRule(activeSessionId, { key, label, createdAt: Date.now() });
               }
               resolve({ confirmed: true });

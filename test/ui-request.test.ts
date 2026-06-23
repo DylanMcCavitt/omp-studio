@@ -3,6 +3,7 @@ import {
   approvalKey,
   asString,
   classifyUiRequest,
+  collectResponseRequiredTimeouts,
   isAllowed,
   partitionUiRequests,
 } from "../src/renderer/src/components/chat/ui-request/logic";
@@ -62,13 +63,7 @@ describe("classifyUiRequest", () => {
 });
 
 describe("approvalKey", () => {
-  test("falls back to the dialog title when no tool identity exists", () => {
-    expect(approvalKey(req("confirm", { title: "Run command" }))).toBe(
-      "confirm:Run command",
-    );
-  });
-
-  test("prefers a structured tool identity + argument signature", () => {
+  test("requires a structured tool identity + argument signature", () => {
     expect(
       approvalKey(
         req("confirm", { toolName: "bash", arguments: { cmd: "ls" } }),
@@ -86,30 +81,52 @@ describe("approvalKey", () => {
     expect(a).toBe(b);
   });
 
-  test("is null when there is no stable structured key", () => {
+  test("NEVER keys on a prose title (no leak between same-titled actions)", () => {
+    // A generic/shared title must not become a stable allow key.
+    expect(approvalKey(req("confirm", { title: "Run command" }))).toBeNull();
+    expect(approvalKey(req("confirm", { title: "Confirm" }))).toBeNull();
+  });
+
+  test("is null when there is no tool identity at all", () => {
     expect(approvalKey(req("confirm", { message: "Continue?" }))).toBeNull();
   });
 });
 
 describe("isAllowed", () => {
-  const keys = new Set(["confirm:Run command"]);
+  const keys = new Set(['tool:bash:{"cmd":"ls"}']);
 
-  test("matches an allowlisted confirm", () => {
-    expect(isAllowed(keys, req("confirm", { title: "Run command" }))).toBe(
-      true,
-    );
+  test("matches an allowlisted confirm by its structured key", () => {
+    expect(
+      isAllowed(
+        keys,
+        req("confirm", { toolName: "bash", arguments: { cmd: "ls" } }),
+      ),
+    ).toBe(true);
   });
 
-  test("rejects a confirm whose key is not listed", () => {
-    expect(isAllowed(keys, req("confirm", { title: "Delete repo" }))).toBe(
+  test("rejects the same tool with different arguments", () => {
+    expect(
+      isAllowed(
+        keys,
+        req("confirm", { toolName: "bash", arguments: { cmd: "rm" } }),
+      ),
+    ).toBe(false);
+  });
+
+  test("never auto-approves a prose-titled confirm (no key)", () => {
+    const titleKeys = new Set(["confirm:Run command"]);
+    expect(isAllowed(titleKeys, req("confirm", { title: "Run command" }))).toBe(
       false,
     );
   });
 
   test("never auto-approves a non-confirm method", () => {
-    expect(isAllowed(keys, req("select", { title: "Run command" }))).toBe(
-      false,
-    );
+    expect(
+      isAllowed(
+        keys,
+        req("select", { toolName: "bash", arguments: { cmd: "ls" } }),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -142,6 +159,49 @@ describe("partitionUiRequests", () => {
     expect(p.hints).toEqual([]);
     expect(p.openUrls).toEqual([]);
     expect(p.cancels).toEqual([]);
+  });
+});
+
+describe("collectResponseRequiredTimeouts", () => {
+  test("collects response-required requests across ALL sessions", () => {
+    const openSessions = {
+      s1: {
+        uiRequests: [
+          ev(req("confirm", { timeout: 1000 }, "c1"), true, "s1"),
+          ev(req("notify", { message: "hi" }, "n1"), false, "s1"),
+        ],
+      },
+      s2: {
+        uiRequests: [ev(req("input", {}, "i1"), true, "s2")],
+      },
+    };
+    const out = collectResponseRequiredTimeouts(openSessions, 300_000);
+    expect(out).toEqual([
+      { sessionId: "s1", requestId: "c1", timeoutMs: 1000 },
+      { sessionId: "s2", requestId: "i1", timeoutMs: 300_000 },
+    ]);
+  });
+
+  test("uses the default when timeout is missing or invalid", () => {
+    const openSessions = {
+      s1: {
+        uiRequests: [
+          ev(req("confirm", { timeout: 0 }, "c1"), true, "s1"),
+          ev(req("editor", { timeout: -5 }, "e1"), true, "s1"),
+        ],
+      },
+    };
+    const out = collectResponseRequiredTimeouts(openSessions, 42);
+    expect(out.map((p) => p.timeoutMs)).toEqual([42, 42]);
+  });
+
+  test("skips non-response-required hints", () => {
+    const openSessions = {
+      s1: {
+        uiRequests: [ev(req("open_url", { url: "x" }, "u1"), false, "s1")],
+      },
+    };
+    expect(collectResponseRequiredTimeouts(openSessions, 1000)).toEqual([]);
   });
 });
 
