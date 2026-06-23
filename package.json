@@ -29,7 +29,8 @@
     "dist:mac": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {
-    "@electron-toolkit/utils": "^3.0.0"
+    "@electron-toolkit/utils": "^3.0.0",
+    "node-pty": "^1.0.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
