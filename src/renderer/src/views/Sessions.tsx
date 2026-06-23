@@ -313,6 +313,10 @@ export default function Sessions() {
 
   const handleSessionChanged = (result: SessionActionResult) => {
     void reload();
+    // In search mode the left pane is driven by hitsState, not the summary
+    // list, so re-run the search too: deleted/archived hits disappear and a
+    // rename reflects the new alias (searchSessions applies aliases).
+    if (searchMode) hitsState.reload();
     if (result.kind === "renamed") {
       setDetailRefresh((n) => n + 1);
     } else {
