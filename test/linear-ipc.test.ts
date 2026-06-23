@@ -1,29 +1,25 @@
-import { afterAll, beforeEach, expect, mock, test } from "bun:test";
+import { afterAll, beforeEach, expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IpcMain } from "electron";
+import { registerLinearIpc } from "../src/main/ipc/linear";
+import { setSecretBackend } from "../src/main/services/secret-store";
 import type { LinearStatusInfo } from "../src/shared/domain";
 import { CH } from "../src/shared/ipc";
 
-// ipc/linear.ts -> secret-store.ts value-imports electron (`app`, `safeStorage`).
-// Under bun there is no electron runtime, so it is stubbed BEFORE the module
-// loads. `isEncryptionAvailable:false` routes the secret store to its in-memory
-// fallback (no disk writes), giving a deterministic, hermetic key store. The key
-// is the writes gate (setApiKey validates before persisting) + read TTL status.
-//
-// mock.module must register before the import, which forces a dynamic import
-// here (the ts-no-dynamic-import test-boundary exception).
+// secret-store reaches electron only through setSecretBackend(); inject a fake
+// backend (isEncryptionAvailable:false -> in-memory fallback, no disk writes)
+// for a deterministic, hermetic key store. No module mocking / electron runtime.
 let userDataDir = "";
-mock.module("electron", () => ({
+setSecretBackend({
   app: { getPath: () => userDataDir },
   safeStorage: {
     isEncryptionAvailable: () => false,
     encryptString: (s: string) => Buffer.from(s),
     decryptString: (b: Buffer) => b.toString(),
   },
-}));
-const { registerLinearIpc } = await import("../src/main/ipc/linear");
+});
 
 type IpcHandler = (event: unknown, ...args: unknown[]) => unknown;
 

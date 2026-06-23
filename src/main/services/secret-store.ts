@@ -20,21 +20,29 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-// Lazy electron access: importing this module must NOT resolve electron's named
-// exports at static link time, or plain-node test graphs that load it without the
-// electron mock active fail with "Export named 'app' not found". Resolved (and
-// memoized) on the first secret op, where bun's mock.module and the real runtime
-// both intercept correctly.
+// Electron is reached only through this minimal structural surface so the module
+// (a) never resolves electron's named exports at static link time — plain-node
+// test graphs load it without an electron runtime — and (b) is deterministically
+// testable via setSecretBackend() rather than relying on module mocking.
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
+interface ElectronBackend {
+  app: { getPath(name: "userData"): string };
+  safeStorage: {
+    isEncryptionAvailable(): boolean;
+    encryptString(plain: string): Buffer;
+    decryptString(data: Buffer): string;
+  };
+}
 const requireCjs = createRequire(import.meta.url);
-let _electron: typeof import("electron") | undefined;
-function electron(): typeof import("electron") {
-  if (_electron === undefined) {
-    _electron = requireCjs("electron") as typeof import("electron");
-  }
-  return _electron;
+let injected: ElectronBackend | null = null;
+/** Test seam: inject a fake electron backend (app/safeStorage); pass null to reset. */
+export function setSecretBackend(backend: ElectronBackend | null): void {
+  injected = backend;
+}
+function electron(): ElectronBackend {
+  return injected ?? (requireCjs("electron") as ElectronBackend);
 }
 
 /** Session-only fallback when OS encryption is unavailable or a disk op fails. */
