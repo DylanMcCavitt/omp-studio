@@ -24,6 +24,8 @@ import type {
   OmpMessage,
   RpcFrame,
   RpcState,
+  SubagentEventFrame,
+  SubagentProgressFrame,
   ThinkingLevel,
   UserMessage,
 } from "@shared/rpc";
@@ -53,6 +55,28 @@ export interface HibernatedSession {
   error?: string;
 }
 
+/**
+ * Live drill-in transcript buffer for the currently-open SubagentInspector
+ * (feature 4). Only the LIVE path uses it: the store pumps `getSubagentMessages`
+ * on each incoming progress/event frame for `subagentId`, appending `messages`
+ * and advancing `cursor` (= `nextByte`); a `reset` clears and restarts. A
+ * completed subagent is read once via `readSession` straight in the component.
+ */
+export interface SubagentInspectorState {
+  sessionId: string;
+  subagentId: string;
+  sessionFile?: string;
+  /** Whether the watched subagent is still live (gates cursor pumping). */
+  live: boolean;
+  /** Byte offset for the next incremental `getSubagentMessages` read. */
+  cursor: number;
+  messages: OmpMessage[];
+  loading: boolean;
+  /** True once a live read has completed, so empty ≠ not-yet-loaded. */
+  started: boolean;
+  error?: string;
+}
+
 interface ChatState {
   /** Every open session's render state, keyed by studio session id. */
   openSessions: Record<string, LiveSessionState>;
@@ -70,6 +94,11 @@ interface ChatState {
   createError?: string;
   /** Cleanup for the single global bridge subscription (null until wired). */
   _unsub: (() => void) | null;
+  /**
+   * Live drill-in transcript buffer for the open SubagentInspector, or null
+   * when none is open. Ephemeral; never persisted.
+   */
+  _subagentInspector: SubagentInspectorState | null;
 }
 
 interface ChatActions {
@@ -147,6 +176,21 @@ interface ChatActions {
    * reports completion. Compaction changes context only — the JSONL is untouched.
    */
   compact(sessionId: string, instructions?: string): Promise<void>;
+  /**
+   * Open the live drill-in transcript for a subagent and seed its cursor. Live
+   * subagents pump `getSubagentMessages` incrementally on each incoming
+   * progress/event frame; completed ones are read once via `readSession` in the
+   * inspector component. Only one inspector is open at a time.
+   */
+  openSubagentInspector(
+    sessionId: string,
+    subagentId: string,
+    opts: { sessionFile?: string; live: boolean },
+  ): void;
+  /** Close the drill-in and drop its transcript buffer. */
+  closeSubagentInspector(): void;
+  /** Advance the open inspector's transcript cursor (frame-driven, not polled). */
+  _pumpSubagentMessages(): Promise<void>;
 
   _handleFrame(sessionId: string, frame: RpcFrame): void;
   _handleLifecycle(e: ChatLifecycleEvent): void;
@@ -193,6 +237,12 @@ function buildUserMessage(text: string, images?: ImageContent[]): UserMessage {
   return { role: "user", content, timestamp: Date.now() };
 }
 
+// Single-flight guards for the inspector cursor pump: only one
+// `getSubagentMessages` read runs at a time, and a frame that lands mid-read
+// re-pumps once it finishes so the final bytes are never missed (no polling).
+let inspectorPumpInFlight = false;
+let inspectorPumpQueued = false;
+
 export const useChatStore = create<ChatStore>()((set, get) => ({
   openSessions: {},
   hibernatedSessions: {},
@@ -200,6 +250,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   creating: false,
   createError: undefined,
   _unsub: null,
+  _subagentInspector: null,
 
   ensureSubscribed() {
     if (get()._unsub) return;
@@ -620,6 +671,95 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
+  openSubagentInspector(sessionId, subagentId, opts) {
+    set({
+      _subagentInspector: {
+        sessionId,
+        subagentId,
+        sessionFile: opts.sessionFile,
+        live: opts.live,
+        cursor: 0,
+        messages: [],
+        loading: opts.live && Boolean(opts.sessionFile),
+        started: false,
+        error: undefined,
+      },
+    });
+    // Live agents with a transcript get an immediate first read so history shows
+    // before the next frame; later reads are frame-driven via _handleFrame.
+    if (opts.live && opts.sessionFile) void get()._pumpSubagentMessages();
+  },
+
+  closeSubagentInspector() {
+    if (get()._subagentInspector) set({ _subagentInspector: null });
+  },
+
+  async _pumpSubagentMessages() {
+    const insp = get()._subagentInspector;
+    if (!insp) return;
+    if (!insp.live || !insp.sessionFile) return;
+    if (inspectorPumpInFlight) {
+      inspectorPumpQueued = true;
+      return;
+    }
+    inspectorPumpInFlight = true;
+    try {
+      do {
+        inspectorPumpQueued = false;
+        const cur = get()._subagentInspector;
+        if (!cur) break;
+        if (!cur.live || !cur.sessionFile) break;
+        try {
+          const res = await window.omp.chat.getSubagentMessages(cur.sessionId, {
+            sessionFile: cur.sessionFile,
+            fromByte: cur.cursor,
+          });
+          set((s) => {
+            const i = s._subagentInspector;
+            // The inspector may have closed or switched subagents mid-read;
+            // only apply when it still points at the same one.
+            if (
+              !i ||
+              i.subagentId !== cur.subagentId ||
+              i.sessionId !== cur.sessionId
+            ) {
+              return s;
+            }
+            const messages = res.reset
+              ? res.messages
+              : [...i.messages, ...res.messages];
+            return {
+              _subagentInspector: {
+                ...i,
+                messages,
+                cursor: res.nextByte,
+                loading: false,
+                started: true,
+                error: undefined,
+              },
+            };
+          });
+        } catch (e) {
+          set((s) => {
+            const i = s._subagentInspector;
+            if (!i || i.subagentId !== cur.subagentId) return s;
+            return {
+              _subagentInspector: {
+                ...i,
+                loading: false,
+                started: true,
+                error: errorMessage(e),
+              },
+            };
+          });
+          break;
+        }
+      } while (inspectorPumpQueued);
+    } finally {
+      inspectorPumpInFlight = false;
+    }
+  },
+
   _handleFrame(sessionId, frame) {
     if (!get().openSessions[sessionId]) return;
     get()._patch(sessionId, (s) => reduceSession(s, frame));
@@ -640,6 +780,21 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       case "subagent_lifecycle":
         void get()._refreshSubagents(sessionId);
         break;
+      case "subagent_progress":
+      case "subagent_event": {
+        // The reducer already stored the NESTED payload; if the open inspector
+        // is watching this live subagent, advance its transcript cursor.
+        const insp = get()._subagentInspector;
+        if (insp?.live && insp.sessionFile) {
+          const p = (frame as SubagentEventFrame | SubagentProgressFrame)
+            .payload as { id?: string; progress?: { id?: string } };
+          const fid = p?.id ?? p?.progress?.id;
+          if (fid && fid === insp.subagentId) {
+            void get()._pumpSubagentMessages();
+          }
+        }
+        break;
+      }
       default:
         break;
     }
