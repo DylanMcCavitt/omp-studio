@@ -35,6 +35,17 @@ interface AppState {
   focusSession: (focus: SessionFocus) => void;
   /** Clear the pending focus once the Sessions view has consumed it. */
   clearSessionFocus: () => void;
+
+  /**
+   * One-shot text to seed into the active chat composer (e.g. "/compact ").
+   * Set by "Use in chat" in Skills & Commands; the Composer adopts it once on
+   * mount/change, then clears it. Null when nothing is pending.
+   */
+  pendingComposerText: string | null;
+  /** Route to Chat and queue `text` for the composer to adopt once. */
+  prefillComposer: (text: string) => void;
+  /** Clear the pending composer seed after the composer has adopted it. */
+  clearPendingComposerText: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -47,4 +58,9 @@ export const useAppStore = create<AppState>((set) => ({
   sessionFocus: null,
   focusSession: (sessionFocus) => set({ route: "sessions", sessionFocus }),
   clearSessionFocus: () => set({ sessionFocus: null }),
+
+  pendingComposerText: null,
+  prefillComposer: (pendingComposerText) =>
+    set({ route: "chat", pendingComposerText }),
+  clearPendingComposerText: () => set({ pendingComposerText: null }),
 }));

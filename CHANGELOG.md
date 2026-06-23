@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   untouched and selecting/adding spawns nothing. Persists to
   `settings.workspaces` (`{id,cwd,label,pinned,lastUsedAt}`) over the existing
   `settings:*` channels — no new IPC.
+- The Skills view becomes **Skills & Commands** (feature 6): three Collapsible
+  sections share one search box — the unchanged disk-skills grid, the active
+  session's live slash commands (merged with an on-open
+  `chat.getAvailableCommands` snapshot, with pin → `settings.ui.pinnedCommands`
+  and a "Use in chat" that routes to Chat with `/name ` prefilled), and a static
+  read-only **TUI-only commands** reference (`tan`/`omfg`/`tree`) badged "TUI
+  only — not available in Studio". The Session-commands section shows an explicit
+  empty state when no session is loaded. Adds `lib/tui-commands.ts`, a
+  `pendingComposerText` seed on `store/app.ts` adopted once by the composer, and a
+  `togglePinnedCommand` settings action; `commandInsertText`/`filterCommands` are
+  reused from the shared slash-command helpers.
 
 ### Changed
 

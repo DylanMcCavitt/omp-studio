@@ -26,6 +26,12 @@ interface SettingsState {
     id: string,
     patch: Partial<Pick<Workspace, "label" | "cwd" | "pinned">>,
   ): Promise<void>;
+  /**
+   * Toggle a command name in `settings.ui.pinnedCommands` (Commands favorites).
+   * Adds it when absent, removes it when present; preserves the rest of `ui`
+   * (e.g. `collapsed`). Funnels through the pessimistic `update`.
+   */
+  togglePinnedCommand(name: string): Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -112,5 +118,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
     }
     await get().update(settingsPatch);
+  },
+
+  async togglePinnedCommand(name) {
+    const current = get().settings;
+    if (!current) return;
+    const ui = current.ui ?? {};
+    const pinned = ui.pinnedCommands ?? [];
+    const next = pinned.includes(name)
+      ? pinned.filter((n) => n !== name)
+      : [...pinned, name];
+    await get().update({ ui: { ...ui, pinnedCommands: next } });
   },
 }));

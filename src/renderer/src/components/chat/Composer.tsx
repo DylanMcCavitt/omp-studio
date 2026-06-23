@@ -9,6 +9,7 @@ import { Navigation, Send, Square } from "lucide-react";
 import { PromptComposer } from "@/components/chat/PromptComposer";
 import { SlashCommandPalette } from "@/components/chat/SlashCommandPalette";
 import { Button } from "@/components/ui";
+import { useAppStore } from "@/store/app";
 import { useActiveSession, useChatStore } from "@/store/chat";
 
 /** Stable empty ref so the no-session selector keeps a steady identity. */
@@ -23,6 +24,10 @@ export function Composer() {
   const availableCommands = useActiveSession(
     (s) => s?.availableCommands ?? NO_COMMANDS,
   );
+  const pendingComposerText = useAppStore((s) => s.pendingComposerText);
+  const clearPendingComposerText = useAppStore(
+    (s) => s.clearPendingComposerText,
+  );
 
   const streaming = status === "streaming";
   const disabled = !sessionId;
@@ -32,6 +37,8 @@ export function Composer() {
       <div className="mx-auto max-w-3xl">
         <PromptComposer
           disabled={disabled}
+          injectText={pendingComposerText}
+          onInjectConsumed={clearPendingComposerText}
           placeholder={
             disabled
               ? "No active session"

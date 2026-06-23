@@ -8,14 +8,24 @@
 // composer — always with a trailing space, and we NEVER infer a no-arg command
 // from its name, so every selection leaves the cursor ready to type arguments.
 
-import type { AvailableCommand } from "@shared/rpc";
+/**
+ * Minimal command shape these helpers need: a bare name and an optional
+ * description. Both the legacy `AvailableCommand` (live `available_commands_update`)
+ * and the richer `AvailableSlashCommand` (the `get_available_commands` snapshot),
+ * as well as the Skills view's merged session commands, satisfy it — so the
+ * palette and the Commands section reuse one insert/filter convention.
+ */
+export interface CommandLike {
+  name: string;
+  description?: string;
+}
 
 /**
  * A command's bare token without a leading slash. omp emits names without one,
  * but we strip defensively so a build that ever prefixes a slash can't produce
  * `//name`.
  */
-export function commandName(command: AvailableCommand): string {
+export function commandName(command: Pick<CommandLike, "name">): string {
   return command.name.replace(/^\/+/, "");
 }
 
@@ -24,7 +34,7 @@ export function commandName(command: AvailableCommand): string {
  * Always slash-prefixed with a trailing space — never infer no-arg from the
  * name, so commands that take arguments stay typeable immediately.
  */
-export function commandInsertText(command: AvailableCommand): string {
+export function commandInsertText(command: Pick<CommandLike, "name">): string {
   return `/${commandName(command)} `;
 }
 
@@ -34,10 +44,10 @@ export function commandInsertText(command: AvailableCommand): string {
  * query is ignored. An empty query returns the list unchanged. Input order is
  * preserved (omp already orders commands sensibly).
  */
-export function filterCommands(
-  commands: AvailableCommand[],
+export function filterCommands<T extends CommandLike>(
+  commands: readonly T[],
   query: string,
-): AvailableCommand[] {
+): readonly T[] {
   const q = query.trim().toLowerCase().replace(/^\/+/, "");
   if (q === "") return commands;
   return commands.filter((c) => {

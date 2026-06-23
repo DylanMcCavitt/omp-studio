@@ -73,6 +73,15 @@ export interface PromptComposerProps {
   maxHeight?: number;
   /** Where the actions render relative to the input. Default "inline". */
   actionsPlacement?: "inline" | "below";
+  /**
+   * One-shot text to inject into the composer (slash-command prefill from the
+   * Skills & Commands "Use in chat" action). When it transitions to a non-null
+   * value the composer adopts it via `applyText` (replace + focus + caret at
+   * end), then signals `onInjectConsumed` so the caller can clear it.
+   */
+  injectText?: string | null;
+  /** Called right after a non-null `injectText` is adopted, to clear it. */
+  onInjectConsumed?: () => void;
   className?: string;
 }
 
@@ -87,6 +96,8 @@ export function PromptComposer({
   rows = 1,
   maxHeight = 200,
   actionsPlacement = "inline",
+  injectText,
+  onInjectConsumed,
   className,
 }: PromptComposerProps) {
   const [text, setText] = useState("");
@@ -124,6 +135,15 @@ export function PromptComposer({
       resize();
     });
   };
+
+  // Adopt a one-shot prefill (Skills "Use in chat"): when injectText becomes
+  // non-null, replace the composer text and tell the caller to clear it so the
+  // same command can be re-injected later (null → value transition re-fires).
+  useEffect(() => {
+    if (injectText == null) return;
+    applyText(injectText);
+    onInjectConsumed?.();
+  }, [injectText]);
 
   const closeOverlay = () => {
     setOverlayOpen(false);
