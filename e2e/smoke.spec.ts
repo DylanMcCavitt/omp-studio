@@ -33,7 +33,7 @@ const mainEntry = fileURLToPath(
 // <h1> when a repo is detected, so its marker is the always-present "Repos" tab.
 const HEADING_VIEWS = [
   { nav: "Sessions", heading: "Sessions" },
-  { nav: "Skills", heading: "Skills" },
+  { nav: "Skills", heading: "Skills & Commands" },
   { nav: "MCP", heading: "MCP Servers" },
   { nav: "Agents", heading: "Agents" },
   { nav: "Settings", heading: "Settings" },
@@ -42,27 +42,38 @@ const HEADING_VIEWS = [
 let app: ElectronApplication;
 let page: Page;
 let tempAgentDir: string;
+let tempUserDataDir: string;
 const pageErrors: Error[] = [];
 
 test.beforeAll(async () => {
-  // Hermetic, non-live posture: point omp/gh at a nonexistent binary so the
-  // data services deterministically hit their graceful-degrade path and spawn
-  // NO omp/gh children, and point the agent-state dir at an empty temp dir so
-  // the session/MCP services read an empty tree. The view assertions below check
-  // only always-rendered headers, so the smoke passes identically whether or not
-  // omp/gh are installed on the host.
+  // Hermetic, non-live posture. Three levers make the run deterministic and
+  // side-effect-free regardless of the host:
+  //   - omp/gh point at a nonexistent binary, so the data services hit their
+  //     graceful-degrade path and spawn NO omp/gh children;
+  //   - PI_CODING_AGENT_DIR points at an empty temp dir, so session/MCP/skills
+  //     discovery reads an empty tree;
+  //   - --user-data-dir points Electron's userData at an empty temp dir, so
+  //     settings.json is absent (terminal + browser stay OFF by default) and the
+  //     keychain-backed secret store is empty (Linear is unauthenticated).
+  // OMP_STUDIO_SMOKE keeps the window hidden (headless/CI friendly) without
+  // changing what the renderer mounts.
   tempAgentDir = mkdtempSync(join(tmpdir(), "omp-studio-e2e-"));
+  tempUserDataDir = mkdtempSync(join(tmpdir(), "omp-studio-e2e-data-"));
   const unresolvable = join(tempAgentDir, "no-such-binary");
   const env = {
     ...process.env,
     // Load the built renderer file, not a leaked dev-server URL.
     ELECTRON_RENDERER_URL: "",
+    OMP_STUDIO_SMOKE: "1",
     OMP_BINARY: unresolvable,
     GH_BINARY: unresolvable,
     PI_CODING_AGENT_DIR: tempAgentDir,
   };
 
-  app = await electron.launch({ args: [mainEntry], env });
+  app = await electron.launch({
+    args: [mainEntry, `--user-data-dir=${tempUserDataDir}`],
+    env,
+  });
   page = await app.firstWindow();
   page.on("pageerror", (error) => pageErrors.push(error));
   await page.waitForLoadState("domcontentloaded");
@@ -71,6 +82,8 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await app?.close();
   if (tempAgentDir) rmSync(tempAgentDir, { recursive: true, force: true });
+  if (tempUserDataDir)
+    rmSync(tempUserDataDir, { recursive: true, force: true });
 });
 
 test("window reports the OMP Studio title", async () => {
@@ -87,7 +100,10 @@ test("sidebar exposes every navigation destination", async () => {
     "Skills",
     "MCP",
     "Agents",
+    "Terminal",
+    "Browser",
     "GitHub",
+    "Linear",
     "Settings",
   ]) {
     await expect(
@@ -127,6 +143,53 @@ test("every browse view navigates without an error boundary or crash", async () 
     page.getByRole("button", { name: "Repos", exact: true }),
   ).toBeVisible();
   await expect(nav).toBeVisible();
+});
+
+test("v2 routes (Linear, Terminal, Browser) render their hermetic states", async () => {
+  const nav = page.getByRole("navigation");
+
+  // Linear — no key in the (empty, redirected) keychain, so the view collapses
+  // to its connect card. The always-present <h1> proves the view mounted; the
+  // "Linear API key" field proves the unauthenticated connect surface rendered.
+  const linear = nav.getByRole("button", { name: "Linear", exact: true });
+  await linear.click();
+  await expect(linear).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("heading", { name: "Linear", level: 1, exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Linear API key", { exact: true }),
+  ).toBeVisible();
+  await expect(nav).toBeVisible();
+
+  // Browser — off by default (no settings.json), so the inline enable gate is
+  // shown instead of the chrome. The gate has no <h1>; its enable action is the
+  // stable marker that the off-by-default path rendered.
+  const browser = nav.getByRole("button", { name: "Browser", exact: true });
+  await browser.click();
+  await expect(browser).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("button", { name: "Enable embedded browser" }),
+  ).toBeVisible();
+  await expect(nav).toBeVisible();
+
+  // Terminal — off by default, so the blocking acknowledgement gate (a modal
+  // dialog) is shown over the view. The <h1> proves the view mounted; the
+  // dialog proves the gate blocks the shell from ever spawning.
+  const terminal = nav.getByRole("button", { name: "Terminal", exact: true });
+  await terminal.click();
+  await expect(terminal).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("heading", { name: "Terminal", level: 1, exact: true }),
+  ).toBeVisible();
+  const gate = page.getByRole("dialog", { name: "Enable the terminal?" });
+  await expect(gate).toBeVisible();
+  await expect(nav).toBeVisible();
+
+  // Dismiss the gate (without enabling the terminal) so the modal's full-screen
+  // backdrop is torn down and the run is left in a clean, non-blocked state.
+  await page.getByRole("button", { name: "Not now" }).click();
+  await expect(gate).toBeHidden();
 });
 
 test("no uncaught renderer errors occurred during the smoke run", () => {
