@@ -19,7 +19,7 @@ import {
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
-import { Badge, Button, Panel, Spinner } from "@/components/ui";
+import { Badge, Button, Combobox, Panel, Spinner } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
 import { useAppStore } from "@/store/app";
@@ -157,19 +157,18 @@ function StartPanel() {
             <label className="mb-1.5 block text-xs font-medium text-ink-muted">
               Model
             </label>
-            <select
+            <Combobox
+              aria-label="Model"
               value={model}
+              onChange={setModel}
               disabled={loading || !models}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none disabled:opacity-50"
-            >
-              {loading && <option value="">Loading models…</option>}
-              {models?.map((m) => (
-                <option key={m.selector} value={m.selector}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
+              placeholder={loading ? "Loading models…" : "Select a model"}
+              searchPlaceholder="Search models…"
+              options={(models ?? []).map((m) => ({
+                value: m.selector,
+                label: m.name,
+              }))}
+            />
           </div>
 
           <div>

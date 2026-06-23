@@ -26,6 +26,7 @@ import {
   Badge,
   type BadgeVariant,
   Button,
+  Combobox,
   EmptyState,
   IconButton,
   Panel,
@@ -213,21 +214,18 @@ function DefaultsPanel({
         label="Default model"
         hint="Prefills the model selector for new sessions."
       >
-        <select
-          className={selectClass}
+        <Combobox
+          aria-label="Default model"
           disabled={modelsLoading}
           value={settings.defaultModel ?? ""}
-          onChange={(e) =>
-            void update({ defaultModel: e.target.value || null })
-          }
-        >
-          <option value="">First available</option>
-          {models.map((m) => (
-            <option key={m.selector} value={m.selector}>
-              {m.name}
-            </option>
-          ))}
-        </select>
+          placeholder="First available"
+          searchPlaceholder="Search models…"
+          onChange={(value) => void update({ defaultModel: value || null })}
+          options={[
+            { value: "", label: "First available" },
+            ...models.map((m) => ({ value: m.selector, label: m.name })),
+          ]}
+        />
       </Field>
 
       <Field label="Default thinking level">
