@@ -120,17 +120,53 @@ it("clears text after a successful submit", async () => {
   await waitFor(() => expect(textarea).toHaveValue(""));
 });
 
-it("restores text after a failed submit so it can be retried", async () => {
+it("restores text AND attachments after a failed submit so they can be retried", async () => {
   const user = userEvent.setup();
-  const onSubmit = vi.fn().mockResolvedValue(false);
-  renderComposer(onSubmit);
+  // First submit fails (keep everything), second succeeds (then clears).
+  const onSubmit = vi
+    .fn()
+    .mockResolvedValueOnce(false)
+    .mockResolvedValueOnce(true);
+  const { container } = renderComposer(onSubmit);
 
   const textarea = screen.getByPlaceholderText("Message");
+  await user.upload(fileInput(container), imageFile("pic.png"));
+  expect(
+    await screen.findByRole("img", { name: "pic.png" }),
+  ).toBeInTheDocument();
   await user.type(textarea, "retry me");
-  await user.click(screen.getByRole("button", { name: "Send" }));
 
+  // Failed submit: text AND the thumbnail must survive for a retry.
+  await user.click(screen.getByRole("button", { name: "Send" }));
   await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
   expect(textarea).toHaveValue("retry me");
+  expect(screen.getByRole("img", { name: "pic.png" })).toBeInTheDocument();
+
+  // The failed call carried the full payload (text + one image)...
+  const failedCall = onSubmit.mock.calls[0];
+  expect(failedCall[0]).toBe("retry me");
+  expect(failedCall[1]).toHaveLength(1);
+  expect(failedCall[1][0]).toMatchObject({
+    type: "image",
+    mimeType: "image/png",
+  });
+
+  // ...and the retry resends the identical preserved payload.
+  await user.click(screen.getByRole("button", { name: "Send" }));
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+  const retryCall = onSubmit.mock.calls[1];
+  expect(retryCall[0]).toBe("retry me");
+  expect(retryCall[1]).toHaveLength(1);
+  expect(retryCall[1][0]).toMatchObject({
+    type: "image",
+    mimeType: "image/png",
+  });
+
+  // The successful retry then clears the composer.
+  await waitFor(() => expect(textarea).toHaveValue(""));
+  expect(
+    screen.queryByRole("img", { name: "pic.png" }),
+  ).not.toBeInTheDocument();
 });
 
 it("submits attachments alongside text", async () => {
