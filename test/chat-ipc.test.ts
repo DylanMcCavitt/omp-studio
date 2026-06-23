@@ -19,6 +19,7 @@ import { OmpRpcSession } from "../src/main/omp/rpc-session";
 import type { ChatCreateOptions, ChatUiRequestEvent } from "../src/shared/ipc";
 import { CH } from "../src/shared/ipc";
 import type {
+  AvailableSlashCommand,
   ExtensionUiRequest,
   ExtensionUiResponse,
   RpcState,
@@ -53,7 +54,7 @@ function makeIpcMain(): {
 }
 
 // Stand-in for a live OmpRpcSession: an EventEmitter that records the calls the
-// chat IPC handlers route to it (respondUi + the feature-4 subagent methods).
+// chat IPC handlers route to it (respondUi + the feature-4/6b methods).
 class FakeSession extends EventEmitter {
   readonly respondUiCalls: Array<{
     requestId: string;
@@ -65,6 +66,11 @@ class FakeSession extends EventEmitter {
     fromByte?: number;
   }> = [];
   readonly subscriptionCalls: SubagentSubscriptionLevel[] = [];
+  availableCommandsCalls = 0;
+  availableCommands: AvailableSlashCommand[] = [
+    { name: "compact", description: "Compact the session", source: "builtin" },
+    { name: "review", description: "Run a review", source: "skill" },
+  ];
 
   respondUi(requestId: string, response: ExtensionUiResponse): void {
     this.respondUiCalls.push({ requestId, response });
@@ -90,6 +96,11 @@ class FakeSession extends EventEmitter {
     level: SubagentSubscriptionLevel,
   ): Promise<void> {
     this.subscriptionCalls.push(level);
+  }
+
+  async getAvailableCommands(): Promise<AvailableSlashCommand[]> {
+    this.availableCommandsCalls += 1;
+    return this.availableCommands;
   }
 }
 
@@ -373,6 +384,30 @@ test("chat:getSubagentMessages throws for an unknown session id", async () => {
     invoke(CH.chatGetSubagentMessages, "no-such-session", {
       subagentId: "x",
     }),
+  ).rejects.toThrow(/unknown session/);
+});
+
+// ---------------------------------------------------------------------------
+// Feature 6b: per-session commands palette snapshot handler wiring. Per-session
+// only — there is no global commands channel. The FakeSession records the call
+// and returns a fixed palette; the handler must resolve the session by id and
+// return the list verbatim.
+// ---------------------------------------------------------------------------
+
+test("chat:getAvailableCommands resolves the session by id and returns the palette", async () => {
+  const { invoke, session, sessionId } = await wiredSession();
+  const commands = (await invoke(
+    CH.chatGetAvailableCommands,
+    sessionId,
+  )) as AvailableSlashCommand[];
+  expect(session.availableCommandsCalls).toBe(1);
+  expect(commands).toEqual(session.availableCommands);
+});
+
+test("chat:getAvailableCommands throws for an unknown session id", async () => {
+  const { invoke } = await wiredSession();
+  await expect(
+    invoke(CH.chatGetAvailableCommands, "no-such-session"),
   ).rejects.toThrow(/unknown session/);
 });
 

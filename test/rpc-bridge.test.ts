@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OmpRpcSession } from "../src/main/omp/rpc-session";
 import type {
+  AvailableSlashCommand,
   ExtensionUiRequest,
   ExtensionUiResponse,
   RpcFrame,
@@ -690,6 +691,93 @@ test("setSubagentSubscription degrades on an unknown command", async () => {
       error: "Unknown command: set_subagent_subscription",
     });
     await expect(pending).resolves.toBeUndefined();
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+// ---------------------------------------------------------------------------
+// Non-live commands palette snapshot bridge tests (feature 6b).
+//
+// Same fake-omp child: read the request frame the bridge wrote, then echo a
+// correlated response (a `{ commands }` object, a bare array, or an id-less
+// unknown-command failure the way real omp replies for commands a build doesn't
+// implement) back via __emit.
+// ---------------------------------------------------------------------------
+
+test("getAvailableCommands sends get_available_commands and returns the parsed list", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getAvailableCommands();
+    const req = outgoing(writes).find(
+      (f) => f.type === "get_available_commands",
+    );
+    expect(req).toBeDefined();
+    const commands: AvailableSlashCommand[] = [
+      {
+        name: "compact",
+        description: "Compact the session",
+        source: "builtin",
+      },
+      { name: "review", source: "skill" },
+    ];
+    emitFrame(session, {
+      type: "response",
+      command: "get_available_commands",
+      id: req?.id as string,
+      success: true,
+      data: { commands },
+    });
+    await expect(pending).resolves.toEqual(commands);
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("getAvailableCommands accepts a bare array response", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getAvailableCommands();
+    const req = outgoing(writes).find(
+      (f) => f.type === "get_available_commands",
+    );
+    expect(req).toBeDefined();
+    const commands: AvailableSlashCommand[] = [
+      { name: "tan", source: "builtin" },
+    ];
+    emitFrame(session, {
+      type: "response",
+      command: "get_available_commands",
+      id: req?.id as string,
+      success: true,
+      data: commands,
+    });
+    await expect(pending).resolves.toEqual(commands);
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("getAvailableCommands degrades to an empty list on an unknown command", async () => {
+  const { session, writes } = fakeSession();
+  try {
+    await session.whenReady();
+    const pending = session.getAvailableCommands();
+    expect(
+      outgoing(writes).some((f) => f.type === "get_available_commands"),
+    ).toBe(true);
+    // Real omp drops the id and reports success:false for unknown commands; no
+    // markReady auto-send competes for this command, so id-less correlation by
+    // command name resolves exactly this request and the method degrades to [].
+    emitFrame(session, {
+      type: "response",
+      command: "get_available_commands",
+      success: false,
+      error: "Unknown command: get_available_commands",
+    });
+    await expect(pending).resolves.toEqual([]);
   } finally {
     session.dispose();
   }

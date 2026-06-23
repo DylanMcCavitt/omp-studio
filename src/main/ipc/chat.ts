@@ -150,6 +150,13 @@ export function registerChatIpc(
     (id: string, level: SubagentSubscriptionLevel) =>
       lookup(id).setSubagentSubscription(level),
   );
+  // Feature 6b: per-session slash-command palette snapshot. Live updates arrive
+  // as forwarded available_commands_update frames; this is the on-demand read at
+  // view open / resume. Degrades to [] on an older omp build (the session method
+  // swallows the Unknown-command failure). Per-session only — no global channel.
+  handle(CH.chatGetAvailableCommands, (id: string) =>
+    lookup(id).getAvailableCommands(),
+  );
   // E2: session stats + compaction. getSessionStats degrades to empty stats on
   // an omp build without the command; compact resolves when compaction finishes
   // while live auto-compaction progress streams via the session's frames.
