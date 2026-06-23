@@ -15,6 +15,10 @@ import {
   SessionRail,
   SessionStatusBadge,
 } from "@/components/chat/SessionRail";
+import {
+  ContextMeterChip,
+  SessionStatsPanel,
+} from "@/components/chat/SessionStatsPanel";
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { Badge, Button, Panel, Spinner } from "@/components/ui";
@@ -223,7 +227,6 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const status = useActiveSession((s) => s?.status ?? "idle");
   const model = useActiveSession((s) => s?.model ?? null);
   const thinkingLevel = useActiveSession((s) => s?.thinkingLevel ?? "medium");
-  const contextUsage = useActiveSession((s) => s?.contextUsage);
   const setModel = useChatStore((s) => s.setModel);
   const setThinking = useChatStore((s) => s.setThinking);
   const error = useActiveSession((s) => s?.error);
@@ -268,11 +271,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
             uiRequests={uiRequests}
             isCompacting={isCompacting}
           />
-          {contextUsage && (
-            <span className="ml-auto text-xs text-ink-faint">
-              {Math.round(contextUsage.percent)}% context
-            </span>
-          )}
+          <ContextMeterChip />
         </header>
         {error && status === "error" && (
           <div className="border-b border-danger/30 bg-danger/10 px-4 py-1.5 text-xs text-danger">
@@ -286,6 +285,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
       <aside className="scrollbar w-80 shrink-0 space-y-4 overflow-y-auto border-l border-border-subtle bg-bg-panel/40 p-4">
         <ModelPanel model={model} onChange={setModel} />
         <ThinkingPanel level={thinkingLevel} onChange={setThinking} />
+        <SessionStatsPanel sessionId={sessionId} />
         <TodoPanel />
         <SubagentTree />
       </aside>

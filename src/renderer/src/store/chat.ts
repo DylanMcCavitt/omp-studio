@@ -80,6 +80,14 @@ interface ChatActions {
   setThinking(level: ThinkingLevel): Promise<void>;
   /** Answer an extension UI request and dequeue it from its session. */
   respondUi(payload: ChatUiRespondPayload): Promise<void>;
+  /** Pull a fresh `get_session_stats` snapshot into the session slice. */
+  refreshStats(sessionId: string): Promise<void>;
+  /**
+   * Compact a session's context (optionally steering the summary). Marks the
+   * slice compacting for the duration, then refreshes state + stats once omp
+   * reports completion. Compaction changes context only — the JSONL is untouched.
+   */
+  compact(sessionId: string, instructions?: string): Promise<void>;
 
   _handleFrame(sessionId: string, frame: RpcFrame): void;
   _handleLifecycle(e: ChatLifecycleEvent): void;
@@ -199,6 +207,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     } catch {
       // subagents are best-effort
     }
+
+    // Populate stats for an already-running session (e.g. resumed mid-chat) so
+    // the panel/meter show usage immediately rather than waiting for a turn end.
+    void get().refreshStats(sessionId);
   },
 
   async start(opts) {
@@ -314,6 +326,35 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     }
   },
 
+  async refreshStats(sessionId) {
+    if (!get().openSessions[sessionId]) return;
+    try {
+      const stats = await window.omp.chat.getSessionStats(sessionId);
+      get()._patch(sessionId, (s) =>
+        reduceSession(s, studioFrame.stats(stats)),
+      );
+    } catch {
+      // Stats are best-effort (the bridge degrades to {} on older omp builds);
+      // leave the prior slice untouched on a transient failure.
+    }
+  },
+
+  async compact(sessionId, instructions) {
+    if (!get().openSessions[sessionId]) return;
+    get()._patch(sessionId, (s) => ({ ...s, compacting: true }));
+    try {
+      await window.omp.chat.compact(sessionId, instructions);
+    } catch (e) {
+      get()._patch(sessionId, (s) => ({ ...s, error: errorMessage(e) }));
+    } finally {
+      get()._patch(sessionId, (s) => ({ ...s, compacting: false }));
+      // Compaction shrinks context + may change token accounting; pull fresh
+      // state and stats so the panel/meter reflect the post-compaction window.
+      await get()._refreshState(sessionId);
+      await get().refreshStats(sessionId);
+    }
+  },
+
   _handleFrame(sessionId, frame) {
     if (!get().openSessions[sessionId]) return;
     get()._patch(sessionId, (s) => reduceSession(s, frame));
@@ -323,6 +364,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       case "agent_end":
       case "turn_end":
         void get()._refresh(sessionId);
+        // Stats settle at turn end (tokens/cost/context); pull a fresh snapshot.
+        // Event-driven, not polled — one fetch per turn boundary.
+        void get().refreshStats(sessionId);
         break;
       case "todo_reminder":
       case "todo_auto_clear":
