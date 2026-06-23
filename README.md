@@ -98,8 +98,18 @@ wrap the command with xvfb:
 xvfb-run -a npm run test:e2e
 ```
 
-Live, paid end-to-end scenarios (real chat turns, approval round-trips, resume,
-concurrency) are out of scope here and run only behind `STUDIO_E2E_LIVE=1`.
+Live, paid end-to-end scenarios (a real chat turn, D1 approval approve/deny and
+input/select round-trips, D3 restart/resume, and D2 two-session concurrency) live
+in `e2e/live.spec.ts` and are gated behind `STUDIO_E2E_LIVE=1` (mirroring
+`RPC_LIVE=1`). They are **skipped by default** — `npm run test:e2e` and CI never
+spawn a paid turn. Unlike the smoke, they launch against the **installed** `omp`
+(no hermetic `OMP_BINARY`/`GH_BINARY` overrides), isolate the studio's settings in
+a temp `--user-data-dir`, run each chat in a throwaway project dir, and keep
+prompts tiny. Run them locally with a configured `omp`:
+
+```sh
+npm run build && STUDIO_E2E_LIVE=1 npm run test:e2e
+```
 
 ## Architecture
 

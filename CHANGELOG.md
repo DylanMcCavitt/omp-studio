@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Live Playwright `_electron` end-to-end flows (`e2e/live.spec.ts`) gated behind
+  `STUDIO_E2E_LIVE=1` (mirroring `RPC_LIVE=1`): a real chat turn, the D1 tool
+  approval approve/deny/input-select round-trips, D3 restart-and-resume, and D2
+  two-session concurrency. They are skipped by default so `npm run test:e2e` and
+  CI stay non-live, and run against the installed `omp` only when the flag is set.
+
 ## [0.1.0] - 2026-06-19
 
 Initial release.
