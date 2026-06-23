@@ -201,6 +201,28 @@ function coerceOpenSessions(
 // (e.g. token-shaped) keys are structurally dropped — secrets can never ride
 // along inside a known namespace.
 
+// Renderer-supplied *identifier* strings (collapse persistKeys, command/route
+// ids, panel ids) flow into persisted settings as JSON keys / array elements.
+// They are short, code-defined identifiers — never free text and never secrets.
+// The value-level token-drop can't see map keys, so guard the persistence
+// boundary: a hostile `settings.update` patch must not smuggle a credential
+// through as a key. An id is accepted only if it matches a tame shape AND does
+// not look credential-shaped. (User project data — workspace cwd/label — is
+// genuinely arbitrary and is NOT subject to this guard.)
+const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/;
+const TOKEN_MARKER =
+  /(secret|token|password|passwd|api[-_]?key|apikey|credential|private[-_]?key|bearer)/i;
+const TOKEN_PREFIX =
+  /^(sk-|sk_|pk_|rk_|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|glpat-|xox[abprs]-|lin_|akia|asia|aiza|ya29\.|eyj)/i;
+
+function isSafeId(value: string): boolean {
+  return (
+    SAFE_ID.test(value) &&
+    !TOKEN_MARKER.test(value) &&
+    !TOKEN_PREFIX.test(value)
+  );
+}
+
 function coerceWorkspaces(value: unknown): Workspace[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out: Workspace[] = [];
@@ -217,12 +239,44 @@ function coerceWorkspaces(value: unknown): Workspace[] | undefined {
       out.push({ id, cwd, label, pinned, lastUsedAt });
     }
   }
+  // A non-empty input that yields nothing valid is malformed → preserve prior;
+  // an explicit empty array is an honoured "clear".
+  if (value.length > 0 && out.length === 0) return undefined;
   return out;
 }
 
-function coerceStringArray(value: unknown): string[] | undefined {
+/**
+ * Coerce an array of identifier strings, keeping only safe ids. Returns
+ * `undefined` when the input is not an array, or when a non-empty input yields
+ * no safe id (malformed → preserve prior); an empty input array is honoured.
+ */
+function coerceIdArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  return value.filter((v): v is string => typeof v === "string");
+  const out = value.filter(
+    (v): v is string => typeof v === "string" && isSafeId(v),
+  );
+  if (value.length > 0 && out.length === 0) return undefined;
+  return out;
+}
+
+/**
+ * Coerce the collapse map, keeping only safe-id keys with boolean values.
+ * Returns `undefined` when the input is not a record, or when a non-empty input
+ * yields no safe entry (malformed/secret-only → preserve prior); an empty input
+ * record is honoured as a clear.
+ */
+function coerceCollapsedMap(
+  value: unknown,
+): Record<string, boolean> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v === "boolean" && isSafeId(k)) out[k] = v;
+  }
+  if (Object.keys(value).length > 0 && Object.keys(out).length === 0) {
+    return undefined;
+  }
+  return out;
 }
 
 function coerceLayout(value: unknown): LayoutSettings | undefined {
@@ -243,9 +297,9 @@ function coerceLayout(value: unknown): LayoutSettings | undefined {
   if (typeof value.chatRailCollapsed === "boolean") {
     out.chatRailCollapsed = value.chatRailCollapsed;
   }
-  const navOrder = coerceStringArray(value.navOrder);
+  const navOrder = coerceIdArray(value.navOrder);
   if (navOrder) out.navOrder = navOrder;
-  const navHidden = coerceStringArray(value.navHidden);
+  const navHidden = coerceIdArray(value.navHidden);
   if (navHidden) out.navHidden = navHidden;
   if (Array.isArray(value.chatRailPanels)) {
     const panels: { id: string; visible: boolean }[] = [];
@@ -253,29 +307,29 @@ function coerceLayout(value: unknown): LayoutSettings | undefined {
       if (
         isRecord(item) &&
         typeof item.id === "string" &&
+        isSafeId(item.id) &&
         typeof item.visible === "boolean"
       ) {
         panels.push({ id: item.id, visible: item.visible });
       }
     }
-    out.chatRailPanels = panels;
+    if (value.chatRailPanels.length === 0 || panels.length > 0) {
+      out.chatRailPanels = panels;
+    }
   }
-  return out;
+  // An object-shaped patch with no accepted field is malformed → preserve prior
+  // (returning `{}` here would clobber the existing layout via mergeKnown).
+  return Object.keys(out).length === 0 ? undefined : out;
 }
 
 function coerceUiPrefs(value: unknown): UiPrefs | undefined {
   if (!isRecord(value)) return undefined;
   const out: UiPrefs = {};
-  if (isRecord(value.collapsed)) {
-    const collapsed: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(value.collapsed)) {
-      if (typeof v === "boolean") collapsed[k] = v;
-    }
-    out.collapsed = collapsed;
-  }
-  const pinnedCommands = coerceStringArray(value.pinnedCommands);
+  const collapsed = coerceCollapsedMap(value.collapsed);
+  if (collapsed) out.collapsed = collapsed;
+  const pinnedCommands = coerceIdArray(value.pinnedCommands);
   if (pinnedCommands) out.pinnedCommands = pinnedCommands;
-  return out;
+  return Object.keys(out).length === 0 ? undefined : out;
 }
 
 /**

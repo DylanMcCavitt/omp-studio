@@ -341,3 +341,83 @@ test("never writes a secret to disk, even nested inside a known namespace", asyn
   expect(onDisk.linear).toEqual({ writesEnabled: true, defaultTeamId: "T" });
   expect(onDisk.terminal).toEqual({ enabled: false, maxConcurrent: 2 });
 });
+
+// ---------------------------------------------------------------------------
+// Rev620 fixes — secret-shaped keys/ids dropped; malformed object/array patches
+// preserve the prior value instead of clobbering with an empty container.
+// ---------------------------------------------------------------------------
+
+test("drops a secret-shaped key from the ui.collapsed map (never persisted as a JSON key)", async () => {
+  const SECRET = "lin_api_supersecret_DO_NOT_PERSIST";
+  await updateSettings({
+    ui: { collapsed: { "panel.details": true, [SECRET]: true } },
+  } as Partial<StudioSettings>);
+
+  const raw = readFileSync(settingsFile(), "utf8");
+  expect(raw).not.toContain(SECRET);
+
+  const loaded = await loadSettings();
+  expect(loaded.ui?.collapsed).toEqual({ "panel.details": true });
+});
+
+test("drops secret-shaped entries from id lists (pinnedCommands, navOrder, panel ids)", async () => {
+  const SECRET = "ghp_secretsecretsecretsecret";
+  await updateSettings({
+    ui: { pinnedCommands: ["tan", SECRET] },
+    layout: {
+      navOrder: ["dashboard", SECRET],
+      chatRailPanels: [
+        { id: SECRET, visible: true },
+        { id: "subagents", visible: false },
+      ],
+    },
+  } as Partial<StudioSettings>);
+
+  const raw = readFileSync(settingsFile(), "utf8");
+  expect(raw).not.toContain(SECRET);
+
+  const loaded = await loadSettings();
+  expect(loaded.ui?.pinnedCommands).toEqual(["tan"]);
+  expect(loaded.layout?.navOrder).toEqual(["dashboard"]);
+  expect(loaded.layout?.chatRailPanels).toEqual([
+    { id: "subagents", visible: false },
+  ]);
+});
+
+test("a malformed object-shaped namespace patch preserves the prior value (no empty-clobber)", async () => {
+  await updateSettings({
+    layout: { sidebarWidthPct: 30 },
+    ui: { collapsed: { "panel.x": true } },
+  });
+  // Object-shaped but no valid field survives (invalid value + unknown key, and
+  // a collapse map whose only entry is non-boolean) → must NOT clobber.
+  await updateSettings({
+    layout: { sidebarWidthPct: "wide", bogus: 1 },
+    ui: { collapsed: { "panel.y": "nope" } },
+  } as unknown as Partial<StudioSettings>);
+
+  const loaded = await loadSettings();
+  expect(loaded.layout).toEqual({ sidebarWidthPct: 30 });
+  expect(loaded.ui).toEqual({ collapsed: { "panel.x": true } });
+});
+
+test("a workspaces patch that is all-invalid preserves prior; an empty array clears", async () => {
+  const w = { id: "w1", cwd: "/a", label: "A", pinned: false, lastUsedAt: "t" };
+  await updateSettings({ workspaces: [w] });
+
+  // Non-empty but all-invalid → malformed → preserve prior.
+  await updateSettings({
+    workspaces: [{ bogus: true }],
+  } as unknown as Partial<StudioSettings>);
+  expect((await loadSettings()).workspaces).toEqual([w]);
+
+  // Explicit empty array → honoured clear.
+  await updateSettings({ workspaces: [] });
+  expect((await loadSettings()).workspaces).toEqual([]);
+});
+
+test("honours an explicit empty collapse map as a clear", async () => {
+  await updateSettings({ ui: { collapsed: { "panel.x": true } } });
+  await updateSettings({ ui: { collapsed: {} } });
+  expect((await loadSettings()).ui?.collapsed).toEqual({});
+});
