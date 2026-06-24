@@ -14,6 +14,7 @@
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
+    "postinstall": "node scripts/ensure-node-pty-exec.mjs",
     "build": "electron-vite build",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
@@ -89,6 +90,9 @@
     "files": [
       "out/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
