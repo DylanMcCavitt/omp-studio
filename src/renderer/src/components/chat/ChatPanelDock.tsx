@@ -22,10 +22,11 @@ export function ChatPanelDock() {
   if (!sessionId) return null;
 
   return (
-    <div className="scrollbar max-h-[45%] shrink-0 space-y-2 overflow-y-auto border-t border-border-subtle p-2">
-      <SessionStatsPanel sessionId={sessionId} />
-      <TodoPanel />
+    <div className="scrollbar max-h-[45%] shrink-0 divide-y divide-border-subtle overflow-y-auto border-t border-border-subtle">
+      <SessionStatsPanel sessionId={sessionId} dense />
+      <TodoPanel dense />
       <SubagentTree
+        dense
         onInspect={(id) => {
           setInspected(id);
           // The inspector renders in the chat center pane; focus it so the

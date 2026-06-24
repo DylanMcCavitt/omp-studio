@@ -233,9 +233,11 @@ const EMPTY_EVENTS: Record<string, SubagentLiveState> = {};
 export function SubagentTree({
   headerLeading,
   onInspect,
+  dense,
 }: {
   headerLeading?: ReactNode;
   onInspect: (subagentId: string) => void;
+  dense?: boolean;
 }) {
   const roster = useActiveSession((s) => s?.subagents ?? EMPTY_SUBAGENTS);
   const events = useActiveSession((s) => s?.subagentEvents ?? EMPTY_EVENTS);
@@ -254,6 +256,7 @@ export function SubagentTree({
       title="Subagents"
       collapsible
       persistKey="chat.rail.subagents"
+      dense={dense}
       headerLeading={headerLeading}
     >
       {tree.length === 0 ? (
