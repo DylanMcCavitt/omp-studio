@@ -141,17 +141,21 @@ export default function Skills() {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-ink">Skills & Commands</h1>
-          <p className="text-sm text-ink-muted">
+          <h1 className="truncate text-lg font-semibold text-ink">
+            Skills & Commands
+          </h1>
+          <p className="truncate text-sm text-ink-muted">
             Disk skills, the active session's slash commands, and the TUI-only
             reference
           </p>
         </div>
-        <IconButton label="Reload skills" onClick={reload}>
-          <RefreshCw
-            className={cn("h-4 w-4", skillsLoading && "animate-spin")}
-          />
-        </IconButton>
+        <div className="shrink-0">
+          <IconButton label="Reload skills" onClick={reload}>
+            <RefreshCw
+              className={cn("h-4 w-4", skillsLoading && "animate-spin")}
+            />
+          </IconButton>
+        </div>
       </div>
 
       <div className="shrink-0 px-6 pt-4">
@@ -170,10 +174,12 @@ export default function Skills() {
         <Collapsible
           persistKey="skills:section:skills"
           title={
-            <span className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-accent" />
-              Skills
-              <Badge variant="muted">{skills.length}</Badge>
+            <span className="flex min-w-0 items-center gap-2">
+              <Sparkles className="h-4 w-4 shrink-0 text-accent" />
+              <span className="truncate">Skills</span>
+              <Badge variant="muted" className="shrink-0">
+                {skills.length}
+              </Badge>
             </span>
           }
           bodyClassName="pt-3"
@@ -227,10 +233,12 @@ export default function Skills() {
         <Collapsible
           persistKey="skills:section:session"
           title={
-            <span className="flex items-center gap-2">
-              <Command className="h-4 w-4 text-accent" />
-              Session commands
-              <Badge variant="muted">{visibleCommands.length}</Badge>
+            <span className="flex min-w-0 items-center gap-2">
+              <Command className="h-4 w-4 shrink-0 text-accent" />
+              <span className="truncate">Session commands</span>
+              <Badge variant="muted" className="shrink-0">
+                {visibleCommands.length}
+              </Badge>
             </span>
           }
           bodyClassName="pt-3"
@@ -300,10 +308,12 @@ export default function Skills() {
           persistKey="skills:section:tui"
           defaultOpen={false}
           title={
-            <span className="flex items-center gap-2">
-              <SquareTerminal className="h-4 w-4 text-ink-muted" />
-              TUI-only commands
-              <Badge variant="muted">reference</Badge>
+            <span className="flex min-w-0 items-center gap-2">
+              <SquareTerminal className="h-4 w-4 shrink-0 text-ink-muted" />
+              <span className="truncate">TUI-only commands</span>
+              <Badge variant="muted" className="shrink-0">
+                reference
+              </Badge>
             </span>
           }
           bodyClassName="pt-3"

@@ -184,7 +184,9 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const transcript = (
     <div className="flex h-full min-w-0 flex-col">
       <header className="flex items-center gap-3 border-b border-border-subtle px-4 py-2.5">
-        <span className="truncate font-mono text-sm text-ink">{modelName}</span>
+        <span className="min-w-0 truncate font-mono text-sm text-ink">
+          {modelName}
+        </span>
         <Badge variant="muted" className="capitalize">
           {thinkingLevel}
         </Badge>
@@ -268,7 +270,7 @@ function ChatRailSplit({
         order={1}
         defaultSize={initialLayout[0]}
         minSize={CHAT_TRANSCRIPT_MIN_PCT}
-        className="flex min-h-0"
+        className="flex min-h-0 min-w-0 overflow-hidden"
       >
         {transcript}
       </ResizablePanel>
@@ -278,7 +280,7 @@ function ChatRailSplit({
         defaultSize={initialLayout[1]}
         minSize={CHAT_RAIL_MIN_PCT}
         maxSize={CHAT_RAIL_MAX_PCT}
-        className="flex min-h-0"
+        className="flex min-h-0 min-w-0 overflow-hidden"
       >
         {rail}
       </ResizablePanel>

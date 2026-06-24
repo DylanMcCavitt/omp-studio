@@ -39,13 +39,15 @@ export default function Dashboard() {
     <div className="scrollbar h-full overflow-y-auto">
       <div className="mx-auto flex max-w-5xl flex-col gap-4 p-6">
         <header className="no-drag flex items-center justify-between gap-4">
-          <div className="flex flex-col">
-            <h1 className="text-xl font-semibold text-ink">Dashboard</h1>
-            <p className="text-sm text-ink-muted">
+          <div className="flex min-w-0 flex-col">
+            <h1 className="truncate text-xl font-semibold text-ink">
+              Dashboard
+            </h1>
+            <p className="truncate text-sm text-ink-muted">
               Overview of your Oh My Pi harness
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="primary" onClick={newChat}>
               <Plus size={16} />
               Start a chat
