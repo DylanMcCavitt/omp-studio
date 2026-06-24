@@ -18,6 +18,7 @@ import type { ChatUiRequestEvent } from "@shared/ipc";
 import type {
   AgentProgress,
   AvailableCommand,
+  ContentBlock,
   ContextUsage,
   MessageUpdateFrame,
   OmpMessage,
@@ -256,6 +257,24 @@ export const studioFrame = {
 };
 
 /**
+ * Coerce an assistant/toolResult message whose `content` arrived as a bare
+ * string into the `ContentBlock[]` shape the renderer's types and `MessageBubble`
+ * assume. omp emits text-only assistant turns with a plain-string `content`,
+ * which violates the declared `content: ContentBlock[]` type and crashed the
+ * transcript (`message.content.map is not a function`). User messages
+ * legitimately carry a string `content` (the user branch of MessageBubble
+ * renders it), so they pass through unchanged; non-string content is unchanged.
+ */
+export function normalizeMessageContent(message: OmpMessage): OmpMessage {
+  if (message.role === "user" || typeof message.content !== "string") {
+    return message;
+  }
+  const text = message.content;
+  const content: ContentBlock[] = text ? [{ type: "text", text }] : [];
+  return { ...message, content };
+}
+
+/**
  * Merge an in-progress assistant snapshot into the transcript: replace the
  * trailing assistant message (the one being streamed) or append a fresh one.
  */
@@ -263,13 +282,14 @@ export function upsertAssistant(
   messages: OmpMessage[],
   snapshot: OmpMessage,
 ): OmpMessage[] {
+  const normalized = normalizeMessageContent(snapshot);
   const last = messages[messages.length - 1];
   if (last && last.role === "assistant") {
     const next = messages.slice();
-    next[next.length - 1] = snapshot;
+    next[next.length - 1] = normalized;
     return next;
   }
-  return [...messages, snapshot];
+  return [...messages, normalized];
 }
 
 /** Most recent system cards kept per session; older ones are dropped. */
@@ -491,7 +511,18 @@ export function reduceSession(
 
     case CONTROL.messages: {
       const messages = (frame as { messages?: OmpMessage[] }).messages;
-      return Array.isArray(messages) ? { ...state, messages } : state;
+      if (!Array.isArray(messages)) return state;
+      // Only allocate a new array when a message actually needs coercing, so an
+      // already-normalized snapshot keeps its reference (stable selector reads).
+      const needsNormalize = messages.some(
+        (m) => m.role !== "user" && typeof m.content === "string",
+      );
+      return {
+        ...state,
+        messages: needsNormalize
+          ? messages.map(normalizeMessageContent)
+          : messages,
+      };
     }
 
     case CONTROL.subagents: {

@@ -62,10 +62,17 @@ export function MessageBubble({ message, toolResults, streaming }: Props) {
     );
   }
 
+  // Defense-in-depth: omp can emit text-only assistant turns with a bare string
+  // `content`. The reducer normalizes this to blocks, but guard here too so a
+  // stray string never crashes the transcript (`content.map is not a function`).
+  const raw = message.content as ContentBlock[] | string;
+  const blocks: ContentBlock[] =
+    typeof raw === "string" ? (raw ? [{ type: "text", text: raw }] : []) : raw;
+
   return (
     <div className="flex justify-start">
       <div className="min-w-0 space-y-1">
-        {message.content.map((block: ContentBlock, i: number) => {
+        {blocks.map((block: ContentBlock, i: number) => {
           if (block.type === "thinking") {
             return (
               <ThinkingBlock
