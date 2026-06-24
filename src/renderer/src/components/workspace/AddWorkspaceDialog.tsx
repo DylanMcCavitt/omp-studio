@@ -4,10 +4,12 @@
 // inherits the focus trap, Esc-to-cancel, and Cmd/Ctrl+Enter-to-submit
 // behaviour every blocking dialog uses. Adding selects, but spawns nothing.
 
+import type { WorkspaceColorKey } from "@shared/ipc";
 import { FolderOpen } from "lucide-react";
 import { useState } from "react";
 import { ModalShell } from "@/components/chat/ui-request/ModalShell";
 import { Button } from "@/components/ui";
+import { WorkspaceColorPicker } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { projectLabel } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
@@ -20,6 +22,7 @@ export function AddWorkspaceDialog({ onClose }: { onClose: () => void }) {
   const [cwd, setCwd] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [color, setColor] = useState<WorkspaceColorKey | undefined>(undefined);
 
   const pick = () => {
     void window.omp.pickDirectory().then((dir) => {
@@ -32,7 +35,7 @@ export function AddWorkspaceDialog({ onClose }: { onClose: () => void }) {
     setSubmitting(true);
     try {
       const trimmed = label.trim();
-      await addWorkspace(cwd, trimmed || undefined);
+      await addWorkspace(cwd, trimmed || undefined, color);
       setSelectedProject(cwd);
       toast.success(`Added workspace “${trimmed || projectLabel(cwd)}”`);
       onClose();
@@ -97,6 +100,13 @@ export function AddWorkspaceDialog({ onClose }: { onClose: () => void }) {
             }
             className="w-full rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
           />
+        </div>
+
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-ink-muted">
+            Color (optional)
+          </span>
+          <WorkspaceColorPicker value={color} onChange={setColor} />
         </div>
       </div>
     </ModalShell>

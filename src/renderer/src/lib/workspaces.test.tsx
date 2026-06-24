@@ -8,6 +8,8 @@ import {
   projectLabel,
   sortWorkspaces,
   upsertWorkspace,
+  WORKSPACE_COLORS,
+  workspaceColorValue,
 } from "@/lib/workspaces";
 
 function ws(
@@ -178,4 +180,33 @@ it("sortWorkspaces does not mutate its input", () => {
   const snapshot = [...list];
   sortWorkspaces(list);
   expect(list).toEqual(snapshot);
+});
+
+it("upsertWorkspace stores a color on a fresh insert", () => {
+  const out = upsertWorkspace([], "/a/b/proj", {
+    id: "id1",
+    now: "t",
+    color: "blue",
+  });
+  expect(out[0]?.color).toBe("blue");
+});
+
+it("upsertWorkspace preserves an existing color when recency is bumped without one", () => {
+  const existing = ws({ id: "w1", cwd: "/p/a", color: "green" });
+  const out = upsertWorkspace([existing], "/p/a", {
+    now: "2026-09-09T00:00:00.000Z",
+  });
+  expect(out[0]?.color).toBe("green");
+});
+
+it("upsertWorkspace overrides an existing color when a new one is given", () => {
+  const existing = ws({ id: "w1", cwd: "/p/a", color: "green" });
+  const out = upsertWorkspace([existing], "/p/a", { now: "t", color: "red" });
+  expect(out[0]?.color).toBe("red");
+});
+
+it("workspaceColorValue resolves a known key to a swatch and unset to undefined", () => {
+  expect(WORKSPACE_COLORS.length).toBeGreaterThan(0);
+  expect(workspaceColorValue("blue")).toMatch(/^#[0-9a-f]{6}$/i);
+  expect(workspaceColorValue(undefined)).toBeUndefined();
 });
