@@ -2,9 +2,11 @@ import { expect, test } from "bun:test";
 import {
   createSession,
   deriveSessionBadgeKind,
+  normalizeMessageContent,
   reduceSession,
   sessionFromState,
   studioFrame,
+  upsertAssistant,
 } from "../src/renderer/src/store/session-reducer";
 
 // The reducer is pure and DOM-free, so we drive it with plain frame objects.
@@ -455,4 +457,68 @@ test("system cards mint unique ids and stay capped at 50", () => {
   expect(s.systemCardSeq).toBe(60);
   const ids = new Set(s.systemCards.map((c) => c.id));
   expect(ids.size).toBe(50);
+});
+
+// --- string-content normalization (AGE-656) -------------------------------
+// omp emits text-only assistant turns with a bare string `content`, violating
+// the declared `content: ContentBlock[]` type and crashing MessageBubble's
+// `content.map`. The reducer coerces assistant/toolResult strings to blocks.
+
+test("normalizeMessageContent wraps a string assistant content into a text block", () => {
+  const m = normalizeMessageContent({
+    role: "assistant",
+    content: "hello world" as never,
+  });
+  expect(m.content).toEqual([{ type: "text", text: "hello world" }]);
+});
+
+test("normalizeMessageContent maps an empty string to an empty block list", () => {
+  const m = normalizeMessageContent({
+    role: "assistant",
+    content: "" as never,
+  });
+  expect(m.content).toEqual([]);
+});
+
+test("normalizeMessageContent leaves array content and user strings untouched", () => {
+  const arr = {
+    role: "assistant",
+    content: [{ type: "text", text: "x" }],
+  } as never;
+  expect(normalizeMessageContent(arr)).toBe(arr);
+  const user = { role: "user", content: "typed it" } as never;
+  expect(normalizeMessageContent(user)).toBe(user);
+});
+
+test("upsertAssistant normalizes a string-content assistant snapshot", () => {
+  const out = upsertAssistant([], {
+    role: "assistant",
+    content: "hi" as never,
+  });
+  expect(out).toEqual([
+    { role: "assistant", content: [{ type: "text", text: "hi" }] },
+  ]);
+});
+
+test("message_update with string-content message normalizes before storing", () => {
+  const s = reduceSession(createSession("s1"), {
+    type: "message_update",
+    assistantMessageEvent: { type: "text_delta", delta: "hi" },
+    message: { role: "assistant", content: "hi there" },
+  } as never);
+  expect(s.messages).toEqual([
+    { role: "assistant", content: [{ type: "text", text: "hi there" }] },
+  ]);
+});
+
+test("a messages snapshot normalizes assistant string content", () => {
+  const msgs = [
+    { role: "user", content: "hi" },
+    { role: "assistant", content: "yo" },
+  ] as never;
+  const s = reduceSession(createSession("s1"), studioFrame.messages(msgs));
+  expect(s.messages).toEqual([
+    { role: "user", content: "hi" },
+    { role: "assistant", content: [{ type: "text", text: "yo" }] },
+  ]);
 });
