@@ -77,7 +77,8 @@ function labelFromTask(task: string): string {
   const target = body.match(/#+\s*Target\b[ \t:]*([\s\S]*?)(?:\r?\n\s*#|$)/i);
   const targetText = target?.[1];
   const candidate =
-    (targetText && firstMeaningfulLine(targetText)) || firstMeaningfulLine(body);
+    (targetText && firstMeaningfulLine(targetText)) ||
+    firstMeaningfulLine(body);
   return candidate.replace(/\s+/g, " ").trim();
 }
 
