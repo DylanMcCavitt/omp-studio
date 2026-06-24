@@ -106,7 +106,7 @@ export interface UserMessage {
 
 export interface AssistantMessage {
   role: "assistant";
-  content: ContentBlock[];
+  content: string | ContentBlock[];
   timestamp?: number;
 }
 
@@ -114,7 +114,7 @@ export interface ToolResultMessage {
   role: "toolResult";
   toolCallId: string;
   toolName: string;
-  content: ContentBlock[];
+  content: string | ContentBlock[];
   details?: Record<string, unknown>;
   isError?: boolean;
   timestamp?: number;

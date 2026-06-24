@@ -179,19 +179,24 @@ test("a subagents snapshot replaces the roster", () => {
   expect(s.subagents).toBe(subs);
 });
 
-test("a messages snapshot replaces the transcript", () => {
+test("a messages snapshot replaces the transcript (normalizing every role)", () => {
   const msgs = [
     { role: "user", content: "hi" },
     { role: "assistant", content: [] },
   ] as never;
   const s = reduceSession(createSession("s1"), studioFrame.messages(msgs));
-  expect(s.messages).toBe(msgs);
+  expect(s.messages).toEqual([
+    { role: "user", content: [{ type: "text", text: "hi" }] },
+    { role: "assistant", content: [] },
+  ]);
 });
 
-test("an optimistic user message is appended", () => {
+test("an optimistic user message is appended (content normalized to blocks)", () => {
   const u = { role: "user", content: "hey" } as never;
   const s = reduceSession(createSession("s1"), studioFrame.userMessage(u));
-  expect(s.messages).toEqual([u]);
+  expect(s.messages).toEqual([
+    { role: "user", content: [{ type: "text", text: "hey" }] },
+  ]);
 });
 
 test("ui-request enqueue adds and dedupes by request id", () => {
@@ -480,14 +485,16 @@ test("normalizeMessageContent maps an empty string to an empty block list", () =
   expect(m.content).toEqual([]);
 });
 
-test("normalizeMessageContent leaves array content and user strings untouched", () => {
+test("normalizeMessageContent returns array content by reference and normalizes every role's string", () => {
   const arr = {
     role: "assistant",
     content: [{ type: "text", text: "x" }],
   } as never;
   expect(normalizeMessageContent(arr)).toBe(arr);
   const user = { role: "user", content: "typed it" } as never;
-  expect(normalizeMessageContent(user)).toBe(user);
+  expect(normalizeMessageContent(user).content).toEqual([
+    { type: "text", text: "typed it" },
+  ]);
 });
 
 test("upsertAssistant normalizes a string-content assistant snapshot", () => {
@@ -511,14 +518,14 @@ test("message_update with string-content message normalizes before storing", () 
   ]);
 });
 
-test("a messages snapshot normalizes assistant string content", () => {
+test("a messages snapshot normalizes string content for every role", () => {
   const msgs = [
     { role: "user", content: "hi" },
     { role: "assistant", content: "yo" },
   ] as never;
   const s = reduceSession(createSession("s1"), studioFrame.messages(msgs));
   expect(s.messages).toEqual([
-    { role: "user", content: "hi" },
+    { role: "user", content: [{ type: "text", text: "hi" }] },
     { role: "assistant", content: [{ type: "text", text: "yo" }] },
   ]);
 });

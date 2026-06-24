@@ -243,7 +243,13 @@ test("resumeSession hydrates from JSONL first, then merges live state (no flash)
   expect(calls.resume).toEqual(["A"]);
   expect(s.hibernatedSessions.A).toBeUndefined();
   expect(s.openSessions.A?.status).toBe("spawning");
-  expect(s.openSessions.A?.messages).toEqual(hydrated);
+  expect(s.openSessions.A?.messages).toEqual([
+    {
+      role: "user",
+      content: [{ type: "text", text: "old question" }],
+      timestamp: 1,
+    },
+  ]);
   expect(s.activeSessionId).toBe("A");
   expect(useAppStore.getState().route).toBe("chat");
   // Approval policy mirrored from the descriptor (parity with create()).
@@ -260,7 +266,18 @@ test("resumeSession hydrates from JSONL first, then merges live state (no flash)
   await p;
 
   s = useChatStore.getState();
-  expect(s.openSessions.A?.messages).toEqual(live);
+  expect(s.openSessions.A?.messages).toEqual([
+    {
+      role: "user",
+      content: [{ type: "text", text: "old question" }],
+      timestamp: 1,
+    },
+    {
+      role: "assistant",
+      content: [{ type: "text", text: "resumed" }],
+      timestamp: 2,
+    },
+  ]);
   expect(s.openSessions.A?.status).toBe("idle");
   expect(s.hibernatedSessions.A).toBeUndefined();
 });
@@ -278,7 +295,9 @@ test("resumeSession with no sessionFile skips hydration but still resumes", asyn
   await useChatStore.getState().resumeSession("N");
 
   expect(calls.readSession).toEqual([]);
-  expect(useChatStore.getState().openSessions.N?.messages).toEqual(live);
+  expect(useChatStore.getState().openSessions.N?.messages).toEqual([
+    { role: "user", content: [{ type: "text", text: "hi" }], timestamp: 1 },
+  ]);
   expect(useChatStore.getState().hibernatedSessions.N).toBeUndefined();
 });
 

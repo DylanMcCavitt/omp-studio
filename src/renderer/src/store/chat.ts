@@ -429,7 +429,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         failResume(`Session transcript not found: ${descriptor.sessionFile}`);
         return;
       }
-      hydrated = transcript.messages;
+      hydrated = transcript.messages.map(normalizeMessageContent);
     }
 
     // 2) Show the hydrated history immediately: register an optimistic live
