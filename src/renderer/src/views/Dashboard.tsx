@@ -48,7 +48,7 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button variant="primary" onClick={newChat}>
+            <Button variant="ghost" onClick={newChat}>
               <Plus size={16} />
               Start a chat
             </Button>

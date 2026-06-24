@@ -12,6 +12,12 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 // shadcn/ui button family on the monochrome accent (AGE-672): a near-white/
 // graphite solid `primary` (subtle shadow), an outlined `subtle` (secondary),
 // a borderless `ghost`, and a tinted (not solid) `danger`. rounded-md, h-9.
+//
+// Usage rule (AGE-673): the solid `primary` is the loudest control (highest
+// contrast), so reserve it for the single decisive action in a focused context —
+// composer Send, a dialog's confirm, a gate's enable. Standalone navigation /
+// creation CTAs that sit in the chrome (sidebar "New chat", empty-state "Start a
+// chat") use `ghost` so they read as controls, not bright banners.
 const VARIANTS: Record<ButtonVariant, string> = {
   primary:
     "bg-accent text-bg hover:bg-accent-hover border border-transparent shadow-sm",

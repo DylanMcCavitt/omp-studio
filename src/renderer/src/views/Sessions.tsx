@@ -360,7 +360,7 @@ export default function Sessions() {
                 title="No sessions yet"
                 hint="Past agent sessions on this machine appear here. Start a chat to create your first one."
                 action={
-                  <Button variant="primary" size="sm" onClick={newChat}>
+                  <Button variant="ghost" size="sm" onClick={newChat}>
                     <Plus className="h-3.5 w-3.5" />
                     Start a chat
                   </Button>

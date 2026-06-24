@@ -59,7 +59,7 @@ function NoActiveSession() {
         title="No chat open"
         hint="Pick one from the sidebar or start a new chat."
         action={
-          <Button variant="primary" onClick={newChat}>
+          <Button variant="ghost" onClick={newChat}>
             <MessageSquarePlus className="h-4 w-4" />
             New chat
           </Button>

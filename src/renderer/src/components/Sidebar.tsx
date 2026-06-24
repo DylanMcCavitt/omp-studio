@@ -103,7 +103,12 @@ function ChatsPane({ onNewChat }: { onNewChat: () => void }) {
   return (
     <>
       <div className="px-3 pb-2">
-        <Button variant="primary" onClick={onNewChat} className="w-full">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onNewChat}
+          className="w-full"
+        >
           <MessageSquarePlus className="h-4 w-4" />
           New chat
         </Button>
