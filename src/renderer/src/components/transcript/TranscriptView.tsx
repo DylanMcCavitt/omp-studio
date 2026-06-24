@@ -107,10 +107,18 @@ export function MessageBlock({ message }: { message: OmpMessage }) {
       </div>
     );
   }
+  // Defense-in-depth at the crash site: `content` is typed string | ContentBlock[]
+  // but a freshly-spawned subagent can emit it undefined. Coerce so `.map` always
+  // runs on an array (mirrors MessageBubble).
+  const blocks: ContentBlock[] = Array.isArray(message.content)
+    ? message.content
+    : message.content
+      ? [{ type: "text", text: message.content }]
+      : [];
   return (
     <div className="space-y-2">
       <Badge>assistant</Badge>
-      {message.content.map((block, i) => (
+      {blocks.map((block, i) => (
         <AssistantBlock key={i} block={block} />
       ))}
     </div>
