@@ -166,3 +166,32 @@ it("removeWorkspace keeps a default that points at a surviving workspace", async
   expect(patch.workspaces?.map((w) => w.id)).toEqual(["b"]);
   expect("defaultProject" in patch).toBe(false);
 });
+
+it("addWorkspace forwards a color override to the new workspace", async () => {
+  const update = seed({ ...BASE, workspaces: [] });
+  await useSettingsStore.getState().addWorkspace("/p/alpha", "Alpha", "violet");
+
+  const patch = update.mock.calls.at(-1)?.[0] as Partial<StudioSettings>;
+  expect(patch.workspaces?.[0]).toMatchObject({
+    cwd: "/p/alpha",
+    color: "violet",
+  });
+});
+
+it("updateWorkspace sets a workspace color by id", async () => {
+  const a = ws({ id: "a", cwd: "/p/a" });
+  const update = seed({ ...BASE, workspaces: [a] });
+  await useSettingsStore.getState().updateWorkspace("a", { color: "teal" });
+
+  const patch = update.mock.calls.at(-1)?.[0] as Partial<StudioSettings>;
+  expect(patch.workspaces?.[0]?.color).toBe("teal");
+});
+
+it("updateWorkspace clears a workspace color when set to undefined", async () => {
+  const a = ws({ id: "a", cwd: "/p/a", color: "teal" });
+  const update = seed({ ...BASE, workspaces: [a] });
+  await useSettingsStore.getState().updateWorkspace("a", { color: undefined });
+
+  const patch = update.mock.calls.at(-1)?.[0] as Partial<StudioSettings>;
+  expect(patch.workspaces?.[0]?.color).toBeUndefined();
+});

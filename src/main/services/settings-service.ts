@@ -20,6 +20,7 @@ import type {
   UiPrefs,
   Workspace,
 } from "@shared/ipc";
+import { WORKSPACE_COLOR_KEYS } from "@shared/ipc";
 import type { ApprovalMode, ApprovalPolicy, ThinkingLevel } from "@shared/rpc";
 import { scoped } from "../logger";
 
@@ -228,7 +229,7 @@ function coerceWorkspaces(value: unknown): Workspace[] | undefined {
   const out: Workspace[] = [];
   for (const item of value) {
     if (!isRecord(item)) continue;
-    const { id, cwd, label, pinned, lastUsedAt } = item;
+    const { id, cwd, label, pinned, lastUsedAt, color } = item;
     if (
       typeof id === "string" &&
       typeof cwd === "string" &&
@@ -236,7 +237,16 @@ function coerceWorkspaces(value: unknown): Workspace[] | undefined {
       typeof pinned === "boolean" &&
       typeof lastUsedAt === "string"
     ) {
-      out.push({ id, cwd, label, pinned, lastUsedAt });
+      const workspace: Workspace = { id, cwd, label, pinned, lastUsedAt };
+      // Only carry a color that matches the curated palette; a stale key or an
+      // injected string is dropped like any other unknown field.
+      if (
+        typeof color === "string" &&
+        (WORKSPACE_COLOR_KEYS as readonly string[]).includes(color)
+      ) {
+        workspace.color = color as Workspace["color"];
+      }
+      out.push(workspace);
     }
   }
   // A non-empty input that yields nothing valid is malformed → preserve prior;

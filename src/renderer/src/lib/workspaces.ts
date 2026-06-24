@@ -1,4 +1,4 @@
-import type { Workspace } from "@shared/ipc";
+import type { Workspace, WorkspaceColorKey } from "@shared/ipc";
 
 /**
  * How many non-pinned (recent) workspaces the switcher surfaces before the
@@ -6,6 +6,35 @@ import type { Workspace } from "@shared/ipc";
  * workspace is a deliberate, user-managed entity, not a transient recent.
  */
 export const WORKSPACE_RECENTS_LIMIT = 6;
+
+/**
+ * Curated workspace swatch palette (AGE-671): each key maps to a display label
+ * and a fixed CSS color value chosen to read on both light and dark surfaces.
+ * The key is what persists on the Workspace; the value is renderer-only.
+ */
+export const WORKSPACE_COLORS: readonly {
+  key: WorkspaceColorKey;
+  label: string;
+  value: string;
+}[] = [
+  { key: "slate", label: "Slate", value: "#64748b" },
+  { key: "red", label: "Red", value: "#ef4444" },
+  { key: "amber", label: "Amber", value: "#f59e0b" },
+  { key: "green", label: "Green", value: "#22c55e" },
+  { key: "teal", label: "Teal", value: "#14b8a6" },
+  { key: "blue", label: "Blue", value: "#3b82f6" },
+  { key: "violet", label: "Violet", value: "#8b5cf6" },
+  { key: "pink", label: "Pink", value: "#ec4899" },
+];
+
+/** Resolve a workspace color key to its swatch value, or undefined when unset. */
+export function workspaceColorValue(
+  color: WorkspaceColorKey | undefined,
+): string | undefined {
+  return color
+    ? WORKSPACE_COLORS.find((c) => c.key === color)?.value
+    : undefined;
+}
 
 /** Derive a stable, human display label from a directory path (its basename). */
 export function projectLabel(cwd: string): string {
@@ -21,6 +50,8 @@ export interface UpsertWorkspaceOptions {
   now?: string;
   /** Id to assign when creating a fresh workspace; defaults to a new uuid. */
   id?: string;
+  /** Curated color key to assign; omit to leave the workspace's color unchanged. */
+  color?: WorkspaceColorKey;
 }
 
 /**
@@ -43,6 +74,7 @@ export function upsertWorkspace(
       ...existing,
       lastUsedAt: now,
       label: label || existing.label,
+      color: opts.color ?? existing.color,
     };
     // Keep exactly one entry per cwd: replace the matched workspace in place
     // and drop any other entry that already shares this cwd (collision-healing).
@@ -56,6 +88,7 @@ export function upsertWorkspace(
     label: label || projectLabel(cwd),
     pinned: false,
     lastUsedAt: now,
+    color: opts.color,
   };
   return [entry, ...list];
 }

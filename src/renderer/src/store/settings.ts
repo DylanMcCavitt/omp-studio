@@ -17,14 +17,18 @@ interface SettingsState {
   update(patch: Partial<StudioSettings>): Promise<void>;
   /** Bump (or create) the workspace for `cwd` to "now" recency (best-effort). */
   recordWorkspace(cwd: string): Promise<void>;
-  /** Add a workspace from a picked directory, with an optional label override. */
-  addWorkspace(cwd: string, label?: string): Promise<void>;
+  /** Add a workspace from a picked directory, with optional label + color. */
+  addWorkspace(
+    cwd: string,
+    label?: string,
+    color?: Workspace["color"],
+  ): Promise<void>;
   /** Remove the workspace `id`; clears defaultProject if it pointed at its cwd. */
   removeWorkspace(id: string): Promise<void>;
-  /** Patch a workspace's mutable fields (label / cwd / pinned) by id. */
+  /** Patch a workspace's mutable fields (label / cwd / pinned / color) by id. */
   updateWorkspace(
     id: string,
-    patch: Partial<Pick<Workspace, "label" | "cwd" | "pinned">>,
+    patch: Partial<Pick<Workspace, "label" | "cwd" | "pinned" | "color">>,
   ): Promise<void>;
   /**
    * Toggle a command name in `settings.ui.pinnedCommands` (Commands favorites).
@@ -96,11 +100,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => {
       });
     },
 
-    async addWorkspace(cwd, label) {
+    async addWorkspace(cwd, label, color) {
       const current = get().settings;
       if (!current) return;
       await get().update({
-        workspaces: upsertWorkspace(current.workspaces ?? [], cwd, { label }),
+        workspaces: upsertWorkspace(current.workspaces ?? [], cwd, {
+          label,
+          color,
+        }),
       });
     },
 

@@ -15,6 +15,7 @@ import {
 import { useState } from "react";
 import { Menu, MenuItem, MenuSeparator } from "@/components/ui";
 import { AddWorkspaceDialog } from "@/components/workspace/AddWorkspaceDialog";
+import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import {
   projectLabel,
@@ -63,7 +64,10 @@ export function WorkspaceSwitcher() {
       }
       onClick={() => select(workspace)}
     >
-      {workspace.label}
+      <span className="flex min-w-0 items-center gap-2">
+        {workspace.color && <WorkspaceColorDot color={workspace.color} />}
+        <span className="truncate">{workspace.label}</span>
+      </span>
     </MenuItem>
   );
 
@@ -87,7 +91,11 @@ export function WorkspaceSwitcher() {
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
             )}
           >
-            <FolderOpen className="h-4 w-4 shrink-0 text-ink-muted" />
+            {current?.color ? (
+              <WorkspaceColorDot color={current.color} className="h-3 w-3" />
+            ) : (
+              <FolderOpen className="h-4 w-4 shrink-0 text-ink-muted" />
+            )}
             <span
               className={cn(
                 "min-w-0 flex-1 truncate",

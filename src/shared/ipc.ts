@@ -234,6 +234,24 @@ export interface StudioSettingsV1 {
 // API key NEVER lives here; `linear` holds non-secret metadata only.
 // ---------------------------------------------------------------------------
 
+/**
+ * Curated per-workspace color keys (AGE-671). The renderer maps each key to a
+ * swatch value; main only needs the key set to validate persisted data without
+ * importing renderer-only presentation.
+ */
+export const WORKSPACE_COLOR_KEYS = [
+  "slate",
+  "red",
+  "amber",
+  "green",
+  "teal",
+  "blue",
+  "violet",
+  "pink",
+] as const;
+
+export type WorkspaceColorKey = (typeof WORKSPACE_COLOR_KEYS)[number];
+
 /** A first-class project workspace (feature 1; supersedes RecentProject). */
 export interface Workspace {
   /** Stable uuid; survives label/prefs across an explicit cwd edit. */
@@ -243,6 +261,8 @@ export interface Workspace {
   label: string;
   pinned: boolean;
   lastUsedAt: string;
+  /** Optional curated color key for at-a-glance distinction; absent = no color. */
+  color?: WorkspaceColorKey;
 }
 
 /** Persisted shell layout (feature 5; resizable splits + nav/rail prefs). */

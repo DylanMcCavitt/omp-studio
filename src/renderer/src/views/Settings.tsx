@@ -3,7 +3,7 @@ import type {
   ProviderAuthStatus,
   ProviderInfo,
 } from "@shared/domain";
-import type { ThemeMode, Workspace } from "@shared/ipc";
+import type { ThemeMode, Workspace, WorkspaceColorKey } from "@shared/ipc";
 import type { ApprovalMode, ThinkingLevel } from "@shared/rpc";
 import {
   Boxes,
@@ -37,9 +37,14 @@ import {
   EmptyState,
   IconButton,
   Panel,
+  Popover,
   Spinner,
 } from "@/components/ui";
 import { AddWorkspaceDialog } from "@/components/workspace/AddWorkspaceDialog";
+import {
+  WorkspaceColorDot,
+  WorkspaceColorPicker,
+} from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
 import { type AsyncState, useAsync } from "@/lib/useAsync";
@@ -433,6 +438,7 @@ function WorkspacesPanel() {
               }
               onRepoint={(cwd) => void updateWorkspace(workspace.id, { cwd })}
               onRemove={() => void removeWorkspace(workspace.id)}
+              onColor={(color) => void updateWorkspace(workspace.id, { color })}
             />
           ))}
         </div>
@@ -450,6 +456,7 @@ function WorkspaceRow({
   onRename,
   onRepoint,
   onRemove,
+  onColor,
 }: {
   workspace: Workspace;
   isDefault: boolean;
@@ -458,6 +465,7 @@ function WorkspaceRow({
   onRename: (label: string) => void;
   onRepoint: (cwd: string) => void;
   onRemove: () => void;
+  onColor: (color: WorkspaceColorKey | undefined) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(workspace.label);
@@ -508,6 +516,7 @@ function WorkspaceRow({
           />
         ) : (
           <div className="flex min-w-0 items-center gap-2">
+            <WorkspaceColorDot color={workspace.color} />
             <span className="truncate text-sm text-ink">{workspace.label}</span>
             {workspace.pinned && <Badge variant="muted">pinned</Badge>}
             {isDefault && <Badge variant="accent">default</Badge>}
@@ -537,6 +546,32 @@ function WorkspaceRow({
         </div>
       ) : (
         <div className="flex shrink-0 items-center gap-0.5">
+          <Popover
+            align="end"
+            contentClassName="p-2"
+            trigger={({ toggle, triggerRef }) => (
+              <button
+                ref={triggerRef}
+                type="button"
+                aria-label="Workspace color"
+                title="Workspace color"
+                onClick={toggle}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              >
+                <Palette className="h-4 w-4 text-ink-faint" />
+              </button>
+            )}
+          >
+            {({ close }) => (
+              <WorkspaceColorPicker
+                value={workspace.color}
+                onChange={(color) => {
+                  onColor(color);
+                  close();
+                }}
+              />
+            )}
+          </Popover>
           <IconButton
             label={workspace.pinned ? "Unpin workspace" : "Pin workspace"}
             onClick={onTogglePin}

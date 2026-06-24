@@ -519,3 +519,49 @@ test("honours an explicit empty collapse map as a clear", async () => {
   await updateSettings({ ui: { collapsed: {} } });
   expect((await loadSettings()).ui?.collapsed).toEqual({});
 });
+
+test("coerceWorkspaces keeps a valid palette color and drops an off-palette one", async () => {
+  // A valid curated key survives the persist → load → coerce round-trip.
+  await updateSettings({
+    workspaces: [
+      {
+        id: "w1",
+        cwd: "/a",
+        label: "A",
+        pinned: false,
+        lastUsedAt: "t",
+        color: "blue",
+      },
+    ],
+  });
+  expect((await loadSettings()).workspaces).toEqual([
+    {
+      id: "w1",
+      cwd: "/a",
+      label: "A",
+      pinned: false,
+      lastUsedAt: "t",
+      color: "blue",
+    },
+  ]);
+
+  // An off-palette / injected color is dropped like any unknown field; the
+  // workspace itself is preserved.
+  await updateSettings({
+    workspaces: [
+      {
+        id: "w2",
+        cwd: "/b",
+        label: "B",
+        pinned: false,
+        lastUsedAt: "t",
+        color: "tok_secret",
+      },
+    ],
+  } as unknown as Partial<StudioSettings>);
+  const loaded = await loadSettings();
+  expect(loaded.workspaces).toEqual([
+    { id: "w2", cwd: "/b", label: "B", pinned: false, lastUsedAt: "t" },
+  ]);
+  expect(loaded.workspaces[0]).not.toHaveProperty("color");
+});
