@@ -32,6 +32,9 @@ vi.mock("@/components/chat/SubagentInspector", () => ({
 vi.mock("@/components/chat/UiRequestLayer", () => ({
   UiRequestLayer: () => null,
 }));
+vi.mock("@/components/chat/ui-request/ApprovalModeControl", () => ({
+  ApprovalModeControl: () => null,
+}));
 
 const SESSION_ID = "session-1";
 

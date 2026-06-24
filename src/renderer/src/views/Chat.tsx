@@ -17,6 +17,7 @@ import { ContextMeterChip } from "@/components/chat/SessionStatsPanel";
 import { SubagentInspector } from "@/components/chat/SubagentInspector";
 import { ThinkingControl } from "@/components/chat/ThinkingControl";
 import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
+import { ApprovalModeControl } from "@/components/chat/ui-request/ApprovalModeControl";
 import { Button, EmptyState } from "@/components/ui";
 import { useActiveSession, useChatStore } from "@/store/chat";
 
@@ -118,6 +119,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
           uiRequests={uiRequests}
           isCompacting={isCompacting}
         />
+        <ApprovalModeControl />
         <ContextMeterChip />
       </header>
       {error && status === "error" && (
