@@ -35,6 +35,7 @@ import { useApprovalStore } from "@/store/approvals";
 import {
   createSession,
   type LiveSessionState,
+  normalizeMessageContent,
   reduceSession,
   sessionFromState,
   studioFrame,
@@ -762,9 +763,10 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
             ) {
               return s;
             }
+            const incoming = res.messages.map(normalizeMessageContent);
             const messages = res.reset
-              ? res.messages
-              : [...i.messages, ...res.messages];
+              ? incoming
+              : [...i.messages, ...incoming];
             return {
               _subagentInspector: {
                 ...i,

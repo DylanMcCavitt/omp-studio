@@ -11,6 +11,7 @@ import {
   MessageSquare,
   MessageSquarePlus,
 } from "lucide-react";
+import { ChatPanelDock } from "@/components/chat/ChatPanelDock";
 import { SessionList } from "@/components/chat/SessionList";
 import { FileTree } from "@/components/files/FileTree";
 import { Button } from "@/components/ui";
@@ -49,6 +50,8 @@ export function Sidebar() {
       </div>
 
       {mode === "chats" ? <ChatsPane onNewChat={newChat} /> : <FileTree />}
+
+      <ChatPanelDock />
 
       <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-3">
         {/* Brand/logo placeholder — reserve this footer slot for the omp mark;

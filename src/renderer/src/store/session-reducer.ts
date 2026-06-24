@@ -257,19 +257,21 @@ export const studioFrame = {
 };
 
 /**
- * Coerce an assistant/toolResult message whose `content` arrived as a bare
- * string into the `ContentBlock[]` shape the renderer's types and `MessageBubble`
- * assume. omp emits text-only assistant turns with a plain-string `content`,
- * which violates the declared `content: ContentBlock[]` type and crashed the
- * transcript (`message.content.map is not a function`). User messages
- * legitimately carry a string `content` (the user branch of MessageBubble
- * renders it), so they pass through unchanged; non-string content is unchanged.
+ * Coerce an assistant/toolResult message into the `ContentBlock[]` shape the
+ * renderer's types and render sites assume. omp emits text-only assistant turns
+ * with a plain-string `content`, and a freshly-spawned subagent can emit an
+ * assistant frame with `content` entirely missing (undefined) — both violate the
+ * declared `content: ContentBlock[]` type and crash the transcript
+ * (`message.content.map is not a function`). A string becomes a single text
+ * block; missing/empty content becomes no blocks. User messages legitimately
+ * carry a string `content` (the user branch of MessageBubble renders it) and
+ * already-array content pass through unchanged.
  */
 export function normalizeMessageContent(message: OmpMessage): OmpMessage {
-  if (message.role === "user" || typeof message.content !== "string") {
+  if (message.role === "user" || Array.isArray(message.content)) {
     return message;
   }
-  const text = message.content;
+  const text = typeof message.content === "string" ? message.content : "";
   const content: ContentBlock[] = text ? [{ type: "text", text }] : [];
   return { ...message, content };
 }
