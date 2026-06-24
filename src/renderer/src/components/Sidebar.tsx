@@ -70,7 +70,7 @@ function SidebarModeToggle({
   onChange: (mode: SidebarMode) => void;
 }) {
   return (
-    <div className="flex gap-1 rounded-lg bg-bg-panel p-1">
+    <div className="flex min-w-0 gap-1 rounded-lg bg-bg-panel p-1">
       {MODES.map(({ id, label, icon: Icon }) => {
         const active = id === mode;
         return (
@@ -80,7 +80,7 @@ function SidebarModeToggle({
             aria-pressed={active}
             onClick={() => onChange(id)}
             className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+              "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
               active
                 ? "bg-bg-raised text-ink shadow-sm"
@@ -88,7 +88,7 @@ function SidebarModeToggle({
             )}
           >
             <Icon size={14} className="shrink-0" />
-            {label}
+            <span className="truncate">{label}</span>
           </button>
         );
       })}

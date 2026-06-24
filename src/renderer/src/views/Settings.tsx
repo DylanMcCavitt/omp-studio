@@ -507,7 +507,7 @@ function WorkspaceRow({
             className="w-full rounded-md border border-border-subtle bg-bg-raised px-2 py-1 text-sm text-ink focus:border-accent focus:outline-none"
           />
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm text-ink">{workspace.label}</span>
             {workspace.pinned && <Badge variant="muted">pinned</Badge>}
             {isDefault && <Badge variant="accent">default</Badge>}
@@ -519,7 +519,7 @@ function WorkspaceRow({
       </div>
 
       {editing ? (
-        <>
+        <div className="flex shrink-0 items-center gap-0.5">
           <IconButton
             label="Save label"
             onMouseDown={(e) => e.preventDefault()}
@@ -534,9 +534,9 @@ function WorkspaceRow({
           >
             <X className="h-4 w-4 text-ink-faint" />
           </IconButton>
-        </>
+        </div>
       ) : (
-        <>
+        <div className="flex shrink-0 items-center gap-0.5">
           <IconButton
             label={workspace.pinned ? "Unpin workspace" : "Pin workspace"}
             onClick={onTogglePin}
@@ -575,7 +575,7 @@ function WorkspaceRow({
           <IconButton label="Remove workspace" onClick={onRemove}>
             <Trash2 className="h-4 w-4 text-ink-faint" />
           </IconButton>
-        </>
+        </div>
       )}
     </div>
   );

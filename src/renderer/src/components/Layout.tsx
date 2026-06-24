@@ -133,7 +133,7 @@ function ShellSplit({
         defaultSize={initialLayout[0]}
         minSize={SIDEBAR_MIN_PCT}
         maxSize={SIDEBAR_MAX_PCT}
-        className="flex min-h-0"
+        className="flex min-h-0 min-w-0 overflow-hidden"
       >
         <Sidebar />
       </ResizablePanel>
@@ -142,7 +142,7 @@ function ShellSplit({
         order={2}
         defaultSize={initialLayout[1]}
         minSize={MAIN_MIN_PCT}
-        className="flex min-h-0"
+        className="flex min-h-0 min-w-0"
       >
         <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
       </ResizablePanel>
@@ -154,7 +154,7 @@ function ShellSplit({
             defaultSize={initialLayout[2]}
             minSize={RIGHT_PANEL_MIN_PCT}
             maxSize={RIGHT_PANEL_MAX_PCT}
-            className="flex min-h-0"
+            className="flex min-h-0 min-w-0 overflow-hidden"
           >
             <RailPanelHost openPanelId={openPanelId} />
           </ResizablePanel>
