@@ -4,13 +4,15 @@
 // (`settings.ui.collapsed[...]` via `useCollapsePref`), so the transcript owns
 // the full center width by default and these stay glanceable bottom-left
 // widgets. Renders nothing without an active session; the Subagents widget's Eye
-// pops that subagent's transcript into the center view through the shared chat
-// store (`inspectedSubagentId`), exactly as the rail used to.
+// pops that subagent's transcript into the center view (via the shared chat
+// store's `inspectedSubagentId`) and focuses the Chat tab so the inspector is
+// visible even when a file tab owns the center.
 
 import { SessionStatsPanel } from "@/components/chat/SessionStatsPanel";
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { useChatStore } from "@/store/chat";
+import { CHAT_TAB, useFilesStore } from "@/store/files";
 
 export function ChatPanelDock() {
   const sessionId = useChatStore((s) => s.activeSessionId);
@@ -23,7 +25,14 @@ export function ChatPanelDock() {
     <div className="scrollbar max-h-[45%] shrink-0 space-y-2 overflow-y-auto border-t border-border-subtle p-2">
       <SessionStatsPanel sessionId={sessionId} />
       <TodoPanel />
-      <SubagentTree onInspect={setInspected} />
+      <SubagentTree
+        onInspect={(id) => {
+          setInspected(id);
+          // The inspector renders in the chat center pane; focus it so the
+          // drill-in is visible even when a file tab currently owns the center.
+          useFilesStore.getState().setActiveTab(CHAT_TAB);
+        }}
+      />
     </div>
   );
 }

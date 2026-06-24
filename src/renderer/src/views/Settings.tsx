@@ -360,7 +360,7 @@ function AppearancePanel() {
       </Field>
       <Field
         label="Layout"
-        hint="Restore the sidebar, chat rail, panel order, and visibility to their defaults."
+        hint="Restore the sidebar and tool panel widths to their defaults."
       >
         <Button variant="subtle" onClick={() => void resetLayout()}>
           <RotateCcw className="h-4 w-4" />
