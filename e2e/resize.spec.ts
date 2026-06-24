@@ -304,3 +304,72 @@ test("the chat transcript and composer fill a wide panel up to the 72rem ceiling
   expect(rendererCrashes).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
+
+// AGE-674 — the Usage/Plan/Subagents panels moved out of the middle chat rail
+// into a bounded dock at the bottom of the left sidebar (`ChatPanelDock`). Like
+// AGE-666's transcript fill, the dock only mounts with a live session this
+// hermetic harness can't reach, so the new placement is proven at two layers: a
+// source guard that the middle rail is gone and the sidebar dock is wired, and a
+// runtime probe that the dock's bounding classes cap its height (≤45% of the
+// sidebar) and scroll internally instead of spilling — the "no overflow/dead
+// space" invariant.
+const DOCK_BOUND = "max-h-[45%] overflow-y-auto";
+
+test("the chat panels live in a bounded sidebar dock, not a middle rail", async () => {
+  await setContentSize(1680, HEIGHT);
+
+  // Source guard: the middle-rail apparatus is gone from the chat view, and the
+  // three panels are mounted by the sidebar dock instead.
+  const chatSrc = readComponent("../src/renderer/src/views/Chat.tsx");
+  for (const gone of [
+    "ChatRailSplit",
+    "RightRail",
+    "RailIconStrip",
+    "Resize panel rail",
+  ]) {
+    expect(chatSrc).not.toContain(gone);
+  }
+  const sidebarSrc = readComponent(
+    "../src/renderer/src/components/Sidebar.tsx",
+  );
+  expect(sidebarSrc).toContain("<ChatPanelDock");
+  const dockSrc = readComponent(
+    "../src/renderer/src/components/chat/ChatPanelDock.tsx",
+  );
+  expect(dockSrc).toContain("SessionStatsPanel");
+  expect(dockSrc).toContain("TodoPanel");
+  expect(dockSrc).toContain("SubagentTree");
+  expect(dockSrc).toContain("max-h-[45%]");
+  expect(dockSrc).toContain("overflow-y-auto");
+
+  // Runtime guard: the dock's bounding classes cap an over-tall stack at 45% of
+  // a fixed-height sidebar and scroll inside — never pushing the column taller.
+  const probe = await page.evaluate(
+    ({ boundCls }) => {
+      const parentHeight = 1000;
+      const outer = document.createElement("div");
+      outer.style.cssText = `position:fixed;top:0;left:0;width:300px;height:${parentHeight}px;visibility:hidden;pointer-events:none;`;
+      const dock = document.createElement("div");
+      dock.className = boundCls;
+      const tall = document.createElement("div");
+      tall.style.height = "5000px";
+      dock.appendChild(tall);
+      outer.appendChild(dock);
+      document.body.appendChild(outer);
+      const height = dock.getBoundingClientRect().height;
+      const scrolls = dock.scrollHeight > dock.clientHeight + 1;
+      outer.remove();
+      return { parentHeight, height, scrolls };
+    },
+    { boundCls: DOCK_BOUND },
+  );
+
+  // Capped at 45% of the 1000px sidebar (≈450px), not the full 5000px content.
+  expect(
+    Math.abs(probe.height - 0.45 * probe.parentHeight),
+  ).toBeLessThanOrEqual(2);
+  expect(probe.scrolls).toBe(true);
+
+  expect(rendererCrashes).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});

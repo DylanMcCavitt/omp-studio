@@ -1,16 +1,9 @@
-// AGE-627 — the pure layout maths behind the draggable shell: list reorder, the
-// sidebar nav visible/hidden split + reorder basis, and the chat rail panel
-// normalization + visibility toggle. Framework-free, so these assert the
-// behaviour the Sidebar / RightRail persist through `setLayout`.
+// AGE-627 — the pure layout maths behind the draggable shell: list reorder and
+// the sidebar nav visible/hidden split + reorder basis. Framework-free, so these
+// assert the behaviour the Sidebar persists through `setLayout`.
 
 import type { LucideIcon } from "lucide-react";
-import {
-  RAIL_PANEL_IDS,
-  reorder,
-  resolveNav,
-  resolveRailPanels,
-  setRailPanelVisible,
-} from "@/lib/layout";
+import { reorder, resolveNav } from "@/lib/layout";
 import type { NavEntry } from "@/lib/nav-registry";
 import type { Route } from "@/store/app";
 
@@ -94,50 +87,5 @@ describe("resolveNav", () => {
       "chat",
       "sessions",
     ]);
-  });
-});
-
-describe("resolveRailPanels", () => {
-  it("returns every rail panel visible in default order when nothing persisted", () => {
-    expect(resolveRailPanels()).toEqual(
-      RAIL_PANEL_IDS.map((id) => ({ id, visible: true })),
-    );
-  });
-
-  it("respects persisted order/visibility and appends missing panels as visible", () => {
-    const got = resolveRailPanels([
-      { id: "subagents", visible: false },
-      { id: "stats", visible: true },
-    ]);
-    expect(got).toEqual([
-      { id: "subagents", visible: false },
-      { id: "stats", visible: true },
-      { id: "todos", visible: true },
-    ]);
-  });
-
-  it("drops unknown ids and de-duplicates persisted entries", () => {
-    const got = resolveRailPanels([
-      { id: "ghost", visible: true },
-      { id: "stats", visible: false },
-      { id: "stats", visible: true },
-    ]);
-    expect(got.filter((p) => p.id === "stats")).toEqual([
-      { id: "stats", visible: false },
-    ]);
-    expect(got.map((p) => String(p.id))).not.toContain("ghost");
-    expect(got).toHaveLength(RAIL_PANEL_IDS.length);
-  });
-});
-
-describe("setRailPanelVisible", () => {
-  it("toggles one panel's visibility, leaving order and siblings intact", () => {
-    const panels = resolveRailPanels();
-    const next = setRailPanelVisible(panels, "stats", false);
-    expect(next.find((p) => p.id === "stats")?.visible).toBe(false);
-    expect(next.map((p) => p.id)).toEqual(panels.map((p) => p.id));
-    expect(next.filter((p) => p.id !== "stats")).toEqual(
-      panels.filter((p) => p.id !== "stats"),
-    );
   });
 });
