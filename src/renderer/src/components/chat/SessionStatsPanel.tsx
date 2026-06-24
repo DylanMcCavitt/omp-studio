@@ -173,9 +173,11 @@ export function ContextMeterChip() {
 export function SessionStatsPanel({
   sessionId,
   headerLeading,
+  dense,
 }: {
   sessionId: string;
   headerLeading?: ReactNode;
+  dense?: boolean;
 }) {
   const view = useStatsView();
   const messageCount = useActiveSession((s) => s?.messages.length ?? 0);
@@ -209,6 +211,7 @@ export function SessionStatsPanel({
       title="Usage"
       collapsible
       persistKey="chat.rail.stats"
+      dense={dense}
       headerLeading={headerLeading}
       actions={
         <IconButton
@@ -222,7 +225,7 @@ export function SessionStatsPanel({
           />
         </IconButton>
       }
-      bodyClassName="space-y-3 p-4"
+      bodyClassName={dense ? "space-y-2.5 p-3" : "space-y-3 p-4"}
     >
       {busy && (
         <div className="flex items-center gap-2 rounded-md border border-thinking/30 bg-thinking/10 px-2.5 py-1.5 text-xs text-thinking">

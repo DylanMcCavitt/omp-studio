@@ -1,8 +1,8 @@
-// Pure helpers for the feature-5 draggable/rearrangeable shell layout. Kept
-// framework-free (no React, no store) so the reorder/visibility maths is unit
-// testable in isolation and reused by both the sidebar nav and the chat
-// right-rail. Persistence shapes live in `settings.layout` (`LayoutSettings`);
-// these functions only compute the next array a caller hands to `setLayout`.
+// Pure helpers for the draggable/rearrangeable shell layout. Kept framework-free
+// (no React, no store) so the reorder maths is unit testable in isolation and
+// reused by the sidebar nav. Persistence shapes live in `settings.layout`
+// (`LayoutSettings`); these functions only compute the next array a caller hands
+// to `setLayout`.
 
 import type { NavEntry } from "@/lib/nav-registry";
 import type { Route } from "@/store/app";
@@ -20,28 +20,6 @@ export const RIGHT_PANEL_MIN_PCT = 18;
 export const RIGHT_PANEL_MAX_PCT = 50;
 /** Minimum center main width (%) so it never collapses behind the rail panel. */
 export const MAIN_MIN_PCT = 30;
-
-/** Default chat right-rail width (% of the chat pane) — mirrors `w-80`. */
-export const DEFAULT_CHAT_RAIL_WIDTH_PCT = 26;
-/** Min/max chat right-rail width (%). */
-export const CHAT_RAIL_MIN_PCT = 16;
-export const CHAT_RAIL_MAX_PCT = 48;
-/** Minimum chat transcript width (%) so it never collapses behind the rail. */
-export const CHAT_TRANSCRIPT_MIN_PCT = 40;
-
-/** The chat right-rail panels, in their default display order. */
-export const RAIL_PANEL_IDS = ["stats", "todos", "subagents"] as const;
-export type RailPanelId = (typeof RAIL_PANEL_IDS)[number];
-
-/** A rail panel's persisted state: its id, in order, plus whether it shows. */
-export interface RailPanelState {
-  id: RailPanelId;
-  visible: boolean;
-}
-
-function isRailPanelId(id: string): id is RailPanelId {
-  return (RAIL_PANEL_IDS as readonly string[]).includes(id);
-}
 
 /**
  * Clamp a raw percentage from a resize drag to `[0, 100]` and round to a single
@@ -128,39 +106,4 @@ export function resolveNav(
     hidden: ordered.filter((e) => hiddenSet.has(e.route)),
     orderedRoutes: ordered.map((e) => e.route),
   };
-}
-
-/**
- * Normalize the persisted chat-rail panels into the full set: persisted entries
- * first (in order, valid ids only, de-duplicated), then any rail panel the
- * stored list omitted appended as visible. Guarantees every {@link RAIL_PANEL_IDS}
- * appears exactly once, so a schema addition surfaces instead of vanishing.
- */
-export function resolveRailPanels(
-  persisted?: readonly { id: string; visible: boolean }[],
-): RailPanelState[] {
-  const seen = new Set<string>();
-  const out: RailPanelState[] = [];
-  for (const panel of persisted ?? []) {
-    if (isRailPanelId(panel.id) && !seen.has(panel.id)) {
-      out.push({ id: panel.id, visible: panel.visible });
-      seen.add(panel.id);
-    }
-  }
-  for (const id of RAIL_PANEL_IDS) {
-    if (!seen.has(id)) {
-      out.push({ id, visible: true });
-      seen.add(id);
-    }
-  }
-  return out;
-}
-
-/** Set a rail panel's visibility, preserving order. Pure. */
-export function setRailPanelVisible(
-  panels: readonly RailPanelState[],
-  id: RailPanelId,
-  visible: boolean,
-): RailPanelState[] {
-  return panels.map((p) => (p.id === id ? { ...p, visible } : p));
 }
