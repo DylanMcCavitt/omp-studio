@@ -21,6 +21,13 @@ export interface PanelProps {
   defaultCollapsed?: boolean;
   /** Persist the collapsed state under `settings.ui.collapsed[persistKey]`. */
   persistKey?: string;
+  /**
+   * Compact, flat presentation for tight contexts (e.g. the sidebar panel dock):
+   * drops the card chrome (border/background/shadow/rounding) and shrinks the
+   * header + default body padding so panels read as glanceable widgets rather
+   * than nested cards. The host supplies separation (dividers/border).
+   */
+  dense?: boolean;
 }
 
 export function Panel({
@@ -33,6 +40,7 @@ export function Panel({
   collapsible = false,
   defaultCollapsed = false,
   persistKey,
+  dense = false,
 }: PanelProps) {
   const [collapsed, setCollapsed] = useCollapsePref(
     collapsible ? persistKey : undefined,
@@ -40,18 +48,23 @@ export function Panel({
   );
   const open = collapsible ? !collapsed : true;
   const bodyId = useId();
+  const titleCls = dense
+    ? "truncate text-xs font-semibold text-ink-muted"
+    : "truncate text-sm font-semibold text-ink";
 
   return (
     <section
       className={cn(
-        "flex min-h-0 flex-col rounded-xl border border-border bg-bg-panel shadow-panel",
+        "flex min-h-0 flex-col",
+        !dense && "rounded-xl border border-border bg-bg-panel shadow-panel",
         className,
       )}
     >
       {(title || actions || collapsible || headerLeading) && (
         <header
           className={cn(
-            "flex items-center justify-between gap-3 px-4 py-3",
+            "flex items-center justify-between gap-3",
+            dense ? "px-3 py-2" : "px-4 py-3",
             open && "border-b border-border-subtle",
           )}
         >
@@ -67,22 +80,15 @@ export function Panel({
               >
                 <ChevronRight
                   className={cn(
-                    "h-4 w-4 shrink-0 text-ink-faint transition-transform",
+                    "shrink-0 text-ink-faint transition-transform",
+                    dense ? "h-3.5 w-3.5" : "h-4 w-4",
                     open && "rotate-90",
                   )}
                 />
-                {title && (
-                  <h2 className="truncate text-sm font-semibold text-ink">
-                    {title}
-                  </h2>
-                )}
+                {title && <h2 className={titleCls}>{title}</h2>}
               </button>
             ) : (
-              title && (
-                <h2 className="truncate text-sm font-semibold text-ink">
-                  {title}
-                </h2>
-              )
+              title && <h2 className={titleCls}>{title}</h2>
             )}
           </div>
           {actions && (
@@ -93,7 +99,10 @@ export function Panel({
       {open && (
         <div
           id={collapsible ? bodyId : undefined}
-          className={cn("min-h-0 flex-1", bodyClassName ?? "p-4")}
+          className={cn(
+            "min-h-0 flex-1",
+            bodyClassName ?? (dense ? "p-3" : "p-4"),
+          )}
         >
           {children}
         </div>
