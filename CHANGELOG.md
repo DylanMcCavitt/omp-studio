@@ -29,6 +29,14 @@ high-legibility, IDE-grade dark interface:
 - **New Playwright `_electron` UI-flow E2E** exercising the polished navigation
   and empty-state flows, plus stale-branch cleanup.
 
+### Visual identity refresh (AGE-658)
+
+- A cohesive dark + light **identity pass** on the CSS-variable token set: the
+  surface ramp is now consistent neutral **graphite** (the previous navy/blue
+  cast on panels is gone) and the accent moves to a refined **iris/violet**.
+  All body and muted copy stays WCAG-AA legible in both themes; only the token
+  values changed (the renderer is fully token-driven, so no per-component edits).
+
 ### Added
 
 - First-class project **workspaces** (feature 1): a sidebar `WorkspaceSwitcher`

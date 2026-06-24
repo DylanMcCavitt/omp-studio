@@ -15,19 +15,19 @@
 @layer base {
   :root {
     /* Light palette (channels: R G B). */
-    --c-bg: 244 245 247;
+    --c-bg: 246 246 249;
     --c-bg-raised: 255 255 255;
-    --c-bg-panel: 251 252 254;
-    --c-bg-hover: 233 235 241;
-    --c-border: 214 218 227;
-    --c-border-subtle: 230 233 240;
-    --c-border-strong: 192 198 210;
-    --c-ink: 18 22 31;
-    --c-ink-muted: 81 90 107;
-    --c-ink-faint: 104 111 130;
-    --c-accent: 58 91 217;
-    --c-accent-hover: 44 73 191;
-    --c-accent-soft: 231 237 253;
+    --c-bg-panel: 251 251 253;
+    --c-bg-hover: 237 237 242;
+    --c-border: 219 219 227;
+    --c-border-subtle: 231 231 238;
+    --c-border-strong: 198 198 209;
+    --c-ink: 22 22 28;
+    --c-ink-muted: 90 90 103;
+    --c-ink-faint: 116 116 131;
+    --c-accent: 109 74 226;
+    --c-accent-hover: 92 60 200;
+    --c-accent-soft: 240 236 253;
     --c-success: 26 127 55;
     --c-warn: 180 83 9;
     --c-danger: 207 34 46;
@@ -36,7 +36,7 @@
     --shadow-panel:
       0 1px 2px rgb(16 24 40 / 0.06), 0 8px 24px rgb(16 24 40 / 0.08);
     --shadow-glow:
-      0 0 0 1px rgb(58 91 217 / 0.35), 0 8px 30px rgb(58 91 217 / 0.18);
+      0 0 0 1px rgb(109 74 226 / 0.35), 0 8px 30px rgb(109 74 226 / 0.18);
 
     /* highlight.js token colors — GitHub light. */
     --hljs-keyword: #d73a49;
@@ -56,19 +56,19 @@
 
   .dark {
     /* Dark cockpit palette (channels: R G B). */
-    --c-bg: 11 13 18;
-    --c-bg-raised: 17 20 27;
-    --c-bg-panel: 21 25 37;
-    --c-bg-hover: 27 32 48;
-    --c-border: 42 49 67;
-    --c-border-subtle: 30 36 51;
-    --c-border-strong: 56 64 86;
-    --c-ink: 230 233 240;
-    --c-ink-muted: 166 175 196;
-    --c-ink-faint: 132 141 163;
-    --c-accent: 109 140 255;
-    --c-accent-hover: 132 160 255;
-    --c-accent-soft: 28 36 56;
+    --c-bg: 12 12 15;
+    --c-bg-raised: 19 19 24;
+    --c-bg-panel: 23 23 29;
+    --c-bg-hover: 32 32 40;
+    --c-border: 41 41 51;
+    --c-border-subtle: 30 30 38;
+    --c-border-strong: 57 57 71;
+    --c-ink: 238 238 243;
+    --c-ink-muted: 166 167 179;
+    --c-ink-faint: 129 130 144;
+    --c-accent: 138 121 255;
+    --c-accent-hover: 158 144 255;
+    --c-accent-soft: 31 27 50;
     --c-success: 74 222 128;
     --c-warn: 251 191 36;
     --c-danger: 248 113 113;
@@ -76,7 +76,7 @@
 
     --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px rgb(0 0 0 / 0.32);
     --shadow-glow:
-      0 0 0 1px rgb(109 140 255 / 0.35), 0 8px 30px rgb(109 140 255 / 0.15);
+      0 0 0 1px rgb(138 121 255 / 0.35), 0 8px 30px rgb(138 121 255 / 0.15);
 
     /* highlight.js token colors — GitHub dark. */
     --hljs-keyword: #ff7b72;
