@@ -257,23 +257,34 @@ export const studioFrame = {
 };
 
 /**
- * Coerce an assistant/toolResult message into the `ContentBlock[]` shape the
- * renderer's types and render sites assume. omp emits text-only assistant turns
- * with a plain-string `content`, and a freshly-spawned subagent can emit an
- * assistant frame with `content` entirely missing (undefined) — both violate the
- * declared `content: ContentBlock[]` type and crash the transcript
- * (`message.content.map is not a function`). A string becomes a single text
- * block; missing/empty content becomes no blocks. User messages legitimately
- * carry a string `content` (the user branch of MessageBubble renders it) and
- * already-array content pass through unchanged.
+ * Coerce any message `content` into the canonical `ContentBlock[]` shape the
+ * renderer assumes. The wire is looser than the static type: omp emits text-only
+ * turns with a plain-string `content`, and a freshly-spawned subagent can emit a
+ * frame with `content` missing (undefined). A non-empty string becomes a single
+ * text block; an empty string or undefined/other becomes no blocks; an array
+ * passes through by reference. This is the single source of truth for the
+ * coercion — render sites call it instead of re-implementing per-site guards.
+ */
+export function toContentBlocks(
+  content: string | ContentBlock[] | undefined,
+): ContentBlock[] {
+  if (Array.isArray(content)) return content;
+  if (typeof content === "string") {
+    return content ? [{ type: "text", text: content }] : [];
+  }
+  return [];
+}
+
+/**
+ * Normalize a message so its `content` is always `ContentBlock[]`. Applied at
+ * every store ingestion boundary (snapshot frames, user-message appends, resume
+ * hydration, the subagent pump) so the rest of the renderer can trust
+ * `OmpMessage.content` and never re-guard. Array content is returned by
+ * reference so an already-normalized message keeps a stable identity.
  */
 export function normalizeMessageContent(message: OmpMessage): OmpMessage {
-  if (message.role === "user" || Array.isArray(message.content)) {
-    return message;
-  }
-  const text = typeof message.content === "string" ? message.content : "";
-  const content: ContentBlock[] = text ? [{ type: "text", text }] : [];
-  return { ...message, content };
+  if (Array.isArray(message.content)) return message;
+  return { ...message, content: toContentBlocks(message.content) };
 }
 
 /**
@@ -514,16 +525,11 @@ export function reduceSession(
     case CONTROL.messages: {
       const messages = (frame as { messages?: OmpMessage[] }).messages;
       if (!Array.isArray(messages)) return state;
-      // Only allocate a new array when a message actually needs coercing, so an
-      // already-normalized snapshot keeps its reference (stable selector reads).
-      const needsNormalize = messages.some(
-        (m) => m.role !== "user" && typeof m.content === "string",
-      );
+      // Normalize every snapshot at the boundary so downstream render sites can
+      // trust `content: ContentBlock[]` without re-guarding.
       return {
         ...state,
-        messages: needsNormalize
-          ? messages.map(normalizeMessageContent)
-          : messages,
+        messages: messages.map(normalizeMessageContent),
       };
     }
 
@@ -535,7 +541,10 @@ export function reduceSession(
     case CONTROL.userMessage: {
       const message = (frame as { message?: UserMessage }).message;
       return message
-        ? { ...state, messages: [...state.messages, message] }
+        ? {
+            ...state,
+            messages: [...state.messages, normalizeMessageContent(message)],
+          }
         : state;
     }
 

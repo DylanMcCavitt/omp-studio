@@ -5,6 +5,7 @@ import type { TextBlock, ToolCallBlock, ToolResultMessage } from "@shared/rpc";
 import { ChevronRight, Wrench } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/cn";
+import { toContentBlocks } from "@/store/session-reducer";
 
 export function ToolCallCard({
   call,
@@ -41,7 +42,7 @@ export function ToolCallCard({
     fullArgs = String(call.arguments);
   }
 
-  const resultText = (result?.content ?? [])
+  const resultText = toContentBlocks(result?.content)
     .map((b) => (b.type === "text" ? String((b as TextBlock).text ?? "") : ""))
     .filter(Boolean)
     .join("\n");

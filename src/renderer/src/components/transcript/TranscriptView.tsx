@@ -18,10 +18,14 @@ import { MessagesSquare } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Badge, EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { toContentBlocks } from "@/store/session-reducer";
 
 /** Flatten message content to plain text, keeping only `text` blocks. */
-export function blocksText(content: string | ContentBlock[]): string {
+export function blocksText(
+  content: string | ContentBlock[] | undefined,
+): string {
   if (typeof content === "string") return content;
+  if (!content) return "";
   return content
     .filter((b): b is TextBlock => b.type === "text")
     .map((b) => b.text)
@@ -107,14 +111,7 @@ export function MessageBlock({ message }: { message: OmpMessage }) {
       </div>
     );
   }
-  // Defense-in-depth at the crash site: `content` is typed string | ContentBlock[]
-  // but a freshly-spawned subagent can emit it undefined. Coerce so `.map` always
-  // runs on an array (mirrors MessageBubble).
-  const blocks: ContentBlock[] = Array.isArray(message.content)
-    ? message.content
-    : message.content
-      ? [{ type: "text", text: message.content }]
-      : [];
+  const blocks = toContentBlocks(message.content);
   return (
     <div className="space-y-2">
       <Badge>assistant</Badge>

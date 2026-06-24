@@ -12,6 +12,7 @@ import type {
   ToolResultMessage,
 } from "@shared/rpc";
 import { imageBlockSrc } from "@/lib/images";
+import { toContentBlocks } from "@/store/session-reducer";
 import { Markdown } from "./Markdown";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { ToolCallCard } from "./ToolCallCard";
@@ -62,12 +63,7 @@ export function MessageBubble({ message, toolResults, streaming }: Props) {
     );
   }
 
-  // Defense-in-depth: omp can emit text-only assistant turns with a bare string
-  // `content`. The reducer normalizes this to blocks, but guard here too so a
-  // stray string never crashes the transcript (`content.map is not a function`).
-  const raw = message.content as ContentBlock[] | string;
-  const blocks: ContentBlock[] =
-    typeof raw === "string" ? (raw ? [{ type: "text", text: raw }] : []) : raw;
+  const blocks = toContentBlocks(message.content);
 
   return (
     <div className="flex justify-start">

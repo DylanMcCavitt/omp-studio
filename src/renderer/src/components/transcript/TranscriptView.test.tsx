@@ -1,39 +1,43 @@
-// AGE-689 — a freshly-spawned subagent can emit an assistant message with no
-// `content`, which crashed the transcript with "Cannot read properties of
-// undefined (reading 'map')". TranscriptView's assistant block now coerces
-// string | undefined content to ContentBlock[] before mapping. These pin that
-// the crash site renders bad-shaped content without throwing and keeps string /
-// array rendering intact.
+// AGE-696 — every TranscriptView render branch coerces content via the shared
+// toContentBlocks / blocksText helpers, so a transcript renders any role with
+// string | undefined | array content without throwing (the
+// `content.map / .filter is not a function` crash family). Builds on AGE-689,
+// which fixed only the subagent-assistant case.
 
 import type { OmpMessage } from "@shared/rpc";
 import { render, screen } from "@testing-library/react";
 import { TranscriptView } from "./TranscriptView";
 
-// The declared type says content is ContentBlock[]; omp can emit it as a bare
-// string or omit it entirely, so build those runtime shapes via a cast.
-const assistant = (content: unknown): OmpMessage =>
-  ({ role: "assistant", content }) as unknown as OmpMessage;
+const message = (role: string, content: unknown): OmpMessage =>
+  ({
+    role,
+    content,
+    toolName: "tool",
+    toolCallId: "c1",
+  }) as unknown as OmpMessage;
 
-describe("TranscriptView assistant content (AGE-689)", () => {
-  it("renders an assistant message with undefined content without throwing", () => {
-    expect(() =>
-      render(<TranscriptView messages={[assistant(undefined)]} />),
-    ).not.toThrow();
-    // The assistant block still renders (its badge), just with no body.
-    expect(screen.getByText("assistant")).toBeInTheDocument();
-  });
+const ROLES = ["user", "assistant", "toolResult"] as const;
+const SHAPES: ReadonlyArray<readonly [string, unknown]> = [
+  ["undefined", undefined],
+  ["string", "hello"],
+  ["array", [{ type: "text", text: "block" }]],
+];
 
-  it("coerces a bare-string assistant content to rendered text", () => {
-    render(<TranscriptView messages={[assistant("hello world")]} />);
-    expect(screen.getByText("hello world")).toBeInTheDocument();
-  });
+describe("TranscriptView content coercion (AGE-696)", () => {
+  for (const role of ROLES) {
+    for (const [label, content] of SHAPES) {
+      it(`renders a ${role} message with ${label} content without throwing`, () => {
+        expect(() =>
+          render(<TranscriptView messages={[message(role, content)]} />),
+        ).not.toThrow();
+      });
+    }
+  }
 
-  it("renders array content blocks unchanged", () => {
+  it("renders bare-string assistant content as text", () => {
     render(
-      <TranscriptView
-        messages={[assistant([{ type: "text", text: "block text" }])]}
-      />,
+      <TranscriptView messages={[message("assistant", "assistant text")]} />,
     );
-    expect(screen.getByText("block text")).toBeInTheDocument();
+    expect(screen.getByText("assistant text")).toBeInTheDocument();
   });
 });
