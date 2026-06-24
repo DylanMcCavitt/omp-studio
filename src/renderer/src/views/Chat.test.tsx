@@ -1,20 +1,17 @@
-// AGE-669 — when a shell rail panel (Terminal/Files/…) owns the far-right
-// column, the chat workspace must collapse its own Panels rail to the icon strip
-// so the transcript reclaims the freed width instead of leaving a wedged, often
-// sparse "dead middle band" between the transcript and the opened panel. The chat
-// rail and a shell panel never stack; expanding the chat rail from the icon strip
-// closes the shell panel. The data-heavy chat children are stubbed so the test
-// exercises only this structural reflow decision (assertions go through roles).
+// AGE-674 — the chat workspace renders a full-width transcript. The
+// Usage/Plan/Subagents panels moved out of the old middle rail into the left
+// sidebar dock (`ChatPanelDock`), so there is no resize rail or icon strip here
+// anymore, regardless of whether a shell panel is open. Clicking a subagent
+// (from the sidebar dock) sets `inspectedSubagentId`, which pops that subagent's
+// transcript into this center view in place of the main transcript. The data-/
+// IPC-bound children are stubbed to inert markers so the test exercises only the
+// center-view selection.
 
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { useChatStore } from "@/store/chat";
-import { useSettingsStore } from "@/store/settings";
 import { useShellStore } from "@/store/shell";
 import ChatWorkspace from "./Chat";
 
-// Stub the data-/IPC-bound chat children to inert nodes; only MessageList leaves
-// a marker so we can assert the transcript renders in both presentations.
 vi.mock("@/components/chat/MessageList", () => ({
   MessageList: () => <div data-testid="message-list" />,
 }));
@@ -28,12 +25,9 @@ vi.mock("@/components/chat/SessionList", () => ({
 }));
 vi.mock("@/components/chat/SessionStatsPanel", () => ({
   ContextMeterChip: () => null,
-  SessionStatsPanel: () => null,
 }));
-vi.mock("@/components/chat/TodoPanel", () => ({ TodoPanel: () => null }));
-vi.mock("@/components/chat/SubagentTree", () => ({ SubagentTree: () => null }));
 vi.mock("@/components/chat/SubagentInspector", () => ({
-  SubagentInspector: () => null,
+  SubagentInspector: () => <div data-testid="subagent-inspector" />,
 }));
 vi.mock("@/components/chat/UiRequestLayer", () => ({
   UiRequestLayer: () => null,
@@ -48,66 +42,49 @@ beforeEach(() => {
       [SESSION_ID]: {
         status: "idle",
         thinkingLevel: "medium",
-        subagents: [],
+        subagents: [{ id: "sub-1" }],
       },
     } as never,
     inspectedSubagentId: null,
   });
-  useSettingsStore.setState({
-    settings: { layout: { chatRailCollapsed: false } } as never,
-    setLayout: vi.fn(),
-  });
   useShellStore.setState({ openPanelId: null });
 });
 
-/** The resize divider exists ONLY in the expanded ChatRailSplit presentation. */
-const expandedRailHandle = () =>
+/** The old middle rail's resize divider — must no longer exist anywhere. */
+const railHandle = () =>
   screen.queryByRole("separator", { name: "Resize panel rail" });
-/** The expand affordance exists ONLY in the collapsed icon-strip presentation. */
+/** The old collapsed icon-strip's expand affordance — also gone. */
 const iconStripExpand = () =>
   screen.queryByRole("button", { name: "Expand panel rail" });
 
-describe("ChatSession rail reflow (AGE-669)", () => {
-  it("shows the expandable Panels rail when no shell panel is open", () => {
+describe("ChatSession center view (AGE-674)", () => {
+  it("renders a full-width transcript with no middle rail or icon strip", () => {
     render(<ChatWorkspace />);
 
     expect(screen.getByTestId("message-list")).toBeInTheDocument();
-    expect(expandedRailHandle()).toBeInTheDocument();
+    expect(screen.queryByTestId("subagent-inspector")).not.toBeInTheDocument();
+    expect(railHandle()).not.toBeInTheDocument();
     expect(iconStripExpand()).not.toBeInTheDocument();
   });
 
-  it("collapses the Panels rail to the icon strip when a shell panel opens, so the transcript reclaims the width", () => {
+  it("keeps the transcript full-width even when a shell panel is open", () => {
     useShellStore.setState({ openPanelId: "terminal" });
 
     render(<ChatWorkspace />);
 
-    // Transcript still renders; the wedged expandable rail is gone (no handle).
+    // No more reflow coupling: the transcript stays full-width and no rail or
+    // icon strip is wedged beside the open shell panel.
     expect(screen.getByTestId("message-list")).toBeInTheDocument();
-    expect(iconStripExpand()).toBeInTheDocument();
-    expect(expandedRailHandle()).not.toBeInTheDocument();
+    expect(railHandle()).not.toBeInTheDocument();
+    expect(iconStripExpand()).not.toBeInTheDocument();
   });
 
-  it("still honors the persisted collapsed preference when no shell panel is open", () => {
-    useSettingsStore.setState({
-      settings: { layout: { chatRailCollapsed: true } } as never,
-      setLayout: vi.fn(),
-    });
+  it("pops a subagent's transcript into the center when one is inspected", () => {
+    useChatStore.setState({ inspectedSubagentId: "sub-1" });
 
     render(<ChatWorkspace />);
 
-    expect(iconStripExpand()).toBeInTheDocument();
-    expect(expandedRailHandle()).not.toBeInTheDocument();
-  });
-
-  it("expanding from the icon strip closes the shell panel so the two rails never stack", async () => {
-    const user = userEvent.setup();
-    useShellStore.setState({ openPanelId: "terminal" });
-    render(<ChatWorkspace />);
-
-    await user.click(screen.getByRole("button", { name: "Expand panel rail" }));
-
-    // The shell panel yields, and the expandable Panels rail returns — never both.
-    expect(useShellStore.getState().openPanelId).toBeNull();
-    expect(expandedRailHandle()).toBeInTheDocument();
+    expect(screen.getByTestId("subagent-inspector")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
   });
 });

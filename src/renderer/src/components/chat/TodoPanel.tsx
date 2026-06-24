@@ -29,8 +29,10 @@ const EMPTY_TODOS: TodoPhase[] = [];
 
 export function TodoPanel({
   headerLeading,
+  dense,
 }: {
   headerLeading?: ReactNode;
+  dense?: boolean;
 } = {}) {
   const phases = useActiveSession((s) => s?.todoPhases ?? EMPTY_TODOS);
   const hasTasks = phases.some((p) => p.tasks.length > 0);
@@ -40,6 +42,7 @@ export function TodoPanel({
       title="Plan"
       collapsible
       persistKey="chat.rail.todos"
+      dense={dense}
       headerLeading={headerLeading}
     >
       {!hasTasks ? (
