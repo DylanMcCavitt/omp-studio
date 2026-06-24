@@ -47,6 +47,7 @@ import {
 } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
+import { modelComboboxOptions } from "@/lib/model-options";
 import { type AsyncState, useAsync } from "@/lib/useAsync";
 import { sortWorkspaces } from "@/lib/workspaces";
 import { useLinearStore } from "@/store/linear";
@@ -236,10 +237,7 @@ function DefaultsPanel({
           placeholder="First available"
           searchPlaceholder="Search models…"
           onChange={(value) => void update({ defaultModel: value || null })}
-          options={[
-            { value: "", label: "First available" },
-            ...models.map((m) => ({ value: m.selector, label: m.name })),
-          ]}
+          options={modelComboboxOptions(models)}
         />
       </Field>
 
