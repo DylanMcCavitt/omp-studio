@@ -5,9 +5,15 @@
 // clicks open a center editor tab. The flat nav list that used to live here
 // moved to the right icon rail (AGE-630).
 
-import { FileText, type LucideIcon, MessageSquare, Plus } from "lucide-react";
+import {
+  FileText,
+  type LucideIcon,
+  MessageSquare,
+  MessageSquarePlus,
+} from "lucide-react";
 import { SessionList } from "@/components/chat/SessionList";
 import { FileTree } from "@/components/files/FileTree";
+import { Button } from "@/components/ui";
 import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
 import { cn } from "@/lib/cn";
 import { useChatStore } from "@/store/chat";
@@ -94,17 +100,10 @@ function ChatsPane({ onNewChat }: { onNewChat: () => void }) {
   return (
     <>
       <div className="px-3 pb-2">
-        <button
-          type="button"
-          onClick={onNewChat}
-          className={cn(
-            "flex w-full items-center justify-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-bg transition-colors",
-            "hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-          )}
-        >
-          <Plus size={16} />
+        <Button variant="primary" onClick={onNewChat} className="w-full">
+          <MessageSquarePlus className="h-4 w-4" />
           New chat
-        </button>
+        </Button>
       </div>
       <SessionList />
     </>

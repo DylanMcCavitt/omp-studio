@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Expands OMP Studio from read-only browsers into an interactive v2 cockpit.
 
+### UI/UX polish — Claude/Codex/Cursor-grade shell (AGE-654)
+
+A renderer-wide polish + bugfix sweep pushing the shell toward a calm,
+high-legibility, IDE-grade dark interface:
+
+- **Design tokens** retuned for the dark theme — `text-ink-muted` now meets
+  WCAG AA for secondary/helper copy and card `border-border` is visible but
+  subtle, so cards read as crisp surfaces instead of heavy boxes.
+- **Single title per surface**: `RailPanelHost` no longer renders the panel
+  name, so each rail view owns exactly one `<h1>`; the duplicate uppercase
+  "eyebrow" title was removed and clipped view subtitles (`truncate`) now wrap.
+- **Ambient workspace titlebar** and a polished **right rail** with an active
+  destination indicator and a pinned **Settings** entry.
+- **Per-view polish**: Dashboard grid rhythm + title truncation fixes, a
+  readable Skills & Commands list, Settings form spacing/rhythm, GitHub/Linear
+  empty-states with clear CTAs, a Chat empty-state unified around one canonical
+  **New chat** primary action, and stronger dialog scrim + elevation.
+- **New Playwright `_electron` UI-flow E2E** exercising the polished navigation
+  and empty-state flows, plus stale-branch cleanup.
+
 ### Added
 
 - First-class project **workspaces** (feature 1): a sidebar `WorkspaceSwitcher`

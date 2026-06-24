@@ -103,6 +103,7 @@ export function LinearConnectCard({ className }: { className?: string }) {
         <Button
           type="submit"
           variant="primary"
+          className="shrink-0"
           disabled={connecting || !key.trim()}
         >
           {connecting ? <Spinner size={14} /> : null}
@@ -118,17 +119,17 @@ export function LinearConnectCard({ className }: { className?: string }) {
         </p>
       )}
 
-      <p className="mt-2 text-xs text-ink-faint">
-        The key is stored securely by the app and never kept in the window.{" "}
-        <button
-          type="button"
-          onClick={() => void window.omp.openExternal(API_KEY_URL)}
-          className="inline-flex items-center gap-1 text-accent hover:underline"
-        >
-          Get a personal API key
-          <ExternalLink className="h-3 w-3" />
-        </button>
+      <p className="mt-2 text-xs text-ink-muted">
+        The key is stored securely by the app and never kept in the window.
       </p>
+      <button
+        type="button"
+        onClick={() => void window.omp.openExternal(API_KEY_URL)}
+        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+      >
+        Get a personal API key
+        <ExternalLink className="h-3 w-3" />
+      </button>
     </form>
   );
 }

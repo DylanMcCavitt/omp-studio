@@ -1,5 +1,12 @@
 import { Bot, RefreshCw, TriangleAlert } from "lucide-react";
-import { Badge, Card, EmptyState, IconButton, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  Spinner,
+} from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
 
@@ -14,7 +21,7 @@ export default function Agents() {
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">Agents</h1>
-          <p className="truncate text-sm text-ink-muted">
+          <p className="text-sm text-ink-muted">
             Task subagents available to the harness
           </p>
         </div>
@@ -33,11 +40,24 @@ export default function Agents() {
             icon={<TriangleAlert className="h-6 w-6" />}
             title="Failed to load agents"
             hint={error}
+            action={
+              <Button variant="subtle" size="sm" onClick={reload}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Try again
+              </Button>
+            }
           />
         ) : agents.length === 0 ? (
           <EmptyState
             icon={<Bot className="h-6 w-6" />}
             title="No agents found"
+            hint="Bundled and discovered subagents appear here. Add them under ~/.omp/agent, then reload."
+            action={
+              <Button variant="subtle" size="sm" onClick={reload}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Reload
+              </Button>
+            }
           />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -48,7 +68,7 @@ export default function Agents() {
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <Bot className="h-4 w-4 shrink-0 text-accent" />
-                  <span className="truncate font-mono text-sm text-ink">
+                  <span className="break-words font-mono text-sm text-ink">
                     {agent.name}
                   </span>
                   {agent.readOnly && <Badge variant="warn">read-only</Badge>}

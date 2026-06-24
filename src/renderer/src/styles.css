@@ -60,12 +60,12 @@
     --c-bg-raised: 17 20 27;
     --c-bg-panel: 21 25 37;
     --c-bg-hover: 27 32 48;
-    --c-border: 34 40 56;
-    --c-border-subtle: 26 31 44;
-    --c-border-strong: 44 51 70;
+    --c-border: 42 49 67;
+    --c-border-subtle: 30 36 51;
+    --c-border-strong: 56 64 86;
     --c-ink: 230 233 240;
-    --c-ink-muted: 154 163 184;
-    --c-ink-faint: 107 116 136;
+    --c-ink-muted: 166 175 196;
+    --c-ink-faint: 132 141 163;
     --c-accent: 109 140 255;
     --c-accent-hover: 132 160 255;
     --c-accent-soft: 28 36 56;
@@ -74,7 +74,7 @@
     --c-danger: 248 113 113;
     --c-thinking: 167 139 250;
 
-    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.25);
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px rgb(0 0 0 / 0.32);
     --shadow-glow:
       0 0 0 1px rgb(109 140 255 / 0.35), 0 8px 30px rgb(109 140 255 / 0.15);
 

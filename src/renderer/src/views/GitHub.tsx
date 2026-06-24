@@ -1,5 +1,6 @@
 import {
   CircleDot,
+  ExternalLink,
   FolderOpen,
   GitBranch,
   GitPullRequest,
@@ -44,6 +45,17 @@ function ReposTab() {
       <EmptyState
         icon={<GitBranch className="h-6 w-6" />}
         title="No repositories"
+        hint="No repositories found for your GitHub account. Sign in with the GitHub CLI, or browse your repositories on GitHub."
+        action={
+          <Button
+            variant="subtle"
+            size="sm"
+            onClick={() => window.omp.openExternal("https://github.com")}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open GitHub
+          </Button>
+        }
       />
     );
   }
@@ -296,7 +308,7 @@ export default function GitHub() {
                 </Badge>
               </button>
               {repo.description && (
-                <p className="mt-1 truncate text-sm text-ink-muted">
+                <p className="mt-1 line-clamp-2 text-sm text-ink-muted">
                   {repo.description}
                 </p>
               )}
@@ -313,8 +325,8 @@ export default function GitHub() {
           ) : (
             <>
               <h1 className="text-lg font-semibold text-ink">GitHub</h1>
-              <p className="truncate text-sm text-ink-muted">
-                No repository detected in this directory
+              <p className="text-sm text-ink-muted">
+                Browse repositories, issues, and pull requests
               </p>
             </>
           )}
@@ -332,8 +344,8 @@ export default function GitHub() {
             className={cn(
               "-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition",
               tab === id
-                ? "border-accent text-ink"
-                : "border-transparent text-ink-muted hover:text-ink",
+                ? "border-accent font-semibold text-ink"
+                : "border-transparent font-medium text-ink-muted hover:text-ink",
             )}
           >
             <Icon className="h-4 w-4" />

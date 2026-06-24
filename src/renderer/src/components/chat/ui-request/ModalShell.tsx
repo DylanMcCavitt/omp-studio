@@ -58,7 +58,7 @@ export function ModalShell({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop: dims the app but does NOT dismiss on click — a blocking
           approval requires an explicit Deny/Cancel or Esc, never a stray click. */}
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-[1px]" />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div
         ref={panelRef}
         role="dialog"

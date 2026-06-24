@@ -107,7 +107,7 @@ export default function Settings() {
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">Settings</h1>
-          <p className="truncate text-sm text-ink-muted">
+          <p className="text-sm text-ink-muted">
             Defaults, appearance, workspaces, providers, and harness paths
           </p>
         </div>
@@ -280,12 +280,14 @@ function DefaultsPanel({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-ink">Auto-approve all requests</span>
+            <span className="text-xs font-medium text-ink-muted">
+              Auto-approve all requests
+            </span>
             {settings.defaultAutoApprove && (
               <Badge variant="danger">dangerous</Badge>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-ink-faint">
+          <p className="mt-1 text-xs text-ink-muted">
             Skip every approval dialog for new sessions.
           </p>
         </div>
@@ -704,12 +706,12 @@ function IntegrationsPanel() {
             searchPlaceholder="Filter teams…"
           />
         ) : (
-          <p className="text-sm text-ink-faint">{defaultTeamId || "None"}</p>
+          <p className="text-sm text-ink-muted">{defaultTeamId || "None"}</p>
         )}
       </Field>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-ink-muted">
+        <span className="text-xs font-medium text-ink-muted">
           Issue writes (create / update)
         </span>
         <Badge variant={writesEnabled ? "success" : "muted"}>
@@ -890,7 +892,7 @@ function Field({
         {label}
       </span>
       {children}
-      {hint && <p className="mt-1 text-xs text-ink-faint">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-ink-muted">{hint}</p>}
     </div>
   );
 }

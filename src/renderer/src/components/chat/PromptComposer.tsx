@@ -314,7 +314,7 @@ export function PromptComposer({
               }
             }}
             style={{ minHeight: `${rows * 1.5 + 1}rem`, maxHeight }}
-            className="scrollbar flex-1 resize-none rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none disabled:opacity-50"
+            className="scrollbar flex-1 resize-none rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none disabled:opacity-50"
           />
         </div>
         {inline && <div className="flex items-end gap-2">{actions}</div>}

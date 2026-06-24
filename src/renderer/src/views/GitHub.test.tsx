@@ -59,3 +59,24 @@ it("queries the selected project's issues once a project is chosen", async () =>
   expect(listIssues).toHaveBeenCalledWith(undefined, "/work/foo");
   expect(screen.queryByText("No project selected")).not.toBeInTheDocument();
 });
+
+it("consolidates the empty repos view into one empty state with a next action", async () => {
+  useAppStore.setState({ selectedProject: null });
+  githubStub({}); // no current repo, no repos
+  render(<GitHub />);
+
+  // The body settles to one empty state carrying a clear next action…
+  expect(await screen.findByText("No repositories")).toBeInTheDocument();
+  // …and the header shows exactly one canonical title (rendered once
+  // currentRepo resolves; until then it's a loading spinner).
+  expect(
+    await screen.findByRole("heading", { name: "GitHub", level: 1 }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: /Open GitHub/ }),
+  ).toBeInTheDocument();
+  // The old redundant header message is gone — no second "nothing here".
+  expect(
+    screen.queryByText("No repository detected in this directory"),
+  ).not.toBeInTheDocument();
+});

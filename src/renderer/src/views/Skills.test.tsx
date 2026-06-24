@@ -134,3 +134,29 @@ it("routes to Chat and prefills the composer on Use in chat", async () => {
   expect(useAppStore.getState().route).toBe("chat");
   expect(useAppStore.getState().pendingComposerText).toBe("/compact ");
 });
+
+it("renders the full skill name and clamps its description (no char-level truncation)", async () => {
+  stubBridge(
+    [
+      {
+        name: "security-best-practices",
+        description:
+          "Perform language and framework specific security best-practice reviews and suggest improvements across the repository.",
+        source: "user",
+        path: "/s/sec",
+      },
+    ],
+    [],
+  );
+  render(<Skills />);
+
+  // The full slug renders without mid-word clipping.
+  expect(
+    await screen.findByText("security-best-practices"),
+  ).toBeInTheDocument();
+
+  // The description word-wraps and clamps to two lines — never truncate/break-all.
+  const description = screen.getByText(/Perform language and framework/);
+  expect(description).toHaveClass("line-clamp-2");
+  expect(description).not.toHaveClass("truncate");
+});

@@ -132,3 +132,19 @@ it("disconnects via clearApiKey and resets to unauthenticated", async () => {
   expect(useLinearStore.getState().issues).toEqual([]);
   expect(useLinearStore.getState().teams).toEqual([]);
 });
+
+it("surfaces a primary Connect CTA and a clear Get a personal API key link", async () => {
+  const user = userEvent.setup();
+  stubLinear({});
+  useLinearStore.setState({ status: UNAUTH });
+
+  render(<LinearConnectCard />);
+  // The primary CTA is present and labeled.
+  expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+  // The key-minting link is surfaced (not buried) and opens Linear's API settings.
+  const link = screen.getByRole("button", { name: /Get a personal API key/ });
+  await user.click(link);
+  expect(window.omp.openExternal).toHaveBeenCalledWith(
+    "https://linear.app/settings/api",
+  );
+});

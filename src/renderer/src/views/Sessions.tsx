@@ -4,6 +4,7 @@ import {
   FolderGit2,
   Inbox,
   MessagesSquare,
+  Plus,
   RefreshCw,
   Search,
   TriangleAlert,
@@ -15,7 +16,13 @@ import {
   SessionActionsMenu,
 } from "@/components/session/SessionActionsMenu";
 import { TranscriptView } from "@/components/transcript/TranscriptView";
-import { Badge, EmptyState, IconButton, Spinner } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  EmptyState,
+  IconButton,
+  Spinner,
+} from "@/components/ui";
 import { cn } from "@/lib/cn";
 import {
   formatBytes,
@@ -26,6 +33,7 @@ import {
 import { useAsync } from "@/lib/useAsync";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useAppStore } from "@/store/app";
+import { useChatStore } from "@/store/chat";
 
 interface SessionGroup {
   project: string;
@@ -42,7 +50,7 @@ function SessionDetail({
   focusIndex: number | null;
   onChanged?: (result: SessionActionResult) => void;
 }) {
-  const { data, loading, error } = useAsync(
+  const { data, loading, error, reload } = useAsync(
     () => window.omp.readSession(path),
     [path],
   );
@@ -61,6 +69,12 @@ function SessionDetail({
           icon={<TriangleAlert className="h-6 w-6" />}
           title="Failed to load session"
           hint={error}
+          action={
+            <Button variant="subtle" size="sm" onClick={reload}>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Try again
+            </Button>
+          }
         />
       </div>
     );
@@ -75,7 +89,7 @@ function SessionDetail({
           <h2 className="text-base font-semibold text-ink">
             {summary.title || "(untitled)"}
           </h2>
-          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-faint">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
             {summary.archived && <Badge variant="muted">Archived</Badge>}
             <span>{summary.project}</span>
             <span>·</span>
@@ -119,6 +133,7 @@ export default function Sessions() {
 
   const sessionFocus = useAppStore((s) => s.sessionFocus);
   const clearSessionFocus = useAppStore((s) => s.clearSessionFocus);
+  const newChat = useChatStore((s) => s.newChat);
 
   // Consume a cross-route focus request (from the Cmd+K overlay): open the
   // requested transcript scrolled to the matched message.
@@ -209,7 +224,7 @@ export default function Sessions() {
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">Sessions</h1>
-          <p className="truncate text-sm text-ink-muted">
+          <p className="text-sm text-ink-muted">
             Past agent sessions on this machine
           </p>
         </div>
@@ -256,19 +271,38 @@ export default function Sessions() {
                   icon={<TriangleAlert className="h-6 w-6" />}
                   title="Search failed"
                   hint={hitsState.error}
+                  action={
+                    <Button
+                      variant="subtle"
+                      size="sm"
+                      onClick={() => hitsState.reload()}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Try again
+                    </Button>
+                  }
                 />
               ) : hitGroups.length === 0 ? (
                 <EmptyState
                   icon={<Inbox className="h-6 w-6" />}
                   title="No transcript matches"
                   hint={`Nothing matched “${query.trim()}”`}
+                  action={
+                    <Button
+                      variant="subtle"
+                      size="sm"
+                      onClick={() => setQuery("")}
+                    >
+                      Clear search
+                    </Button>
+                  }
                 />
               ) : (
                 hitGroups.map((group) => (
                   <div key={group.session.path}>
                     <div className="flex items-center gap-2 px-3 pb-0.5 pt-3">
                       <MessagesSquare className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                      <span className="truncate text-xs font-semibold text-ink">
+                      <span className="line-clamp-2 min-w-0 break-words text-xs font-semibold text-ink">
                         {group.session.title || "(untitled)"}
                       </span>
                       <Badge variant="muted">{group.hits.length}</Badge>
@@ -276,7 +310,7 @@ export default function Sessions() {
                         <Badge variant="muted">Archived</Badge>
                       )}
                     </div>
-                    <div className="truncate px-3 pb-1 text-xs text-ink-faint">
+                    <div className="break-words px-3 pb-1 text-xs text-ink-muted">
                       {group.session.project} ·{" "}
                       {formatRelativeTime(group.session.updatedAt)}
                     </div>
@@ -313,18 +347,31 @@ export default function Sessions() {
                 icon={<TriangleAlert className="h-6 w-6" />}
                 title="Failed to load sessions"
                 hint={error}
+                action={
+                  <Button variant="subtle" size="sm" onClick={reload}>
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Try again
+                  </Button>
+                }
               />
             ) : groups.length === 0 ? (
               <EmptyState
                 icon={<Inbox className="h-6 w-6" />}
                 title="No sessions yet"
+                hint="Past agent sessions on this machine appear here. Start a chat to create your first one."
+                action={
+                  <Button variant="primary" size="sm" onClick={newChat}>
+                    <Plus className="h-3.5 w-3.5" />
+                    Start a chat
+                  </Button>
+                }
               />
             ) : (
               groups.map((group) => (
                 <div key={group.project}>
                   <div className="flex items-center gap-2 px-3 pb-1 pt-3">
                     <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
-                    <span className="truncate text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                    <span className="min-w-0 break-words text-xs font-semibold uppercase tracking-wide text-ink-muted">
                       {group.project}
                     </span>
                     <Badge variant="muted">{group.items.length}</Badge>
@@ -339,10 +386,10 @@ export default function Sessions() {
                           "border-border-strong bg-bg-hover",
                       )}
                     >
-                      <span className="truncate text-sm text-ink">
+                      <span className="line-clamp-2 break-words text-sm text-ink">
                         {s.title || "(untitled)"}
                       </span>
-                      <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-faint">
+                      <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
                         {s.archived && <Badge variant="muted">Archived</Badge>}
                         <span>{formatRelativeTime(s.updatedAt)}</span>
                         <span>·</span>

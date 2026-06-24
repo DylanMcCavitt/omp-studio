@@ -142,7 +142,7 @@ export default function Skills() {
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">Skills & Commands</h1>
-          <p className="truncate text-sm text-ink-muted">
+          <p className="text-sm text-ink-muted">
             Disk skills, the active session's slash commands, and the TUI-only
             reference
           </p>
@@ -194,12 +194,12 @@ export default function Skills() {
               title={query ? "No matching skills" : "No skills found"}
             />
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="space-y-2.5">
               {skills.map((skill) => (
-                <Card key={skill.path} className="flex flex-col gap-2 p-4">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 shrink-0 text-accent" />
-                    <span className="truncate font-mono text-sm text-ink">
+                <Card key={skill.path} className="flex flex-col gap-1.5 p-4">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    <span className="min-w-0 flex-1 break-words font-mono text-sm text-ink">
                       {skill.name}
                     </span>
                     <Badge
@@ -210,12 +210,12 @@ export default function Skills() {
                             ? "success"
                             : "muted"
                       }
-                      className="ml-auto"
+                      className="shrink-0"
                     >
                       {skill.source}
                     </Badge>
                   </div>
-                  <p className="line-clamp-4 text-xs text-ink-muted">
+                  <p className="line-clamp-2 break-words pl-6 text-xs text-ink-muted">
                     {skill.description}
                   </p>
                 </Card>
@@ -259,13 +259,13 @@ export default function Skills() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="truncate font-mono text-sm text-ink">
+                        <span className="break-words font-mono text-sm text-ink">
                           /{cmd.name}
                         </span>
                         {pinned && <Badge variant="accent">Pinned</Badge>}
                       </div>
                       {cmd.description && (
-                        <p className="truncate text-xs text-ink-muted">
+                        <p className="line-clamp-2 break-words text-xs text-ink-muted">
                           {cmd.description}
                         </p>
                       )}
@@ -325,10 +325,10 @@ export default function Skills() {
                   className="flex items-center gap-3 rounded-lg border border-border-subtle bg-bg-raised/50 px-3 py-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <span className="truncate font-mono text-sm text-ink-muted">
+                    <span className="break-words font-mono text-sm text-ink-muted">
                       /{cmd.name}
                     </span>
-                    <p className="truncate text-xs text-ink-faint">
+                    <p className="line-clamp-2 break-words text-xs text-ink-muted">
                       {cmd.description}
                     </p>
                   </div>
