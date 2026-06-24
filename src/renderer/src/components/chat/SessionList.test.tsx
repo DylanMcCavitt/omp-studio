@@ -9,11 +9,12 @@
 // the active session) and Arrow-key navigation. The "New chat" action lives in
 // the sidebar above this list, so it is no longer part of the roving order.
 
-import type { ChatUiRequestEvent } from "@shared/ipc";
+import type { ChatUiRequestEvent, WorkspaceColorKey } from "@shared/ipc";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
 import { createSession } from "@/store/session-reducer";
+import { useSettingsStore } from "@/store/settings";
 import { SessionList } from "./SessionList";
 
 // Full store snapshot (state + actions) captured before any test mutates it, so
@@ -193,4 +194,44 @@ describe("keyboard nav (G2)", () => {
       screen.getByRole("button", { name: "Session actions" }).tabIndex,
     ).toBe(-1);
   });
+});
+
+function seedWorkspaceColor(cwd: string, color: WorkspaceColorKey | undefined) {
+  useSettingsStore.setState({
+    settings: {
+      workspaces: [
+        { id: "w1", cwd, label: "WS", pinned: false, lastUsedAt: "t", color },
+      ],
+    } as never,
+  });
+}
+
+it("shows the workspace color swatch on a session card in a colored workspace", () => {
+  seedWorkspaceColor("/p/alpha", "blue");
+  seed(
+    { a: createSession("a", { sessionName: "Alpha", cwd: "/p/alpha" }) },
+    "a",
+  );
+  render(<SessionList />);
+
+  const swatch = railItem("a").querySelector(
+    "span[style]",
+  ) as HTMLElement | null;
+  expect(swatch).not.toBeNull();
+  expect(swatch?.style.backgroundColor).not.toBe("");
+});
+
+it("shows no swatch when the session's workspace has no color or no match", () => {
+  seedWorkspaceColor("/p/alpha", undefined);
+  seed(
+    {
+      a: createSession("a", { sessionName: "Alpha", cwd: "/p/alpha" }),
+      b: createSession("b", { sessionName: "Beta", cwd: "/p/unsaved" }),
+    },
+    "a",
+  );
+  render(<SessionList />);
+
+  expect(railItem("a").querySelector("span[style]")).toBeNull();
+  expect(railItem("b").querySelector("span[style]")).toBeNull();
 });

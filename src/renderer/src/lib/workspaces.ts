@@ -36,6 +36,19 @@ export function workspaceColorValue(
     : undefined;
 }
 
+/**
+ * Resolve the color key of the saved workspace whose cwd matches `cwd` (exact
+ * match — the same convention the switcher and file tree use). Undefined when
+ * there is no cwd, no matching workspace, or that workspace has no color.
+ */
+export function workspaceColorForCwd(
+  workspaces: readonly Workspace[] | undefined,
+  cwd: string | undefined,
+): WorkspaceColorKey | undefined {
+  if (!cwd) return undefined;
+  return workspaces?.find((w) => w.cwd === cwd)?.color;
+}
+
 /** Derive a stable, human display label from a directory path (its basename). */
 export function projectLabel(cwd: string): string {
   const trimmed = cwd.replace(/[/\\]+$/, "");

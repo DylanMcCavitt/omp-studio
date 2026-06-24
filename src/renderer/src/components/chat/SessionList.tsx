@@ -23,13 +23,16 @@ import {
 import { useShallow } from "zustand/react/shallow";
 import { SessionActionsMenu } from "@/components/session/SessionActionsMenu";
 import { Badge, type BadgeVariant, EmptyState, Spinner } from "@/components/ui";
+import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
+import { workspaceColorForCwd } from "@/lib/workspaces";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
 import {
   deriveSessionBadgeKind,
   type SessionBadgeKind,
 } from "@/store/session-reducer";
+import { useSettingsStore } from "@/store/settings";
 
 const BADGE: Record<
   SessionBadgeKind,
@@ -229,11 +232,13 @@ function SessionListRow({
   const session = useChatStore((s) => s.openSessions[sessionId]);
   const setActiveSession = useChatStore((s) => s.setActiveSession);
   const patch = useChatStore((s) => s._patch);
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
   if (!session) return null;
 
   const percent = session.contextUsage
     ? Math.round(session.contextUsage.percent)
     : null;
+  const color = workspaceColorForCwd(workspaces, session.cwd);
 
   return (
     <div className="group relative">
@@ -252,11 +257,12 @@ function SessionListRow({
       >
         <span
           className={cn(
-            "block truncate pr-14 text-sm font-medium",
+            "flex items-center gap-1.5 pr-14 text-sm font-medium",
             active ? "text-accent" : "text-ink",
           )}
         >
-          {rowTitle(session)}
+          {color && <WorkspaceColorDot color={color} />}
+          <span className="truncate">{rowTitle(session)}</span>
         </span>
 
         <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">
@@ -338,9 +344,14 @@ function HibernatedListRow({
   const row = useChatStore((s) => s.hibernatedSessions[sessionId]);
   const resumeSession = useChatStore((s) => s.resumeSession);
   const removeHibernated = useChatStore((s) => s.removeHibernated);
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
   if (!row) return null;
   const { descriptor, resuming, error } = row;
   const title = hibernatedTitle(descriptor);
+  const color = workspaceColorForCwd(workspaces, descriptor.cwd);
+  // Keep the model/status sub-lines aligned under the title text: the leading
+  // cluster is the Moon icon (19px) plus the color dot when present (+16px).
+  const indent = color ? "pl-[35px]" : "pl-[19px]";
 
   if (error) {
     return (
@@ -393,15 +404,26 @@ function HibernatedListRow({
         )}
       >
         <span className="flex items-center gap-1.5 truncate pr-8 text-sm font-medium text-ink-muted">
+          {color && <WorkspaceColorDot color={color} />}
           <Moon size={13} className="shrink-0 text-ink-faint" />
           <span className="truncate">{title}</span>
         </span>
 
-        <span className="mt-0.5 block truncate pl-[19px] font-mono text-xs text-ink-faint">
+        <span
+          className={cn(
+            "mt-0.5 block truncate font-mono text-xs text-ink-faint",
+            indent,
+          )}
+        >
           {descriptor.model ?? "—"}
         </span>
 
-        <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-[19px] text-xs text-ink-faint">
+        <span
+          className={cn(
+            "mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint",
+            indent,
+          )}
+        >
           {resuming ? (
             <Badge variant="accent">
               <span className="flex items-center gap-1.5">

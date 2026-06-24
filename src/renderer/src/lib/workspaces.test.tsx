@@ -9,6 +9,7 @@ import {
   sortWorkspaces,
   upsertWorkspace,
   WORKSPACE_COLORS,
+  workspaceColorForCwd,
   workspaceColorValue,
 } from "@/lib/workspaces";
 
@@ -209,4 +210,19 @@ it("workspaceColorValue resolves a known key to a swatch and unset to undefined"
   expect(WORKSPACE_COLORS.length).toBeGreaterThan(0);
   expect(workspaceColorValue("blue")).toMatch(/^#[0-9a-f]{6}$/i);
   expect(workspaceColorValue(undefined)).toBeUndefined();
+});
+
+it("workspaceColorForCwd resolves the matching workspace's color by exact cwd", () => {
+  const list = [
+    ws({ id: "a", cwd: "/p/a", color: "blue" }),
+    ws({ id: "b", cwd: "/p/b" }),
+  ];
+  expect(workspaceColorForCwd(list, "/p/a")).toBe("blue");
+  // Matching workspace has no color set.
+  expect(workspaceColorForCwd(list, "/p/b")).toBeUndefined();
+  // No workspace at that cwd.
+  expect(workspaceColorForCwd(list, "/p/missing")).toBeUndefined();
+  // No cwd / no list.
+  expect(workspaceColorForCwd(list, undefined)).toBeUndefined();
+  expect(workspaceColorForCwd(undefined, "/p/a")).toBeUndefined();
 });
