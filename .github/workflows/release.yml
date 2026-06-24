@@ -6,7 +6,7 @@ on:
       - "v*"
 
 jobs:
-  release:
+  build:
     strategy:
       fail-fast: false
       matrix:
@@ -21,6 +21,18 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      # Guard: the tag must match package.json's version, so a release is never
+      # cut from a mismatched source tree.
+      - name: Verify package.json version matches tag
+        shell: bash
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::package.json version ($PKG) != tag ($TAG)"; exit 1
+          fi
+          echo "Version OK: $PKG == $TAG"
 
       - name: Install dependencies
         run: npm ci
@@ -94,3 +106,43 @@ jobs:
             release/*.dmg
             release/*.AppImage
             release/*.exe
+
+  # Gather every platform's installers and cut ONE GitHub Release for the tag,
+  # with notes lifted verbatim from the matching CHANGELOG.md section. Runs only
+  # after all build/smoke jobs pass.
+  publish:
+    name: publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Extract release notes from CHANGELOG
+        shell: bash
+        run: node scripts/changelog.mjs "${GITHUB_REF_NAME#v}" > RELEASE_NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          mapfile -t FILES < <(find dist-artifacts -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.exe' \))
+          echo "Release assets: ${FILES[*]:-<none>}"
+          gh release create "$TAG" \
+            --title "OMP Studio $TAG" \
+            --notes-file RELEASE_NOTES.md \
+            "${FILES[@]}"

@@ -152,6 +152,28 @@ high-legibility, IDE-grade dark interface:
   chosen affordance back to the select's `{value}` response. Generic (non
   approval) selects keep the plain `SelectRequestDialog`.
 
+### Fixed
+
+- **Chat no longer crashes on a string `message.content`** (AGE-656). omp emits
+  text-only assistant turns with a bare-string `content`, which violated the
+  declared `ContentBlock[]` type and threw `content.map is not a function`,
+  tearing down the whole transcript. The session reducer now normalizes
+  assistant/toolResult string content to a text block (single source of truth),
+  with a render-side guard in `MessageBubble` as a backstop.
+- **Resize robustness** (AGE-657): narrowing a panel or the window now clips or
+  truncates content **within its own panel** instead of spilling a horizontal
+  scrollbar onto the app. Added `min-w-0`/`overflow` guards to the shell and
+  chat split panels and to the Sidebar toggle, Dashboard/Skills headers, and
+  Settings workspace rows, plus an `e2e/resize.spec.ts` regression suite.
+
+### Release / CI
+
+- **Real versioned releases** (AGE-659): `npm run release` bumps the version,
+  stamps the CHANGELOG, and tags `vX.Y.Z`; the Release workflow now verifies the
+  tag matches `package.json`, builds + smoke-tests installers on all three OSes,
+  and cuts a single **GitHub Release** whose notes are the matching CHANGELOG
+  section. See the README "Releases" section.
+
 ## [0.1.0] - 2026-06-19
 
 Initial release.

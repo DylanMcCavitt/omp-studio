@@ -90,6 +90,33 @@ npm run dist
 electron-builder and downloads platform Electron binaries, so it runs locally
 or in the release workflow rather than in CI.
 
+## Releases
+
+Releases are cut from `main` and published by CI. The flow is one command plus a
+tag push:
+
+```sh
+# 1. Bump the version + stamp the CHANGELOG's [Unreleased] section into a dated
+#    release section, then commit and create the vX.Y.Z tag locally.
+npm run release -- 0.1.0          # explicit version (use for the first release)
+npm run release -- patch          # or bump patch/minor/major
+npm run release -- patch --dry-run  # preview the version + release notes only
+
+# 2. Push the branch and the tag. Pushing the tag triggers the Release workflow.
+git push && git push origin v0.1.0
+```
+
+On a `v*` tag, `.github/workflows/release.yml`:
+
+1. verifies `package.json`'s version matches the tag (fails otherwise),
+2. builds and boot-smoke-tests the app on macOS/Linux/Windows,
+3. packages installers (`.dmg` / `.AppImage` / `.exe`) with electron-builder, and
+4. cuts a single **GitHub Release** for the tag whose notes are the matching
+   `CHANGELOG.md` section (`npm run release:notes -- <version>` prints them).
+
+macOS code-signing / notarization is intentionally deferred (it needs Apple
+account credentials), so the macOS build is currently unsigned.
+
 ## Testing
 
 ```sh
