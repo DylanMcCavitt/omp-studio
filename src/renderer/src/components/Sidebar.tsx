@@ -50,7 +50,13 @@ export function Sidebar() {
 
       {mode === "chats" ? <ChatsPane onNewChat={newChat} /> : <FileTree />}
 
-      <div className="border-t border-border-subtle px-3 py-3">
+      <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-3">
+        {/* Brand/logo placeholder — reserve this footer slot for the omp mark;
+            swap the dashed box for the real asset when it lands. */}
+        <span
+          aria-hidden="true"
+          className="h-5 w-5 shrink-0 rounded-md border border-dashed border-border-strong"
+        />
         <span className="text-xs text-ink-faint">omp harness</span>
       </div>
     </nav>
