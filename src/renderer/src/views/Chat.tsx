@@ -58,6 +58,7 @@ import {
 } from "@/lib/layout";
 import { useActiveSession, useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
+import { useShellStore } from "@/store/shell";
 
 /** Stable empty queue so the no-active-session selectors keep a steady ref. */
 const NO_UI: ChatUiRequestEvent[] = [];
@@ -138,11 +139,13 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const error = useActiveSession((s) => s?.error);
   const uiRequests = useActiveSession((s) => s?.uiRequests ?? NO_UI);
   const isCompacting = useActiveSession((s) => s?.isCompacting ?? false);
-  const railCollapsed = useSettingsStore(
+  const persistedRailCollapsed = useSettingsStore(
     (s) => s.settings?.layout?.chatRailCollapsed ?? false,
   );
   const settingsLoaded = useSettingsStore((s) => s.settings != null);
   const setLayout = useSettingsStore((s) => s.setLayout);
+  const shellPanelOpen = useShellStore((s) => s.openPanelId != null);
+  const closeShellPanel = useShellStore((s) => s.closePanel);
   const inspectedId = useChatStore((s) => s.inspectedSubagentId);
   const setInspected = useChatStore((s) => s.setInspectedSubagent);
   const subagents = useActiveSession(
@@ -206,12 +209,21 @@ function ChatSession({ sessionId }: { sessionId: string }) {
       transcript
     );
 
-  if (railCollapsed) {
+  // A shell rail panel (Terminal/Files/etc.) owns the far-right column. Showing
+  // the chat's own Panels rail beside it wedges a narrow, often-sparse strip
+  // between the transcript and the opened panel (the "dead middle band" of
+  // AGE-669) and stops the transcript reclaiming the freed width. Collapse to
+  // the icon strip whenever the chat rail is collapsed OR a shell panel is open;
+  // expanding then closes the shell panel so the two rails never stack.
+  if (persistedRailCollapsed || shellPanelOpen) {
     return (
       <div className="flex h-full min-h-0">
         <div className="min-w-0 flex-1">{center}</div>
         <RailIconStrip
-          onExpand={() => setLayout({ chatRailCollapsed: false })}
+          onExpand={() => {
+            if (shellPanelOpen) closeShellPanel();
+            if (persistedRailCollapsed) setLayout({ chatRailCollapsed: false });
+          }}
         />
       </div>
     );
