@@ -1,16 +1,21 @@
-// Per-session approval control. Shows the session's approval mode (captured at
-// spawn) as a compact pill and, on click, a panel listing the session-scoped
-// "Always allow" rules with a way to revoke each. Rendered as a fixed chip by
-// the UiRequestLayer so it never collides with the chat header/right-rail that
-// other workers own. Approval mode is fixed at spawn (no runtime RPC setter),
-// so this is a display + allowlist-management surface, not a mode switcher.
+// Per-session approval control. Shows the active session's approval mode
+// (captured at spawn) as a compact chip in the chat header and, on click, a
+// dropdown listing the session-scoped "Always allow" rules with a way to revoke
+// each. It is self-contained — it reads the active session + approval store
+// directly, like the sibling ContextMeterChip — so it sits inline with the
+// other header controls (model / thinking / status / context) instead of
+// floating over the viewport's bottom-left corner, where a `fixed` chip
+// collided with the left sidebar's footer and panel dock (AGE-686). Approval
+// mode is fixed at spawn (no runtime RPC setter), so this is a display +
+// allowlist-management surface, not a mode switcher.
 
-import type { ApprovalMode, ApprovalPolicy } from "@shared/rpc";
+import type { ApprovalMode } from "@shared/rpc";
 import { ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 import { IconButton } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import type { AllowRule } from "@/store/approvals";
+import { NO_RULES, useApprovalStore } from "@/store/approvals";
+import { useActiveSession, useChatStore } from "@/store/chat";
 
 const MODE_LABEL: Record<ApprovalMode, string> = {
   "always-ask": "Always ask",
@@ -24,32 +29,58 @@ const MODE_TONE: Record<ApprovalMode, string> = {
   yolo: "border-danger/40 bg-danger/10 text-danger",
 };
 
-export interface ApprovalModeControlProps {
-  policy: ApprovalPolicy | undefined;
-  rules: AllowRule[];
-  onRevoke(key: string): void;
-}
-
-export function ApprovalModeControl({
-  policy,
-  rules,
-  onRevoke,
-}: ApprovalModeControlProps) {
+export function ApprovalModeControl() {
+  const activeSessionId = useChatStore((s) => s.activeSessionId);
+  const status = useActiveSession((s) => s?.status ?? "idle");
+  const policy = useApprovalStore((s) =>
+    activeSessionId ? s.policies[activeSessionId] : undefined,
+  );
+  const rules = useApprovalStore((s) =>
+    activeSessionId
+      ? (s.rulesBySession[activeSessionId] ?? NO_RULES)
+      : NO_RULES,
+  );
+  const revokeRule = useApprovalStore((s) => s.revokeRule);
   const [open, setOpen] = useState(false);
   const mode: ApprovalMode = policy?.mode ?? "always-ask";
 
+  // No live session → nothing to show. Mirrors the prior fixed-chip gate, which
+  // only rendered while a session was active and not exited.
+  if (!activeSessionId || status === "exited") return null;
+
   return (
-    <div className="fixed bottom-4 left-4 z-40">
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={`Approval mode: ${MODE_LABEL[mode]}. ${rules.length} always-allow rule(s).`}
+        className={cn(
+          "relative inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+          MODE_TONE[mode],
+        )}
+      >
+        <ShieldCheck className="h-3.5 w-3.5" />
+        {MODE_LABEL[mode]}
+        {rules.length > 0 && (
+          <span className="ml-0.5 rounded-full bg-accent/20 px-1.5 text-[10px] text-accent">
+            {rules.length}
+          </span>
+        )}
+      </button>
       {open && (
         <>
           {/* Click-away layer. */}
           <button
             type="button"
             aria-label="Close approval panel"
-            className="fixed inset-0 cursor-default"
+            className="fixed inset-0 z-40 cursor-default"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute bottom-full left-0 mb-2 w-72 animate-fade-in rounded-xl border border-border bg-bg-panel shadow-panel">
+          {/* Drops down from the chip so it never escapes upward through the
+              transcript panel's overflow-hidden top edge. */}
+          <div className="absolute left-0 top-full z-50 mt-2 w-72 animate-fade-in rounded-xl border border-border bg-bg-panel shadow-panel">
             <div className="border-b border-border-subtle px-3 py-2.5">
               <p className="text-xs font-semibold text-ink">
                 Session approval mode
@@ -83,7 +114,7 @@ export function ApprovalModeControl({
                       <IconButton
                         label={`Revoke ${rule.label}`}
                         className="h-6 w-6"
-                        onClick={() => onRevoke(rule.key)}
+                        onClick={() => revokeRule(activeSessionId, rule.key)}
                       >
                         <X className="h-3.5 w-3.5" />
                       </IconButton>
@@ -95,25 +126,6 @@ export function ApprovalModeControl({
           </div>
         </>
       )}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-label={`Approval mode: ${MODE_LABEL[mode]}. ${rules.length} always-allow rule(s).`}
-        className={cn(
-          "relative inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium shadow-panel transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-          MODE_TONE[mode],
-        )}
-      >
-        <ShieldCheck className="h-3.5 w-3.5" />
-        {MODE_LABEL[mode]}
-        {rules.length > 0 && (
-          <span className="ml-0.5 rounded-full bg-accent/20 px-1.5 text-[10px] text-accent">
-            {rules.length}
-          </span>
-        )}
-      </button>
     </div>
   );
 }

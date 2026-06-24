@@ -33,6 +33,7 @@ import { SubagentTree } from "@/components/chat/SubagentTree";
 import { ThinkingControl } from "@/components/chat/ThinkingControl";
 import { TodoPanel } from "@/components/chat/TodoPanel";
 import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
+import { ApprovalModeControl } from "@/components/chat/ui-request/ApprovalModeControl";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { useDragReorder } from "@/components/layout/useDragReorder";
 import { usePersistedPanelLayout } from "@/components/layout/usePersistedPanelLayout";
@@ -184,6 +185,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
           uiRequests={uiRequests}
           isCompacting={isCompacting}
         />
+        <ApprovalModeControl />
         <ContextMeterChip />
       </header>
       {error && status === "error" && (

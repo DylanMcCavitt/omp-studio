@@ -13,7 +13,6 @@
 //   - surfaces passive hints as toasts and open_url as an explicit-action banner;
 //   - drops the modal when the session exits or a request's timeout elapses
 //     (there is no settled event from the bridge — orphan handling is derived);
-//   - shows a per-session approval-mode control with the allowlist + revoke.
 //
 // All UI renders through fixed-position overlays / portals, so the only edit to
 // ChatWorkspace is the single mount — no collision with the header/right-rail
@@ -25,7 +24,6 @@ import { useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { NO_RULES, useApprovalStore } from "@/store/approvals";
 import { useActiveSession, useChatStore } from "@/store/chat";
-import { ApprovalModeControl } from "./ui-request/ApprovalModeControl";
 import { ApprovalRequestDialog } from "./ui-request/ApprovalRequestDialog";
 import { EditorRequestDialog } from "./ui-request/EditorRequestDialog";
 import { InputRequestDialog } from "./ui-request/InputRequestDialog";
@@ -57,17 +55,15 @@ export function UiRequestLayer() {
   const respondUi = useChatStore((s) => s.respondUi);
   const dismissUi = useChatStore((s) => s.dismissUiRequest);
 
-  // Approval state for the active session (policy display + allowlist).
-  const policy = useApprovalStore((s) =>
-    activeSessionId ? s.policies[activeSessionId] : undefined,
-  );
+  // Always-allow rules for the active session (the allowlist that drives
+  // auto-approve). The approval-mode chip + revoke moved to the chat header
+  // (AGE-686); this layer only reads rules and appends new ones.
   const rules = useApprovalStore((s) =>
     activeSessionId
       ? (s.rulesBySession[activeSessionId] ?? NO_RULES)
       : NO_RULES,
   );
   const addRule = useApprovalStore((s) => s.addRule);
-  const revokeRule = useApprovalStore((s) => s.revokeRule);
   const prune = useApprovalStore((s) => s.prune);
 
   // Prune approval state for sessions that are no longer open (close ≠ delete,
@@ -305,13 +301,6 @@ export function UiRequestLayer() {
           if (activeSessionId) dismissUi(activeSessionId, id);
         }}
       />
-      {activeSessionId && status !== "exited" && (
-        <ApprovalModeControl
-          policy={policy}
-          rules={rules}
-          onRevoke={(key) => revokeRule(activeSessionId, key)}
-        />
-      )}
     </>
   );
 }
