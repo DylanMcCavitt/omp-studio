@@ -65,7 +65,13 @@ const RAIL_DESTINATIONS: readonly {
       ).toBeVisible();
     },
   },
-  { label: "GitHub", assertRendered: heading("GitHub") },
+  {
+    label: "GitHub",
+    assertRendered: async (panel) => {
+      await heading("GitHub")(panel);
+      await expect(panel.getByRole("button", { name: "Repos" })).toBeVisible();
+    },
+  },
   {
     label: "Linear",
     assertRendered: async (panel) => {

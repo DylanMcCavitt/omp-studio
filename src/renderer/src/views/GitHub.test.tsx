@@ -5,10 +5,10 @@
 // fall through to the normal (here empty) listing.
 
 import type { OmpApi } from "@shared/ipc";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/store/app";
-import GitHub from "./GitHub";
+import GitHub, { languageDotColor } from "./GitHub";
 
 function stubBridge(overrides: Partial<OmpApi>) {
   Object.assign(window.omp, overrides);
@@ -79,4 +79,51 @@ it("consolidates the empty repos view into one empty state with a next action", 
   expect(
     screen.queryByText("No repository detected in this directory"),
   ).not.toBeInTheDocument();
+});
+
+it("uses GitHub language colors for repository language dots", () => {
+  expect(languageDotColor("TypeScript")).toBe("#3178c6");
+  expect(languageDotColor("Rust")).toBe("#dea584");
+  expect(languageDotColor("JavaScript")).toBe("#f1e05a");
+  expect(languageDotColor("Python")).toBe("#3572A5");
+  expect(languageDotColor("Unknown Thing")).toBe("#8b949e");
+});
+
+it("renders repo rows with language dots, stars, and relative age", async () => {
+  const dateNow = vi
+    .spyOn(Date, "now")
+    .mockReturnValue(new Date("2026-06-25T12:00:00Z").getTime());
+  try {
+    useAppStore.setState({ selectedProject: null });
+    githubStub({
+      listRepos: vi.fn().mockResolvedValue([
+        {
+          nameWithOwner: "DylanMcCavitt/omp-studio",
+          name: "omp-studio",
+          description: "Desktop cockpit",
+          isPrivate: false,
+          url: "https://github.com/DylanMcCavitt/omp-studio",
+          stargazerCount: 1234,
+          updatedAt: "2026-06-11T12:00:00Z",
+          primaryLanguage: "TypeScript",
+        },
+      ]),
+    });
+
+    render(<GitHub />);
+
+    const name = await screen.findByText("DylanMcCavitt/omp-studio");
+    const row = name.closest("button");
+    expect(row).not.toBeNull();
+    const rowQueries = within(row as HTMLElement);
+    expect(rowQueries.getByText("public")).toBeInTheDocument();
+    const language = rowQueries.getByText("TypeScript");
+    expect(language.previousElementSibling).toHaveStyle(
+      "background-color: rgb(49, 120, 198)",
+    );
+    expect(rowQueries.getByText("★ 1,234")).toBeInTheDocument();
+    expect(rowQueries.getByText("2 weeks ago")).toBeInTheDocument();
+  } finally {
+    dateNow.mockRestore();
+  }
 });

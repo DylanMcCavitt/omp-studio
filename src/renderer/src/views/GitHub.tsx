@@ -1,3 +1,4 @@
+import type { GhRepo } from "@shared/domain";
 import {
   CircleDot,
   ExternalLink,
@@ -30,6 +31,77 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
+const GITHUB_LANGUAGE_COLORS: Record<string, string> = {
+  typescript: "#3178c6",
+  rust: "#dea584",
+  javascript: "#f1e05a",
+  python: "#3572A5",
+  go: "#00ADD8",
+  css: "#563d7c",
+  html: "#e34c26",
+  shell: "#89e051",
+  ruby: "#701516",
+  java: "#b07219",
+  "c#": "#178600",
+  "c++": "#f34b7d",
+  c: "#555555",
+  php: "#4F5D95",
+  swift: "#F05138",
+  kotlin: "#A97BFF",
+  dart: "#00B4AB",
+};
+
+const UNKNOWN_LANGUAGE_COLOR = "#8b949e";
+
+export function languageDotColor(language: string | null | undefined) {
+  return language
+    ? (GITHUB_LANGUAGE_COLORS[language.toLowerCase()] ?? UNKNOWN_LANGUAGE_COLOR)
+    : UNKNOWN_LANGUAGE_COLOR;
+}
+
+function RepoRow({ repo }: { repo: GhRepo }) {
+  const language = repo.primaryLanguage ?? "Unknown";
+  const stars = repo.stargazerCount ?? 0;
+
+  return (
+    <button
+      onClick={() => window.omp.openExternal(repo.url)}
+      className="flex w-full flex-col gap-2 px-3 py-3 text-left transition hover:bg-bg-hover"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <GitBranch className="h-4 w-4 shrink-0 text-ink-muted" />
+        <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium text-ink">
+          {repo.nameWithOwner}
+        </span>
+        <Badge variant={repo.isPrivate ? "warn" : "muted"}>
+          {repo.isPrivate ? "private" : "public"}
+        </Badge>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
+        <span className="flex items-center gap-1.5">
+          <span
+            aria-hidden="true"
+            className="h-2.5 w-2.5 rounded-full border border-border-subtle"
+            style={{ backgroundColor: languageDotColor(repo.primaryLanguage) }}
+          />
+          <span>{language}</span>
+        </span>
+        <span className="font-mono">★ {formatNumber(stars)}</span>
+        {repo.updatedAt && (
+          <span className="font-mono">
+            {formatRelativeTime(repo.updatedAt)}
+          </span>
+        )}
+      </div>
+      {repo.description && (
+        <p className="line-clamp-2 text-xs text-ink-muted">
+          {repo.description}
+        </p>
+      )}
+    </button>
+  );
+}
+
 const ROW =
   "flex w-full flex-col gap-1 rounded-md border border-border bg-bg-raised px-3 py-2 text-left transition hover:bg-bg-hover";
 
@@ -60,43 +132,9 @@ function ReposTab() {
     );
   }
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+    <div className="divide-y divide-border border-y border-border">
       {repos.map((repo) => (
-        <button
-          key={repo.nameWithOwner}
-          onClick={() => window.omp.openExternal(repo.url)}
-          className="flex flex-col gap-1.5 rounded-lg border border-border bg-bg-raised p-4 text-left transition hover:bg-bg-hover"
-        >
-          <div className="flex items-center gap-2">
-            <GitBranch className="h-4 w-4 shrink-0 text-ink-muted" />
-            <span className="truncate font-mono text-sm text-ink">
-              {repo.nameWithOwner}
-            </span>
-            <Badge
-              variant={repo.isPrivate ? "warn" : "success"}
-              className="ml-auto"
-            >
-              {repo.isPrivate ? "private" : "public"}
-            </Badge>
-          </div>
-          {repo.description && (
-            <p className="line-clamp-2 text-xs text-ink-muted">
-              {repo.description}
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
-            {repo.primaryLanguage && <span>{repo.primaryLanguage}</span>}
-            {typeof repo.stargazerCount === "number" && (
-              <span className="flex items-center gap-1">
-                <Star className="h-3 w-3" />
-                {formatNumber(repo.stargazerCount)}
-              </span>
-            )}
-            {repo.updatedAt && (
-              <span>{formatRelativeTime(repo.updatedAt)}</span>
-            )}
-          </div>
-        </button>
+        <RepoRow key={repo.nameWithOwner} repo={repo} />
       ))}
     </div>
   );
