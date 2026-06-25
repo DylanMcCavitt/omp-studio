@@ -77,14 +77,16 @@ export function editDiff(
   let added = 0;
   let removed = 0;
   const writeAll = call.name.toLowerCase() === "write";
-  for (const raw of text.split("\n")) {
+  const rows = text.split("\n");
+  if (writeAll && rows.length > 1 && rows[rows.length - 1] === "") rows.pop();
+  for (const raw of rows) {
     if (writeAll) {
       added++;
       lines.push({ kind: "add", text: raw });
-    } else if (raw.startsWith("+") && !raw.startsWith("++")) {
+    } else if (raw.startsWith("+") && !raw.startsWith("+++")) {
       added++;
       lines.push({ kind: "add", text: raw.slice(1) });
-    } else if (raw.startsWith("-") && !raw.startsWith("--")) {
+    } else if (raw.startsWith("-") && !raw.startsWith("---")) {
       removed++;
       lines.push({ kind: "remove", text: raw.slice(1) });
     }

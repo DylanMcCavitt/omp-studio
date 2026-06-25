@@ -44,10 +44,25 @@ describe("editDiff", () => {
     expect(d?.removed).toBe(0);
   });
 
+  test("keeps diff body lines that start with literal +/- content", () => {
+    const d = editDiff(
+      call("edit", { input: "++value\n-- item\n+keep\n-drop" }),
+    );
+    expect(d?.added).toBe(2);
+    expect(d?.removed).toBe(2);
+    expect(d?.lines).toEqual([
+      { kind: "add", text: "+value" },
+      { kind: "remove", text: "- item" },
+      { kind: "add", text: "keep" },
+      { kind: "remove", text: "drop" },
+    ]);
+  });
+
   test("write counts its whole body as added", () => {
-    const d = editDiff(call("write", { content: "line a\nline b\nline c" }));
+    const d = editDiff(call("write", { content: "line a\nline b\nline c\n" }));
     expect(d?.added).toBe(3);
     expect(d?.removed).toBe(0);
+    expect(d?.lines.at(-1)).toEqual({ kind: "add", text: "line c" });
   });
 
   test("returns null for non-edit tools", () => {
