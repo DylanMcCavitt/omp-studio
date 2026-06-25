@@ -16,13 +16,17 @@
   :root {
     /* Light palette (channels: R G B). */
     --c-bg: 246 246 249;
-    --c-bg-raised: 255 255 255;
-    --c-bg-panel: 251 251 253;
+    /* AGE-698: bg-panel is the elevated --panel surface (#ffffff); bg-raised is
+       the recessed --panel2 inset surface (#fbfbfd). */
+    --c-bg-raised: 251 251 253;
+    --c-bg-panel: 255 255 255;
     --c-bg-hover: 237 237 242;
     --c-border: 219 219 227;
     --c-border-subtle: 231 231 238;
     --c-border-strong: 198 198 209;
     --c-ink: 22 22 28;
+    /* AGE-698: t1cl — secondary primary-text step between ink and ink-muted. */
+    --c-ink-clear: 44 44 56;
     --c-ink-muted: 90 90 103;
     --c-ink-faint: 116 116 131;
     /* Monochrome accent (AGE-672): graphite primary on the light surface so a
@@ -30,11 +34,22 @@
     --c-accent: 24 24 30;
     --c-accent-hover: 42 42 52;
     --c-accent-soft: 236 236 241;
+    /* AGE-698: accentText — text/ink rendered on an accent fill. */
+    --c-accent-ink: 255 255 255;
     --c-success: 26 127 55;
     --c-warn: 180 83 9;
     --c-danger: 207 34 46;
     /* Reasoning indicator: a calm neutral slate, no longer purple. */
     --c-thinking: 100 100 116;
+
+    /* AGE-698: PRD chrome tokens added to the theme layer. Terminal, inline-code,
+       and diff are dark-spec in the PRD; light values here are provisional (they
+       mirror the nearest light surface) pending design sign-off, and no surface
+       consumes them yet — see XtermView/Markdown/ToolCallCard in the report. */
+    --c-terminal-bg: 255 255 255;
+    --c-code-bg: 237 237 242;
+    --c-diff-add: 63 185 104;
+    --c-diff-remove: 224 89 79;
 
     --shadow-panel:
       0 1px 2px rgb(16 24 40 / 0.06), 0 8px 24px rgb(16 24 40 / 0.08);
@@ -60,13 +75,17 @@
   .dark {
     /* Dark cockpit palette (channels: R G B). */
     --c-bg: 12 12 15;
-    --c-bg-raised: 19 19 24;
-    --c-bg-panel: 23 23 29;
-    --c-bg-hover: 32 32 40;
+    /* AGE-698: bg-panel is the elevated --panel surface (#131318); bg-raised is
+       the recessed --panel2 inset surface (#0e0e12), sitting just above --c-bg.
+       hover dims to the spec value. */
+    --c-bg-raised: 14 14 18;
+    --c-bg-panel: 19 19 24;
+    --c-bg-hover: 23 23 29;
     --c-border: 41 41 51;
     --c-border-subtle: 30 30 38;
     --c-border-strong: 57 57 71;
     --c-ink: 238 238 243;
+    --c-ink-clear: 207 208 216;
     --c-ink-muted: 166 167 179;
     --c-ink-faint: 129 130 144;
     /* Monochrome accent (AGE-672): near-white primary on the dark surface so a
@@ -74,11 +93,18 @@
     --c-accent: 226 228 234;
     --c-accent-hover: 245 245 248;
     --c-accent-soft: 32 32 40;
+    --c-accent-ink: 12 12 15;
     --c-success: 74 222 128;
     --c-warn: 251 191 36;
     --c-danger: 248 113 113;
     /* Reasoning indicator: a calm neutral slate, no longer purple. */
     --c-thinking: 150 152 168;
+
+    /* AGE-698: PRD chrome tokens (dark spec). */
+    --c-terminal-bg: 8 8 10;
+    --c-code-bg: 28 28 34;
+    --c-diff-add: 63 185 104;
+    --c-diff-remove: 224 89 79;
 
     --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.5), 0 12px 32px rgb(0 0 0 / 0.32);
     --shadow-glow:

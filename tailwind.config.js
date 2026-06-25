@@ -29,6 +29,8 @@ export default {
           raised: "rgb(var(--c-bg-raised) / <alpha-value>)",
           panel: "rgb(var(--c-bg-panel) / <alpha-value>)",
           hover: "rgb(var(--c-bg-hover) / <alpha-value>)",
+          terminal: "rgb(var(--c-terminal-bg) / <alpha-value>)",
+          code: "rgb(var(--c-code-bg) / <alpha-value>)",
         },
         border: {
           DEFAULT: "rgb(var(--c-border) / <alpha-value>)",
@@ -39,16 +41,22 @@ export default {
           DEFAULT: "rgb(var(--c-ink) / <alpha-value>)",
           muted: "rgb(var(--c-ink-muted) / <alpha-value>)",
           faint: "rgb(var(--c-ink-faint) / <alpha-value>)",
+          clear: "rgb(var(--c-ink-clear) / <alpha-value>)",
         },
         accent: {
           DEFAULT: "rgb(var(--c-accent) / <alpha-value>)",
           hover: "rgb(var(--c-accent-hover) / <alpha-value>)",
           soft: "rgb(var(--c-accent-soft) / <alpha-value>)",
+          ink: "rgb(var(--c-accent-ink) / <alpha-value>)",
         },
         success: "rgb(var(--c-success) / <alpha-value>)",
         warn: "rgb(var(--c-warn) / <alpha-value>)",
         danger: "rgb(var(--c-danger) / <alpha-value>)",
         thinking: "rgb(var(--c-thinking) / <alpha-value>)",
+        diff: {
+          add: "rgb(var(--c-diff-add) / <alpha-value>)",
+          remove: "rgb(var(--c-diff-remove) / <alpha-value>)",
+        },
       },
       boxShadow: {
         panel: "var(--shadow-panel)",
