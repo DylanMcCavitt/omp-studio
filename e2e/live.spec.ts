@@ -166,16 +166,17 @@ async function startSession(page: Page, prompt: string): Promise<void> {
   const startButton = page.getByRole("button", { name: "Start session" });
   await expect(startButton).toBeEnabled({ timeout: 20_000 });
   await startButton.click();
-  // The pane swaps to the live composer (idle "Send" or mid-turn "Steer").
+  // The pane swaps to the live composer (idle "Message <workspace>" or mid-turn
+  // "Steer").
   await expect(
-    page.getByPlaceholder(/Send a message…|Steer the agent…/),
+    page.getByPlaceholder(/Message .+…|Steer the agent…/),
   ).toBeVisible({ timeout: 90_000 });
 }
 
 /**
  * Approve or deny every approval dialog the current turn raises, returning once
- * the turn ends (the composer returns to its idle "Send a message…" state). In
- * always-ask mode a turn can raise several tool approvals; this resolves each
+ * the turn ends (the composer returns to its idle "Message <workspace>…" state).
+ * In always-ask mode a turn can raise several tool approvals; this resolves each
  * the same way so the assertion afterwards is unambiguous.
  *
  * omp surfaces a tool approval as an Approve/Deny `select` extension UI request,
@@ -189,7 +190,7 @@ async function resolveApprovals(
   decision: "Approve" | "Deny",
 ): Promise<void> {
   const button = decision === "Approve" ? "Approve once" : "Deny";
-  const idle = page.getByPlaceholder("Send a message…");
+  const idle = page.getByPlaceholder(/Message .+…/);
   const deadline = Date.now() + 180_000;
   while (Date.now() < deadline) {
     if (await idle.isVisible().catch(() => false)) return;
@@ -497,7 +498,7 @@ test.describe("live D2 concurrency", () => {
 
       // With S2 active and streaming, close the OTHER (idle, background) session.
       await page
-        .getByPlaceholder("Send a message…")
+        .getByPlaceholder(/Message .+…/)
         .fill("Count from 1 to 12, one number per line.");
       await page.getByRole("button", { name: "Send" }).click();
       await expect(page.getByRole("button", { name: "Stop" })).toBeVisible({
