@@ -6,9 +6,9 @@
 // its live transcript into this center view in place of the main chat.
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
-import type { SubagentInfo, SubagentSnapshot } from "@shared/rpc";
+import type { OmpMessage, SubagentInfo, SubagentSnapshot } from "@shared/rpc";
 import { MessageSquarePlus } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
 import { ModelControl } from "@/components/chat/ModelControl";
@@ -18,14 +18,29 @@ import { SubagentInspector } from "@/components/chat/SubagentInspector";
 import { ThinkingControl } from "@/components/chat/ThinkingControl";
 import { UiRequestLayer } from "@/components/chat/UiRequestLayer";
 import { ApprovalModeControl } from "@/components/chat/ui-request/ApprovalModeControl";
+import {
+  ActivityRail,
+  deriveActivitySteps,
+  type TranscriptMode,
+  TranscriptModeToggle,
+} from "@/components/transcript/ActivityRail";
 import { Button, EmptyState } from "@/components/ui";
+import { workspaceColorForCwd } from "@/lib/workspaces";
 import { useActiveSession, useChatStore } from "@/store/chat";
+import type { ActivityRunState } from "@/store/session-reducer";
+import { useSettingsStore } from "@/store/settings";
 
 /** Stable empty queue so the no-active-session selectors keep a steady ref. */
 const NO_UI: ChatUiRequestEvent[] = [];
 
 /** Stable empty roster so the no-subagent selector keeps a steady ref. */
 const NO_SUBAGENTS: SubagentInfo[] = [];
+
+/** Stable empty transcript so the Activity-rail selector keeps a steady ref. */
+const NO_MESSAGES: OmpMessage[] = [];
+
+/** Stable empty tool-run map so the Activity-rail selector keeps a steady ref. */
+const NO_TOOL_RUNS: Record<string, ActivityRunState> = {};
 
 export default function ChatWorkspace() {
   const activeSessionId = useChatStore((s) => s.activeSessionId);
@@ -89,6 +104,19 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const inspected = inspectedId
     ? subagents.find((s) => s.id === inspectedId)
     : undefined;
+  const messages = useActiveSession((s) => s?.messages ?? NO_MESSAGES);
+  const toolRuns = useActiveSession((s) => s?.toolRuns ?? NO_TOOL_RUNS);
+  const cwd = useActiveSession((s) => s?.cwd);
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
+  const color = workspaceColorForCwd(workspaces, cwd);
+  const [mode, setMode] = useState<TranscriptMode>("focused");
+  // The Activity rail is a derived, presentation-only view of the live tool
+  // frames — status comes from the reconciled transcript or the live tool-run
+  // record, so steps settle before turn end (AGE-708).
+  const steps = useMemo(
+    () => deriveActivitySteps(messages, toolRuns),
+    [messages, toolRuns],
+  );
 
   // Safety net: if the active session isn't registered yet (e.g. selected from
   // another surface), open it now. start() registers before activating, so this
@@ -121,14 +149,22 @@ function ChatSession({ sessionId }: { sessionId: string }) {
         />
         <ApprovalModeControl />
         <ContextMeterChip />
+        <div className="ml-auto">
+          <TranscriptModeToggle value={mode} onChange={setMode} />
+        </div>
       </header>
       {error && status === "error" && (
         <div className="border-b border-danger/30 bg-danger/10 px-4 py-1.5 text-xs text-danger">
           {error}
         </div>
       )}
-      <MessageList />
-      <Composer />
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <MessageList />
+          <Composer />
+        </div>
+        {mode === "activity" && <ActivityRail steps={steps} color={color} />}
+      </div>
     </div>
   );
 

@@ -39,6 +39,14 @@ import type {
 export type ChatStatus = "idle" | "spawning" | "streaming" | "error" | "exited";
 
 /**
+ * Live run-state of a single tool call, recorded from the `tool_execution_*`
+ * frames as they stream — before the authoritative `toolResult` messages are
+ * reconciled at turn end. Keyed by tool-call id in `LiveSessionState.toolRuns`
+ * so the Activity rail can mark a step `done`/`running` mid-turn (AGE-708).
+ */
+export type ActivityRunState = "running" | "done" | "error";
+
+/**
  * Kind of a transcript system card. `command_output` carries the text a local
  * slash command printed; `session_info` reflects a `session_info_update` (e.g. a
  * rename); `config` reflects a `config_update` (model/thinking change).
@@ -136,6 +144,13 @@ export interface LiveSessionState {
   queuedCount: number;
   /** Name of the tool currently executing, for the activity indicator. */
   activeTool: string | null;
+  /**
+   * Live tool-call run-state keyed by tool-call id, recorded from the
+   * `tool_execution_*` frames as the turn streams (before the reconciled
+   * `toolResult` messages land). Lets the Activity rail mark steps
+   * `done`/`running`/`queued` mid-turn; reset each turn (AGE-708).
+   */
+  toolRuns: Record<string, ActivityRunState>;
   /** Slash commands advertised by this session (`available_commands_update`). */
   availableCommands: AvailableCommand[];
   /** Outstanding extension UI requests awaiting a renderer response (C3). */
@@ -178,6 +193,7 @@ export function createSession(
     stats: undefined,
     queuedCount: 0,
     activeTool: null,
+    toolRuns: {},
     availableCommands: [],
     uiRequests: [],
     systemCards: [],
@@ -367,6 +383,7 @@ export function reduceSession(
         liveText: "",
         liveThinking: "",
         activeTool: null,
+        toolRuns: {},
         error: undefined,
       };
 
@@ -387,14 +404,39 @@ export function reduceSession(
 
     case "tool_execution_start":
     case "tool_execution_update": {
-      const toolName = (frame as ToolExecutionFrame).toolName;
-      return toolName && toolName !== state.activeTool
-        ? { ...state, activeTool: toolName }
-        : state;
+      const f = frame as ToolExecutionFrame;
+      let next = state;
+      if (f.toolName && f.toolName !== next.activeTool) {
+        next = { ...next, activeTool: f.toolName };
+      }
+      // Track the running call by id so the rail can promote exactly this step
+      // (parallel tools run concurrently — name alone can't disambiguate).
+      if (f.toolCallId && next.toolRuns[f.toolCallId] !== "running") {
+        next = {
+          ...next,
+          toolRuns: { ...next.toolRuns, [f.toolCallId]: "running" },
+        };
+      }
+      return next;
     }
 
-    case "tool_execution_end":
-      return state.activeTool === null ? state : { ...state, activeTool: null };
+    case "tool_execution_end": {
+      const f = frame as ToolExecutionFrame;
+      let next = state;
+      if (next.activeTool !== null) next = { ...next, activeTool: null };
+      // Record completion now — the reconciled `toolResult` message only arrives
+      // at turn end, so this is what lets a step go `done` mid-stream (AGE-708).
+      if (f.toolCallId) {
+        const done: ActivityRunState = f.result?.isError ? "error" : "done";
+        if (next.toolRuns[f.toolCallId] !== done) {
+          next = {
+            ...next,
+            toolRuns: { ...next.toolRuns, [f.toolCallId]: done },
+          };
+        }
+      }
+      return next;
+    }
 
     case "auto_compaction_start":
       return state.isCompacting ? state : { ...state, isCompacting: true };

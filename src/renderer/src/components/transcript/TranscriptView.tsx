@@ -32,7 +32,7 @@ export function blocksText(
     .join("\n\n");
 }
 
-function argsPreview(args: unknown): string {
+export function argsPreview(args: unknown): string {
   let raw: string;
   try {
     raw = typeof args === "string" ? args : JSON.stringify(args);

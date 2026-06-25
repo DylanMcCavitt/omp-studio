@@ -7,7 +7,7 @@
 // IPC-bound children are stubbed to inert markers so the test exercises only the
 // center-view selection.
 
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { useChatStore } from "@/store/chat";
 import { useShellStore } from "@/store/shell";
 import ChatWorkspace from "./Chat";
@@ -89,5 +89,18 @@ describe("ChatSession center view (AGE-674)", () => {
 
     expect(screen.getByTestId("subagent-inspector")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+  });
+
+  it("toggles the Focused/Activity-rail layout from the header (AGE-708)", () => {
+    render(<ChatWorkspace />);
+
+    // Focused by default: the Activity rail column is not mounted.
+    expect(screen.queryByText("No tool steps yet.")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Activity rail" }));
+    expect(screen.getByText("No tool steps yet.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Focused" }));
+    expect(screen.queryByText("No tool steps yet.")).not.toBeInTheDocument();
   });
 });
