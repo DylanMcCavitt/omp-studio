@@ -8,11 +8,12 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { editDiff, ToolCallCard } from "./ToolCallCard";
 
-const call = (
-  name: string,
-  args: unknown,
-  id = "t1",
-): ToolCallBlock => ({ type: "toolCall", id, name, arguments: args });
+const call = (name: string, args: unknown, id = "t1"): ToolCallBlock => ({
+  type: "toolCall",
+  id,
+  name,
+  arguments: args,
+});
 
 const ok = (id = "t1"): ToolResultMessage => ({
   role: "toolResult",
@@ -107,7 +108,9 @@ describe("running tool card", () => {
     expect(card).not.toBeNull();
     expect(card.style.borderColor).not.toBe("");
     // Header dot is the running Live Dot (pulse animation).
-    const dot = document.querySelector('[data-status="running"]') as HTMLElement;
+    const dot = document.querySelector(
+      '[data-status="running"]',
+    ) as HTMLElement;
     expect(dot.className).toContain("animate-omp-pulse");
     // Blinking running label.
     const label = screen.getByText("running…");

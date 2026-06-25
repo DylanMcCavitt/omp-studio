@@ -66,7 +66,10 @@ function diffSource(args: unknown, fallback: string): string {
  * unit-tests directly. `write` adds its whole body; other edit tools parse
  * unified-diff style `+`/`-` prefixed lines (ignoring `+++`/`---` file headers).
  */
-export function editDiff(call: ToolCallBlock, resultText = ""): EditDiff | null {
+export function editDiff(
+  call: ToolCallBlock,
+  resultText = "",
+): EditDiff | null {
   if (!isEditTool(call.name)) return null;
   const text = diffSource(call.arguments, resultText);
   if (!text) return null;
