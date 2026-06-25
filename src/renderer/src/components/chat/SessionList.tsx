@@ -26,11 +26,13 @@ import { Badge, type BadgeVariant, EmptyState, Spinner } from "@/components/ui";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
-import { workspaceColorForCwd } from "@/lib/workspaces";
+import { workspaceColorForCwd, workspaceColorValue } from "@/lib/workspaces";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
 import {
   deriveSessionBadgeKind,
   type SessionBadgeKind,
+  type SessionStatus,
+  sessionStatus,
 } from "@/store/session-reducer";
 import { useSettingsStore } from "@/store/settings";
 
@@ -216,7 +218,45 @@ export function SessionList() {
           </>
         )}
       </div>
+      {total > 0 && <SessionStatusLegend />}
     </aside>
+  );
+}
+
+/**
+ * One entry in the status legend: a Live Dot in a fixed neutral hue (slate) so
+ * the fill — solid / hollow ring / faded — reads independently of any workspace
+ * color, paired with its label.
+ */
+function LegendItem({
+  status,
+  label,
+}: {
+  status: SessionStatus;
+  label: string;
+}) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <WorkspaceColorDot color="slate" status={status} pulse={false} />
+      {label}
+    </span>
+  );
+}
+
+/**
+ * Footer legend decoding the Live-Dot fills used across the session index:
+ * live (solid) · idle (hollow ring) · done (faded).
+ */
+function SessionStatusLegend() {
+  return (
+    <fieldset
+      aria-label="Session status legend"
+      className="flex items-center gap-3 border-x-0 border-b-0 border-t border-border-subtle px-4 py-2 text-[9.5px] lowercase text-ink-faint"
+    >
+      <LegendItem status="running" label="live" />
+      <LegendItem status="idle" label="idle" />
+      <LegendItem status="done" label="done" />
+    </fieldset>
   );
 }
 
@@ -239,6 +279,29 @@ function SessionListRow({
     ? Math.round(session.contextUsage.percent)
     : null;
   const color = workspaceColorForCwd(workspaces, session.cwd);
+  const colorValue = workspaceColorValue(color);
+  const status = sessionStatus({ live: true, status: session.status });
+  // The 3-fill dot carries the normal lifecycle (running/idle); surface a text
+  // badge for the states it cannot express — the user-blocking ones plus
+  // exited/spawning, which would otherwise collapse into a plain idle row.
+  const badgeKind = deriveSessionBadgeKind({
+    status: session.status,
+    uiRequests: session.uiRequests,
+    isCompacting: session.isCompacting,
+  });
+  const showStatusBadge =
+    badgeKind === "needs-approval" ||
+    badgeKind === "needs-input" ||
+    badgeKind === "error" ||
+    badgeKind === "exited" ||
+    badgeKind === "starting";
+  // Title ramp encodes the hierarchy directly: active = strong (--t1/600),
+  // done = faded (--t3), other inactive = muted (--t2/500).
+  const titleRamp = active
+    ? "text-ink font-semibold"
+    : status === "done"
+      ? "text-ink-faint font-medium"
+      : "text-ink-muted font-medium";
 
   return (
     <div className="group relative">
@@ -248,42 +311,50 @@ function SessionListRow({
         aria-current={active ? "true" : undefined}
         onClick={() => setActiveSession(sessionId)}
         className={cn(
-          "block w-full rounded-lg border px-3 py-2 text-left transition-colors",
+          "flex w-full gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
           active
-            ? "border-accent/50 bg-accent-soft"
+            ? "border-border-subtle bg-bg-hover"
             : "border-transparent hover:border-border-subtle hover:bg-bg-hover",
         )}
       >
-        <span
-          className={cn(
-            "flex items-center gap-1.5 pr-14 text-sm font-medium",
-            active ? "text-accent" : "text-ink",
-          )}
-        >
-          {color && <WorkspaceColorDot color={color} />}
-          <span className="truncate">{rowTitle(session)}</span>
-        </span>
+        <WorkspaceColorDot color={color} status={status} className="mt-1.5" />
+        <span className="min-w-0 flex-1">
+          <span className={cn("flex items-center pr-14 text-sm", titleRamp)}>
+            <span className="truncate">{rowTitle(session)}</span>
+          </span>
 
-        <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">
-          {modelLabel(session)}
-        </span>
+          <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">
+            {modelLabel(session)}
+          </span>
 
-        <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
-          <SessionStatusBadge
-            status={session.status}
-            uiRequests={session.uiRequests}
-            isCompacting={session.isCompacting}
-          />
-          {percent !== null && <span>{percent}% context</span>}
-          {session.queuedCount > 0 && (
-            <Badge variant="muted">{session.queuedCount} queued</Badge>
-          )}
-          {session.lastActivityAt > 0 && (
-            <span className="ml-auto">
-              {formatRelativeTime(session.lastActivityAt)}
-            </span>
-          )}
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
+            {status === "running" ? (
+              <span
+                className="font-mono lowercase"
+                style={colorValue ? { color: colorValue } : undefined}
+              >
+                live
+              </span>
+            ) : (
+              session.lastActivityAt > 0 && (
+                <span className="font-mono">
+                  {formatRelativeTime(session.lastActivityAt)}
+                </span>
+              )
+            )}
+            {showStatusBadge && (
+              <SessionStatusBadge
+                status={session.status}
+                uiRequests={session.uiRequests}
+                isCompacting={session.isCompacting}
+              />
+            )}
+            {percent !== null && <span>{percent}% context</span>}
+            {session.queuedCount > 0 && (
+              <Badge variant="muted">{session.queuedCount} queued</Badge>
+            )}
+          </span>
         </span>
       </button>
 
@@ -349,9 +420,6 @@ function HibernatedListRow({
   const { descriptor, resuming, error } = row;
   const title = hibernatedTitle(descriptor);
   const color = workspaceColorForCwd(workspaces, descriptor.cwd);
-  // Keep the model/status sub-lines aligned under the title text: the leading
-  // cluster is the Moon icon (19px) plus the color dot when present (+16px).
-  const indent = color ? "pl-[35px]" : "pl-[19px]";
 
   if (error) {
     return (
@@ -396,46 +464,38 @@ function HibernatedListRow({
         onClick={() => void resumeSession(sessionId)}
         title="Resume session"
         className={cn(
-          "block w-full rounded-lg border border-transparent px-3 py-2 text-left opacity-80 transition-colors",
+          "flex w-full gap-2.5 rounded-lg border border-transparent px-3 py-2 text-left opacity-80 transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
           resuming
             ? "cursor-default"
             : "hover:border-border-subtle hover:bg-bg-hover hover:opacity-100",
         )}
       >
-        <span className="flex items-center gap-1.5 truncate pr-8 text-sm font-medium text-ink-muted">
-          {color && <WorkspaceColorDot color={color} />}
-          <Moon size={13} className="shrink-0 text-ink-faint" />
-          <span className="truncate">{title}</span>
-        </span>
+        <WorkspaceColorDot color={color} status="done" className="mt-1.5" />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5 truncate pr-8 text-sm font-medium text-ink-muted">
+            <Moon size={13} className="shrink-0 text-ink-faint" />
+            <span className="truncate">{title}</span>
+          </span>
 
-        <span
-          className={cn(
-            "mt-0.5 block truncate font-mono text-xs text-ink-faint",
-            indent,
-          )}
-        >
-          {descriptor.model ?? "—"}
-        </span>
+          <span className="mt-0.5 block truncate font-mono text-xs text-ink-faint">
+            {descriptor.model ?? "—"}
+          </span>
 
-        <span
-          className={cn(
-            "mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint",
-            indent,
-          )}
-        >
-          {resuming ? (
-            <Badge variant="accent">
-              <span className="flex items-center gap-1.5">
-                <Spinner size={12} />
-                Resuming
-              </span>
-            </Badge>
-          ) : (
-            <Badge variant="muted">Hibernated</Badge>
-          )}
-          <span className="ml-auto">
-            {formatRelativeTime(descriptor.lastActiveAt)}
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
+            {resuming ? (
+              <Badge variant="accent">
+                <span className="flex items-center gap-1.5">
+                  <Spinner size={12} />
+                  Resuming
+                </span>
+              </Badge>
+            ) : (
+              <Badge variant="muted">Hibernated</Badge>
+            )}
+            <span className="ml-auto font-mono text-ink-muted">
+              {formatRelativeTime(descriptor.lastActiveAt)}
+            </span>
           </span>
         </span>
       </button>

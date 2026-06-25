@@ -103,11 +103,41 @@ it("closes a session through the store's closeSession action", async () => {
   expect(closeSession).toHaveBeenCalledWith("a");
 });
 
-it("reflects each session's derived status in its badge", () => {
+it("renders a running session with a pulsing dot and 'live' meta", () => {
+  seedWorkspaceColor("/p/live", "blue");
   seed(
     {
-      r: createSession("r", { sessionName: "ReadyOne", status: "idle" }),
-      s: createSession("s", { sessionName: "StreamOne", status: "streaming" }),
+      s: createSession("s", {
+        sessionName: "StreamOne",
+        status: "streaming",
+        cwd: "/p/live",
+      }),
+    },
+    "s",
+  );
+  render(<SessionList />);
+
+  const row = railItem("s");
+  // Status mode dot tagged running, with a solid workspace fill.
+  const dot = row.querySelector<HTMLElement>('[data-status="running"]');
+  expect(dot).not.toBeNull();
+  expect(dot?.className).toContain("animate-omp-pulse");
+  expect(dot?.style.backgroundColor).not.toBe("");
+  // Meta reads "live" instead of a streaming text badge.
+  expect(row).toHaveTextContent("live");
+  expect(screen.queryByText("Streaming")).toBeNull();
+});
+
+it("shows an idle dot + relative time and keeps user-blocking badges", () => {
+  seedWorkspaceColor("/p/idle", "green");
+  seed(
+    {
+      r: createSession("r", {
+        sessionName: "ReadyOne",
+        status: "idle",
+        cwd: "/p/idle",
+        lastActivityAt: Date.now() - 60_000,
+      }),
       e: createSession("e", { sessionName: "ErrOne", status: "error" }),
       n: createSession("n", {
         sessionName: "ApprovalOne",
@@ -119,10 +149,46 @@ it("reflects each session's derived status in its badge", () => {
   );
   render(<SessionList />);
 
-  expect(screen.getByText("Ready")).toBeInTheDocument();
-  expect(screen.getByText("Streaming")).toBeInTheDocument();
+  // Idle row leads with a hollow idle dot and a muted relative time, not a badge.
+  expect(railItem("r").querySelector('[data-status="idle"]')).not.toBeNull();
+  expect(railItem("r")).toHaveTextContent(/ago/);
+  expect(screen.queryByText("Ready")).toBeNull();
+  // States the 3-fill dot cannot express still surface as actionable badges.
   expect(screen.getByText("Error")).toBeInTheDocument();
   expect(screen.getByText("Needs approval")).toBeInTheDocument();
+});
+
+it("ramps title weight and ink by active state", () => {
+  seed(
+    {
+      a: createSession("a", { sessionName: "Alpha", status: "idle" }),
+      b: createSession("b", { sessionName: "Beta", status: "idle" }),
+    },
+    "a",
+  );
+  render(<SessionList />);
+
+  // Active title stays strong (--t1/600); inactive drops to the muted ramp
+  // (--t2/500). getByText returns the inner truncate span; its parent is ramped.
+  const activeTitle = screen.getByText("Alpha").parentElement;
+  const inactiveTitle = screen.getByText("Beta").parentElement;
+  expect(activeTitle?.className).toContain("text-ink font-semibold");
+  expect(inactiveTitle?.className).toContain("text-ink-muted font-medium");
+});
+
+it("keeps exited and spawning rows visible as their own status badges", () => {
+  seed(
+    {
+      x: createSession("x", { sessionName: "ExitOne", status: "exited" }),
+      s: createSession("s", { sessionName: "SpawnOne", status: "spawning" }),
+    },
+    "x",
+  );
+  render(<SessionList />);
+
+  // Neither collapses into a plain idle row: each keeps a decoding badge.
+  expect(screen.getByText("Exited")).toBeInTheDocument();
+  expect(screen.getByText("Starting")).toBeInTheDocument();
 });
 
 it("shows an empty state when no sessions are open", () => {
@@ -206,22 +272,44 @@ function seedWorkspaceColor(cwd: string, color: WorkspaceColorKey | undefined) {
   });
 }
 
-it("shows the workspace color swatch on a session card in a colored workspace", () => {
+function seedHibernated(id: string, cwd: string, title: string) {
+  useChatStore.setState({
+    hibernatedSessions: {
+      [id]: {
+        descriptor: {
+          studioSessionId: id,
+          cwd,
+          createdAt: "t",
+          lastActiveAt: new Date(Date.now() - 3_600_000).toISOString(),
+          title,
+          status: "hibernated",
+          approvalPolicy: "untrusted",
+        },
+      },
+    },
+  } as never);
+}
+
+it("leads each row with a status Live Dot on a shared left axis", () => {
   seedWorkspaceColor("/p/alpha", "blue");
   seed(
-    { a: createSession("a", { sessionName: "Alpha", cwd: "/p/alpha" }) },
+    {
+      a: createSession("a", { sessionName: "Alpha", cwd: "/p/alpha" }),
+      b: createSession("b", { sessionName: "Beta", cwd: "/p/alpha" }),
+    },
     "a",
   );
   render(<SessionList />);
 
-  const swatch = railItem("a").querySelector(
-    "span[style]",
-  ) as HTMLElement | null;
-  expect(swatch).not.toBeNull();
-  expect(swatch?.style.backgroundColor).not.toBe("");
+  // The dot is the first child of the row button, so every dot shares one axis.
+  for (const id of ["a", "b"]) {
+    const lead = railItem(id).firstElementChild as HTMLElement | null;
+    expect(lead?.className).toContain("rounded-full");
+    expect(lead?.getAttribute("data-status")).toBe("idle");
+  }
 });
 
-it("shows no swatch when the session's workspace has no color or no match", () => {
+it("falls back to a plain identity dot when the workspace has no color", () => {
   seedWorkspaceColor("/p/alpha", undefined);
   seed(
     {
@@ -232,6 +320,53 @@ it("shows no swatch when the session's workspace has no color or no match", () =
   );
   render(<SessionList />);
 
-  expect(railItem("a").querySelector("span[style]")).toBeNull();
-  expect(railItem("b").querySelector("span[style]")).toBeNull();
+  // No color -> identity dot: present but neither status-tagged nor filled.
+  for (const id of ["a", "b"]) {
+    const lead = railItem(id).firstElementChild as HTMLElement | null;
+    expect(lead?.className).toContain("rounded-full");
+    expect(lead?.getAttribute("data-status")).toBeNull();
+    expect(lead?.style.backgroundColor).toBe("");
+  }
+});
+
+it("renders a hibernated session with a faded done dot", () => {
+  seedWorkspaceColor("/p/done", "violet");
+  seedHibernated("h1", "/p/done", "DoneOne");
+  render(<SessionList />);
+
+  const row = railItem("h1");
+  const dot = row.querySelector<HTMLElement>('[data-status="done"]');
+  expect(dot).not.toBeNull();
+  // done = solid swatch faded to .3.
+  expect(dot?.style.backgroundColor).not.toBe("");
+  expect(dot?.style.opacity).toBe("0.3");
+});
+
+it("renders a status legend footer with live, idle, and done fills", () => {
+  seed({ a: createSession("a", { sessionName: "Alpha" }) }, "a");
+  render(<SessionList />);
+
+  const legend = screen.getByLabelText("Session status legend");
+  expect(legend).toHaveTextContent("live");
+  expect(legend).toHaveTextContent("idle");
+  expect(legend).toHaveTextContent("done");
+  expect(legend.querySelector('[data-status="running"]')).not.toBeNull();
+  expect(legend.querySelector('[data-status="idle"]')).not.toBeNull();
+  expect(legend.querySelector('[data-status="done"]')).not.toBeNull();
+});
+
+it("renders the legend live fill as a static (non-pulsing) dot", () => {
+  seed({ a: createSession("a", { sessionName: "Alpha" }) }, "a");
+  render(<SessionList />);
+
+  const legend = screen.getByLabelText("Session status legend");
+  const live = legend.querySelector<HTMLElement>('[data-status="running"]');
+  // Legend decodes the fill, so its "live" dot stays still rather than pulsing.
+  expect(live).not.toBeNull();
+  expect(live?.className).not.toContain("animate-omp-pulse");
+});
+
+it("hides the legend when no sessions are open", () => {
+  render(<SessionList />);
+  expect(screen.queryByLabelText("Session status legend")).toBeNull();
 });

@@ -29,11 +29,14 @@ export function WorkspaceColorDot({
   status,
   size,
   className,
+  pulse = true,
 }: {
   color: WorkspaceColorKey | undefined;
   status?: SessionStatus;
   size?: number;
   className?: string;
+  /** Whether a `running` dot animates its glow ring. Off for static legends. */
+  pulse?: boolean;
 }) {
   const tokens = workspaceColor(color);
   const value = tokens?.value;
@@ -53,7 +56,7 @@ export function WorkspaceColorDot({
         backgroundColor: value,
         "--omp-glow": tokens.glow,
       } as CSSProperties;
-      stateClass = "animate-omp-pulse";
+      stateClass = pulse ? "animate-omp-pulse" : undefined;
     } else if (status === "idle") {
       style = { ...sizeStyle, boxShadow: `inset 0 0 0 1.5px ${value}` };
     } else {
