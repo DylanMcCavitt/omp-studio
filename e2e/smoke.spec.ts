@@ -182,6 +182,20 @@ test("window reports the OMP Studio title", async () => {
   expect(await page.title()).toBe("OMP Studio");
 });
 
+test("titlebar exposes the Live Dot navigation controls", async () => {
+  await expect(
+    page.getByRole("button", { name: "Open navigation palette" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Switch to (dark|light) theme/ }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Open navigation palette" }).click();
+  await expect(page.getByRole("dialog", { name: "Navigate" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Navigate" })).toBeHidden();
+});
+
 test("right rail exposes the v3 destinations and each panel opens", async () => {
   const rail = page.getByRole("navigation", { name: "Tools" });
   await expect(rail).toBeVisible();

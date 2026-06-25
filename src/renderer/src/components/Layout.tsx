@@ -1,11 +1,13 @@
 import type { LayoutSettings } from "@shared/ipc";
-import { type ReactNode, useEffect, useRef } from "react";
+import { Moon, Sun } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useSyncExternalStore } from "react";
 import { PanelGroup, Panel as ResizablePanel } from "react-resizable-panels";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { usePersistedPanelLayout } from "@/components/layout/usePersistedPanelLayout";
 import { RailPanelHost } from "@/components/shell/RailPanelHost";
 import { RightRail } from "@/components/shell/RightRail";
 import { Toaster } from "@/components/ui";
+import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import {
   DEFAULT_RIGHT_PANEL_WIDTH_PCT,
   DEFAULT_SIDEBAR_WIDTH_PCT,
@@ -17,9 +19,14 @@ import {
   SIDEBAR_MIN_PCT,
 } from "@/lib/layout";
 import { isRailRoute } from "@/lib/nav-registry";
+import { PREFERS_DARK_QUERY, resolveTheme } from "@/lib/theme";
+import { projectLabel } from "@/lib/workspaces";
 import { type Route, useAppStore } from "@/store/app";
+import { useActiveSession } from "@/store/chat";
+import { sessionStatus } from "@/store/session-reducer";
 import { useSettingsStore } from "@/store/settings";
 import { useShellStore } from "@/store/shell";
+import { useUiStore } from "@/store/ui";
 import { Sidebar } from "./Sidebar";
 
 export interface LayoutProps {
@@ -34,15 +41,29 @@ export function Layout({ children }: LayoutProps) {
   const openPanelId = useShellStore((s) => s.openPanelId);
   const hydrate = useShellStore((s) => s.hydrate);
   const panelOpen = openPanelId != null && isRailRoute(openPanelId);
-  // Ambient location for the titlebar: the active workspace's label (falls back
-  // to its path basename, then the product name) instead of a dead brand label.
+  // Ambient location for the titlebar: the active workspace's Live Dot + label
+  // (falls back to its path basename, then the product name) instead of a dead
+  // brand label.
   const selectedProject = useAppStore((s) => s.selectedProject);
   const workspaces = useSettingsStore((s) => s.settings?.workspaces);
-  const titleLabel = selectedProject
-    ? (workspaces?.find((w) => w.cwd === selectedProject)?.label ??
-      selectedProject.split("/").filter(Boolean).pop() ??
-      "OMP Studio")
-    : "OMP Studio";
+  const themeMode = useSettingsStore((s) => s.settings?.theme ?? "system");
+  const updateSettings = useSettingsStore((s) => s.update);
+  const openNavPalette = useUiStore((s) => s.openNavPalette);
+  const activeSessionStatus = useActiveSession((s) =>
+    s ? sessionStatus({ live: true, status: s.status }) : undefined,
+  );
+  const prefersDark = usePrefersDark();
+  const titleWorkspace = selectedProject
+    ? workspaces?.find((w) => w.cwd === selectedProject)
+    : undefined;
+  const titleLabel = titleWorkspace
+    ? titleWorkspace.label
+    : selectedProject
+      ? projectLabel(selectedProject)
+      : "OMP Studio";
+  const resolvedTheme = resolveTheme(themeMode, prefersDark);
+  const switchToTheme = resolvedTheme === "dark" ? "light" : "dark";
+  const switchTheme = () => void updateSettings({ theme: switchToTheme });
 
   // Restore the persisted open rail panel once, after settings finish loading.
   // Guarded so a panel the user opened during boot is never clobbered.
@@ -59,11 +80,40 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="flex h-screen flex-col bg-bg text-ink">
-      <header className="titlebar flex h-7 shrink-0 items-center border-b border-border-subtle bg-bg-raised pl-[72px]">
-        <span className="flex-1 truncate px-3 text-center text-xs font-medium text-ink-muted">
-          {titleLabel}
+      <header className="titlebar relative flex h-7 shrink-0 items-center border-b border-border-subtle bg-bg-raised pl-[72px]">
+        <span className="pointer-events-none absolute inset-x-[72px] top-0 flex h-full items-center justify-center gap-1.5 truncate px-3 text-center text-xs font-medium text-ink-muted">
+          {selectedProject && (
+            <WorkspaceColorDot
+              color={titleWorkspace?.color}
+              status={activeSessionStatus}
+              size={8}
+            />
+          )}
+          <span className="truncate">{titleLabel}</span>
         </span>
-        <span className="w-[72px]" />
+        <div className="no-drag ml-auto flex h-full items-center gap-1 pr-2">
+          <button
+            type="button"
+            aria-label="Open navigation palette"
+            onClick={openNavPalette}
+            className="flex h-5 items-center rounded-full border border-border px-2 font-mono text-[11px] leading-none text-ink-muted transition-colors hover:border-border-strong hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+          >
+            ⌘K
+          </button>
+          <button
+            type="button"
+            aria-label={`Switch to ${switchToTheme} theme`}
+            onClick={switchTheme}
+            disabled={!settingsLoaded}
+            className="flex h-5 w-5 items-center justify-center rounded-full border border-border text-ink-muted transition-colors hover:border-border-strong hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {resolvedTheme === "dark" ? (
+              <Sun className="h-3 w-3" />
+            ) : (
+              <Moon className="h-3 w-3" />
+            )}
+          </button>
+        </div>
       </header>
       <div className="flex min-h-0 flex-1">
         <ShellSplit
@@ -77,6 +127,24 @@ export function Layout({ children }: LayoutProps) {
       <Toaster />
     </div>
   );
+}
+
+function usePrefersDark(): boolean {
+  return useSyncExternalStore(
+    subscribePrefersDark,
+    getPrefersDarkSnapshot,
+    () => false,
+  );
+}
+
+function subscribePrefersDark(onChange: () => void): () => void {
+  const media = window.matchMedia(PREFERS_DARK_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function getPrefersDarkSnapshot(): boolean {
+  return window.matchMedia(PREFERS_DARK_QUERY).matches;
 }
 
 function ShellSplit({
