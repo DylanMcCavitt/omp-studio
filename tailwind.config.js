@@ -63,10 +63,25 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.4" },
         },
+        // AGE-699 Live Dot: a running dot emits an expanding ring in its
+        // workspace glow. The ring color is per-workspace, so it reads the
+        // `--omp-glow` custom property the dot sets inline.
+        ompPulse: {
+          "0%": { boxShadow: "0 0 0 0 var(--omp-glow, transparent)" },
+          "70%": { boxShadow: "0 0 0 5px transparent" },
+          "100%": { boxShadow: "0 0 0 0 transparent" },
+        },
+        // AGE-699 Live Dot: a 1.3s opacity blink for "running…" affordances.
+        ompBlink: {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.35" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.2s ease-out",
         "pulse-slow": "pulse 1.6s ease-in-out infinite",
+        "omp-pulse": "ompPulse 1.8s infinite",
+        "omp-blink": "ompBlink 1.3s infinite",
       },
     },
   },

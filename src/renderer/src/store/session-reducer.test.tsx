@@ -9,6 +9,7 @@ import {
   createSession,
   normalizeMessageContent,
   reduceSession,
+  sessionStatus,
   studioFrame,
   toContentBlocks,
 } from "./session-reducer";
@@ -81,5 +82,25 @@ describe("reduceSession normalizes at the store boundary (AGE-696)", () => {
     expect(next.messages.at(-1)?.content).toEqual([
       { type: "text", text: "hello" },
     ]);
+  });
+});
+
+describe("sessionStatus — Live Dot triad (AGE-699)", () => {
+  it("maps a live, streaming session to running", () => {
+    expect(sessionStatus({ live: true, status: "streaming" })).toBe("running");
+  });
+
+  it("maps a live, non-streaming session to idle", () => {
+    for (const status of ["idle", "spawning", "error", "exited"] as const) {
+      expect(sessionStatus({ live: true, status })).toBe("idle");
+    }
+    // A live session with no status yet still reads as idle, not done.
+    expect(sessionStatus({ live: true })).toBe("idle");
+  });
+
+  it("maps any session with no live child (hibernated/closed) to done", () => {
+    expect(sessionStatus({ live: false })).toBe("done");
+    // `live: false` wins even if a stale status is carried alongside.
+    expect(sessionStatus({ live: false, status: "streaming" })).toBe("done");
   });
 });

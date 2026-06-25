@@ -611,3 +611,24 @@ export function deriveSessionBadgeKind(
   if (s.status === "spawning") return "starting";
   return "ready";
 }
+
+/**
+ * The Live Dot status triad (AGE-699): hue = workspace identity, fill = this.
+ * Coarser than `SessionBadgeKind`; it answers only "is this session working,
+ * waiting, or finished" so a single dot can carry status across the UI.
+ */
+export type SessionStatus = "running" | "idle" | "done";
+
+/**
+ * Derive a session's Live-Dot status. Pure and framework-free: status is never
+ * stored, it is read off the session model. A `live` session (one with an omp
+ * child, i.e. in `openSessions`) is `running` while its turn streams and `idle`
+ * otherwise; a session with no live child (hibernated/closed) is `done`.
+ */
+export function sessionStatus(session: {
+  live: boolean;
+  status?: ChatStatus;
+}): SessionStatus {
+  if (!session.live) return "done";
+  return session.status === "streaming" ? "running" : "idle";
+}

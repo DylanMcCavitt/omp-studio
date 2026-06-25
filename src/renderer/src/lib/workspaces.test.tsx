@@ -9,6 +9,7 @@ import {
   sortWorkspaces,
   upsertWorkspace,
   WORKSPACE_COLORS,
+  workspaceColor,
   workspaceColorForCwd,
   workspaceColorValue,
 } from "@/lib/workspaces";
@@ -225,4 +226,25 @@ it("workspaceColorForCwd resolves the matching workspace's color by exact cwd", 
   // No cwd / no list.
   expect(workspaceColorForCwd(list, undefined)).toBeUndefined();
   expect(workspaceColorForCwd(undefined, "/p/a")).toBeUndefined();
+});
+
+it("WORKSPACE_COLORS derives an rgba glow (~.55) and border (~.28) per key", () => {
+  for (const c of WORKSPACE_COLORS) {
+    expect(c.value).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(c.glow).toMatch(/^rgba\(\d+, \d+, \d+, 0\.55\)$/);
+    expect(c.border).toMatch(/^rgba\(\d+, \d+, \d+, 0\.28\)$/);
+  }
+  // glow/border share the swatch's channels — e.g. blue #3b82f6 → 59,130,246.
+  const blue = WORKSPACE_COLORS.find((c) => c.key === "blue");
+  expect(blue?.glow).toBe("rgba(59, 130, 246, 0.55)");
+  expect(blue?.border).toBe("rgba(59, 130, 246, 0.28)");
+});
+
+it("workspaceColor resolves a key to its full token record, unset to undefined", () => {
+  expect(workspaceColor("green")).toMatchObject({
+    key: "green",
+    label: "Green",
+  });
+  expect(workspaceColor("green")?.glow).toMatch(/^rgba\(/);
+  expect(workspaceColor(undefined)).toBeUndefined();
 });
