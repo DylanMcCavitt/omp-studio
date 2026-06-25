@@ -41,9 +41,13 @@ it("WorkspaceColorPicker marks the active selection as pressed", () => {
 
 it("WorkspaceColorDot paints an inline swatch for a color and stays hollow when unset", () => {
   const { container, rerender } = render(<WorkspaceColorDot color="red" />);
-  expect((container.firstChild as HTMLElement).style.backgroundColor).not.toBe(
-    "",
-  );
+  const dot = container.firstChild as HTMLElement;
+  expect(dot.style.backgroundColor).not.toBe("");
+  // Identity mode (no status) keeps today's 10px Tailwind size with no inline
+  // override, so the five existing callers stay visually unchanged (AC5).
+  expect(dot.className).toContain("h-2.5");
+  expect(dot.className).toContain("w-2.5");
+  expect(dot.style.width).toBe("");
 
   rerender(<WorkspaceColorDot color={undefined} />);
   expect((container.firstChild as HTMLElement).style.backgroundColor).toBe("");
