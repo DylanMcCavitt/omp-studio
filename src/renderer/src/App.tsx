@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { Layout } from "@/components/Layout";
+import { NavPalette } from "@/components/nav/NavPalette";
 import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { CenterTabs } from "@/components/shell/CenterTabs";
 import { useShortcuts } from "@/lib/useShortcuts";
@@ -22,7 +23,7 @@ export default function App() {
   const loadOpenSessions = useChatStore((s) => s.loadOpenSessions);
   // Apply the persisted theme to the document (follows the OS when "system").
   useTheme();
-  // Single global keyboard-shortcut manager (Cmd+T/N/W/1-9/K/Shift+P, Esc).
+  // Single global keyboard-shortcut manager (Cmd+T/N/W/1-9/K, Shift+P/F, Esc).
   useShortcuts();
   // Bootstrap once: load persisted settings, open the single global bridge
   // subscription that routes every session's frames into the chat store, then
@@ -58,6 +59,7 @@ export default function App() {
           </AppErrorBoundary>
         }
       />
+      <NavPalette />
       <GlobalSearch />
     </Layout>
   );

@@ -69,13 +69,13 @@ export function SessionStatusBadge({
   );
 }
 
-function basename(p: string): string {
+export function basename(p: string): string {
   const trimmed = p.replace(/[/\\]+$/, "");
   const idx = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
   return idx >= 0 ? trimmed.slice(idx + 1) || trimmed : trimmed;
 }
 
-function rowTitle(s: LiveSessionState): string {
+export function rowTitle(s: LiveSessionState): string {
   if (s.alias && s.alias.trim() !== "") return s.alias;
   if (s.sessionName && s.sessionName.trim() !== "") return s.sessionName;
   if (s.cwd) return basename(s.cwd);
@@ -322,7 +322,7 @@ function SessionListRow({
   );
 }
 
-function hibernatedTitle(descriptor: OpenSessionDescriptor): string {
+export function hibernatedTitle(descriptor: OpenSessionDescriptor): string {
   if (descriptor.title && descriptor.title.trim() !== "")
     return descriptor.title;
   if (descriptor.cwd) return basename(descriptor.cwd);
