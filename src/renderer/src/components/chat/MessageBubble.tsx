@@ -1,7 +1,9 @@
-// Renders one OmpMessage. User messages are right-aligned bubbles; assistant
-// messages render their content blocks in order (thinking / text / tool calls).
-// toolResult messages are folded into their ToolCallCard and render nothing here.
+// Renders one OmpMessage (AGE-704 turn restyle). User turns lead with an
+// uppercase "YOU" label over their body; assistant turns lead with an ω accent
+// avatar beside their content blocks (thinking / text / tool calls). toolResult
+// messages are folded into their ToolCallCard and render nothing here.
 
+import type { WorkspaceColorKey } from "@shared/ipc";
 import type {
   ContentBlock,
   ImageBlock,
@@ -21,9 +23,19 @@ interface Props {
   message: OmpMessage;
   toolResults: Map<string, ToolResultMessage>;
   streaming?: boolean;
+  /** The active session is live and streaming a turn (running tool cards). */
+  sessionRunning?: boolean;
+  /** Workspace hue threaded to running tool cards. */
+  workspaceColorKey?: WorkspaceColorKey;
 }
 
-export function MessageBubble({ message, toolResults, streaming }: Props) {
+export function MessageBubble({
+  message,
+  toolResults,
+  streaming,
+  sessionRunning,
+  workspaceColorKey,
+}: Props) {
   if (message.role === "toolResult") return null;
 
   if (message.role === "user") {
@@ -40,25 +52,26 @@ export function MessageBubble({ message, toolResults, streaming }: Props) {
       images = content.filter((b): b is ImageBlock => b.type === "image");
     }
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-accent-soft px-4 py-2.5 text-sm text-ink">
-          {images.length > 0 && (
-            <div className="mb-1.5 flex flex-wrap gap-1.5">
-              {images.map((img, i) => {
-                const src = imageBlockSrc(img);
-                return src ? (
-                  <img
-                    key={i}
-                    src={src}
-                    alt="Attachment"
-                    className="max-h-48 rounded-lg border border-border-subtle object-cover"
-                  />
-                ) : null;
-              })}
-            </div>
-          )}
-          {text && <Markdown>{text}</Markdown>}
+      <div className="space-y-1">
+        <div className="text-[0.65rem] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+          YOU
         </div>
+        {images.length > 0 && (
+          <div className="mb-1.5 flex flex-wrap gap-1.5">
+            {images.map((img, i) => {
+              const src = imageBlockSrc(img);
+              return src ? (
+                <img
+                  key={i}
+                  src={src}
+                  alt="Attachment"
+                  className="max-h-48 rounded-lg border border-border-subtle object-cover"
+                />
+              ) : null;
+            })}
+          </div>
+        )}
+        {text && <Markdown className="text-ink">{text}</Markdown>}
       </div>
     );
   }
@@ -66,8 +79,14 @@ export function MessageBubble({ message, toolResults, streaming }: Props) {
   const blocks = toContentBlocks(message.content);
 
   return (
-    <div className="flex justify-start">
-      <div className="min-w-0 space-y-1">
+    <div className="flex gap-3">
+      <div
+        aria-hidden
+        className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold leading-none text-bg"
+      >
+        ω
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
         {blocks.map((block: ContentBlock, i: number) => {
           if (block.type === "thinking") {
             return (
@@ -89,6 +108,8 @@ export function MessageBubble({ message, toolResults, streaming }: Props) {
                 key={call.id || `c${i}`}
                 call={call}
                 result={toolResults.get(call.id)}
+                sessionRunning={sessionRunning}
+                workspaceColorKey={workspaceColorKey}
               />
             );
           }

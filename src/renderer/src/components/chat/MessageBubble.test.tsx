@@ -44,3 +44,27 @@ test("renders an assistant message with empty string content without crashing", 
   // No blocks to render, but the bubble shell still mounts (no throw).
   expect(container.firstChild).not.toBeNull();
 });
+
+// AGE-704 — turn restyle: user turns lead with an uppercase "YOU" label; the
+// assistant turn leads with the ω accent avatar.
+test("renders a user turn with a YOU label and its body", () => {
+  render(
+    <MessageBubble
+      message={{ role: "user", content: "hello there" }}
+      toolResults={noResults}
+    />,
+  );
+  expect(screen.getByText("YOU")).toBeInTheDocument();
+  expect(screen.getByText("hello there")).toBeInTheDocument();
+});
+
+test("renders an assistant turn with the ω avatar", () => {
+  render(
+    <MessageBubble
+      message={{ role: "assistant", content: [{ type: "text", text: "hi" }] }}
+      toolResults={noResults}
+    />,
+  );
+  expect(screen.getByText("ω")).toBeInTheDocument();
+  expect(screen.getByText("hi")).toBeInTheDocument();
+});

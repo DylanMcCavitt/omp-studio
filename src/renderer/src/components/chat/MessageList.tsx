@@ -11,8 +11,10 @@ import type {
 } from "@shared/rpc";
 import { Loader } from "lucide-react";
 import { Fragment, useEffect, useRef } from "react";
+import { workspaceColorForCwd } from "@/lib/workspaces";
 import { useActiveSession } from "@/store/chat";
 import type { SystemCard } from "@/store/session-reducer";
+import { useSettingsStore } from "@/store/settings";
 import { MessageBubble } from "./MessageBubble";
 import { SystemCardBubble } from "./SystemCardBubble";
 
@@ -26,6 +28,9 @@ export function MessageList() {
   const liveThinking = useActiveSession((s) => s?.liveThinking ?? "");
   const activeTool = useActiveSession((s) => s?.activeTool ?? null);
   const systemCards = useActiveSession((s) => s?.systemCards ?? EMPTY_CARDS);
+  const cwd = useActiveSession((s) => s?.cwd);
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
+  const workspaceColorKey = workspaceColorForCwd(workspaces, cwd);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
@@ -91,6 +96,8 @@ export function MessageList() {
               <MessageBubble
                 message={m}
                 toolResults={toolResults}
+                sessionRunning={streaming}
+                workspaceColorKey={workspaceColorKey}
                 streaming={
                   streaming &&
                   lastIsAssistant &&
@@ -110,6 +117,8 @@ export function MessageList() {
             <MessageBubble
               message={liveMessage}
               toolResults={toolResults}
+              sessionRunning={streaming}
+              workspaceColorKey={workspaceColorKey}
               streaming
             />
           )}
