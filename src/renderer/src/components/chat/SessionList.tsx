@@ -295,13 +295,12 @@ function SessionListRow({
     badgeKind === "error" ||
     badgeKind === "exited" ||
     badgeKind === "starting";
-  // Title ramp encodes the hierarchy directly: active = strong (--t1/600),
-  // done = faded (--t3), other inactive = muted (--t2/500).
+  // Title ramp encodes the live-row hierarchy directly: active = strong
+  // (--t1/600), other inactive = muted (--t2/500). Hibernated rows carry the
+  // done/faded ramp in HibernatedListRow.
   const titleRamp = active
     ? "text-ink font-semibold"
-    : status === "done"
-      ? "text-ink-faint font-medium"
-      : "text-ink-muted font-medium";
+    : "text-ink-muted font-medium";
 
   return (
     <div className="group relative">
