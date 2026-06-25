@@ -8,9 +8,10 @@
 //   Cmd/Ctrl+T or N    new chat
 //   Cmd/Ctrl+W         close the active session (confirm if streaming)
 //   Cmd/Ctrl+1..9      switch to the Nth open session
-//   Cmd/Ctrl+K         toggle global search
+//   Cmd/Ctrl+K         toggle the navigation palette
+//   Cmd/Ctrl+Shift+F   toggle global search
 //   Cmd/Ctrl+Shift+P   toggle the slash-command palette
-//   Esc                close the topmost soft overlay (global search)
+//   Esc                close the topmost soft overlay (nav palette / global search)
 //
 // While focus is in a text-entry field (input/textarea/contenteditable) the app
 // chords are suppressed so a chord pressed mid-draft (Cmd+W, Cmd+T, …) never
@@ -25,14 +26,15 @@ import { useChatStore } from "@/store/chat";
 import { useUiStore } from "@/store/ui";
 
 /**
- * A blocking modal is open. The global-search overlay is also `aria-modal` but
- * is tagged `data-search-overlay` and excluded — it is a soft overlay the chords
- * may still toggle.
+ * A blocking modal is open. The soft overlays (global search, the nav palette)
+ * are also `aria-modal` but are tagged `data-search-overlay` / `data-nav-overlay`
+ * and excluded — they are soft overlays the chords may still toggle.
  */
 function blockingModalOpen(): boolean {
   return (
-    document.querySelector('[aria-modal="true"]:not([data-search-overlay])') !==
-    null
+    document.querySelector(
+      '[aria-modal="true"]:not([data-search-overlay]):not([data-nav-overlay])',
+    ) !== null
   );
 }
 
@@ -50,12 +52,16 @@ function isEditableTarget(el: EventTarget | null): boolean {
 export function useShortcuts(): void {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Esc closes the topmost soft overlay we own. Blocking dialogs and the
-      // slash palette handle their own Esc, so this only acts on global search.
+      // Esc closes the topmost soft overlay we own (nav palette first, then
+      // global search). Blocking dialogs and the slash palette handle their own.
       if (e.key === "Escape") {
-        if (useUiStore.getState().searchOpen) {
+        const ui = useUiStore.getState();
+        if (ui.navPaletteOpen) {
           e.preventDefault();
-          useUiStore.getState().closeSearch();
+          ui.closeNavPalette();
+        } else if (ui.searchOpen) {
+          e.preventDefault();
+          ui.closeSearch();
         }
         return;
       }
@@ -71,6 +77,12 @@ export function useShortcuts(): void {
       if (e.shiftKey && (e.key === "p" || e.key === "P")) {
         e.preventDefault();
         ui.requestSlashPalette();
+        return;
+      }
+      // Cmd/Ctrl+Shift+F — global full-text search overlay.
+      if (e.shiftKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault();
+        ui.toggleSearch();
         return;
       }
       if (e.shiftKey) return; // no other Shift chords are bound
@@ -94,7 +106,7 @@ export function useShortcuts(): void {
         case "k":
         case "K":
           e.preventDefault();
-          ui.toggleSearch();
+          ui.toggleNavPalette();
           return;
         default:
           // Cmd/Ctrl+1..9 — switch to the Nth open (live) session.

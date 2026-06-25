@@ -33,7 +33,11 @@ beforeEach(() => {
     hibernatedSessions: {},
     activeSessionId: null,
   });
-  useUiStore.setState({ searchOpen: false, slashPaletteToggle: 0 });
+  useUiStore.setState({
+    searchOpen: false,
+    navPaletteOpen: false,
+    slashPaletteToggle: 0,
+  });
   useAppStore.setState({ route: "dashboard" });
 });
 
@@ -46,11 +50,19 @@ describe("useShortcuts", () => {
     expect(newChat).toHaveBeenCalledTimes(2);
   });
 
-  it("Cmd+K toggles the global search overlay", () => {
+  it("Cmd+K toggles the navigation palette", () => {
     render(<Harness />);
     press("k", { metaKey: true });
-    expect(useUiStore.getState().searchOpen).toBe(true);
+    expect(useUiStore.getState().navPaletteOpen).toBe(true);
     press("k", { metaKey: true });
+    expect(useUiStore.getState().navPaletteOpen).toBe(false);
+  });
+
+  it("Cmd+Shift+F toggles the global search overlay", () => {
+    render(<Harness />);
+    press("f", { metaKey: true, shiftKey: true });
+    expect(useUiStore.getState().searchOpen).toBe(true);
+    press("f", { metaKey: true, shiftKey: true });
     expect(useUiStore.getState().searchOpen).toBe(false);
   });
 
@@ -103,6 +115,13 @@ describe("useShortcuts", () => {
     render(<Harness />);
     press("Escape");
     expect(useUiStore.getState().searchOpen).toBe(false);
+  });
+
+  it("Esc closes the navigation palette when it is open", () => {
+    useUiStore.setState({ navPaletteOpen: true });
+    render(<Harness />);
+    press("Escape");
+    expect(useUiStore.getState().navPaletteOpen).toBe(false);
   });
 
   it("suppresses session chords while a blocking modal is open", () => {

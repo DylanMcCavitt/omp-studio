@@ -25,7 +25,7 @@ import {
 //   - dismissing the terminal gate frees the UI (its scrim must not linger and
 //     swallow the next click);
 //   - the Files/Chats sidebar toggle, opening a file into CodeMirror, and the
-//     Cmd/Ctrl+K command palette all behave.
+//     Cmd/Ctrl+K navigation palette all behave.
 // It NEVER starts a chat, enables the terminal/browser, or saves a file, so the
 // result is identical whether or not omp/gh are installed.
 //
@@ -368,8 +368,9 @@ test("opening README.md from the tree renders it in CodeMirror", async () => {
   );
 });
 
-// Flow 6 — the global command palette opens on Cmd/Ctrl+K and closes on Escape.
-test("the command palette opens with Cmd/Ctrl+K and closes with Escape", async () => {
+// Flow 6 — the ⌘K navigation palette opens on Cmd/Ctrl+K, lists workspaces,
+// jumps + closes on selecting a row, and closes on Escape (AGE-700).
+test("the navigation palette opens with Cmd/Ctrl+K, jumps, and closes", async () => {
   // Move focus off any editable element (e.g. the CodeMirror content) so the
   // global chord is treated as a shortcut, not typing.
   await page.evaluate(() => {
@@ -377,14 +378,26 @@ test("the command palette opens with Cmd/Ctrl+K and closes with Escape", async (
     if (el instanceof HTMLElement) el.blur();
   });
 
-  const palette = page.getByRole("dialog", { name: "Global search" });
+  const palette = page.getByRole("dialog", { name: "Navigate" });
+  const openKey = process.platform === "darwin" ? "Meta+K" : "Control+K";
   await expect(palette).toBeHidden();
 
-  await page.keyboard.press(
-    process.platform === "darwin" ? "Meta+K" : "Control+K",
-  );
+  // Open → it lists the Workspaces group with the seeded workspace.
+  await page.keyboard.press(openKey);
   await expect(palette).toBeVisible();
+  await expect(palette.getByText("Workspaces")).toBeVisible();
+  const workspaceRow = palette.getByRole("option", {
+    name: /Smoke workspace/,
+  });
+  await expect(workspaceRow).toBeVisible();
 
+  // Selecting the (already-current) workspace jumps and closes — no confirm.
+  await workspaceRow.click();
+  await expect(palette).toBeHidden();
+
+  // Re-open and confirm Escape closes it too.
+  await page.keyboard.press(openKey);
+  await expect(palette).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(palette).toBeHidden();
 });
