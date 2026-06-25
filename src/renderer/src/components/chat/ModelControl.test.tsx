@@ -1,8 +1,9 @@
-// AGE-666 — the inline header model picker. The behaviours that matter: the
-// compact trigger shows the active model's name (sourced from the `model` prop,
-// so it renders before `listModels` resolves), opening reveals the available
-// models, and choosing a different one reports its `(provider, id)`. Verified
-// through roles + the onChange callback; `window.omp.listModels` is stubbed.
+// AGE-666 / AGE-705 — the compact model picker chip. The behaviours that
+// matter: the trigger shows the active model's name (sourced from the `model`
+// prop, so it renders before `listModels` resolves), opening reveals the
+// available models, choosing a different one reports its `(provider, id)`, and
+// (AGE-705) the chip is led by a workspace Live Dot. Verified through roles, the
+// onChange callback, and the rendered dot; `window.omp.listModels` is stubbed.
 
 import type { ModelInfo } from "@shared/domain";
 import type { RpcModel } from "@shared/rpc";
@@ -102,4 +103,27 @@ it("disables the trigger when no models are available", async () => {
   // Once the empty list resolves the trigger becomes disabled.
   const trigger = await screen.findByRole("button", { name: "Claude Opus 4" });
   await waitFor(() => expect(trigger).toBeDisabled());
+});
+
+it("renders the chip with a Live Dot (workspace color), model name, and chevron", () => {
+  stubModels();
+  render(
+    <ModelControl
+      model={CURRENT}
+      onChange={vi.fn()}
+      color="blue"
+      status="running"
+    />,
+  );
+
+  const trigger = screen.getByRole("button", { name: "Claude Opus 4" });
+  // Model name is the chip's label.
+  expect(trigger).toHaveTextContent("Claude Opus 4");
+  // A running Live Dot carries the active workspace color as its fill — blue is
+  // #3b82f6, which jsdom normalizes to rgb(59, 130, 246).
+  const dot = trigger.querySelector<HTMLElement>('[data-status="running"]');
+  expect(dot).not.toBeNull();
+  expect(dot?.style.backgroundColor).toBe("rgb(59, 130, 246)");
+  // The trigger's lone svg is the trailing chevron.
+  expect(trigger.querySelector("svg")).not.toBeNull();
 });

@@ -11,7 +11,6 @@ import { MessageSquarePlus } from "lucide-react";
 import { useEffect } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
-import { ModelControl } from "@/components/chat/ModelControl";
 import { SessionStatusBadge } from "@/components/chat/SessionList";
 import { ContextMeterChip } from "@/components/chat/SessionStatsPanel";
 import { SubagentInspector } from "@/components/chat/SubagentInspector";
@@ -74,9 +73,7 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const open = useChatStore((s) => Boolean(s.openSessions[sessionId]));
   const openSession = useChatStore((s) => s.openSession);
   const status = useActiveSession((s) => s?.status ?? "idle");
-  const model = useActiveSession((s) => s?.model ?? null);
   const thinkingLevel = useActiveSession((s) => s?.thinkingLevel ?? "medium");
-  const setModel = useChatStore((s) => s.setModel);
   const setThinking = useChatStore((s) => s.setThinking);
   const error = useActiveSession((s) => s?.error);
   const uiRequests = useActiveSession((s) => s?.uiRequests ?? NO_UI);
@@ -112,7 +109,6 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const transcript = (
     <div className="flex h-full min-w-0 flex-col">
       <header className="flex items-center gap-3 border-b border-border-subtle px-4 py-2.5">
-        <ModelControl model={model} onChange={setModel} />
         <ThinkingControl level={thinkingLevel} onChange={setThinking} />
         <SessionStatusBadge
           status={status}

@@ -10,7 +10,7 @@
 // result leaves them in place so a failed send can be retried.
 
 import type { ImageContent } from "@shared/rpc";
-import { ImagePlus } from "lucide-react";
+import { ImagePlus, Paperclip } from "lucide-react";
 import type { ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui";
@@ -53,8 +53,14 @@ export interface PromptComposerProps {
     text: string,
     images: ImageContent[],
   ) => boolean | Promise<boolean>;
-  /** Render the action button(s); receives submit + derived state. */
+  /** Render the action button(s) on the right of the controls row. */
   renderActions: (ctx: PromptComposerActionContext) => ReactNode;
+  /**
+   * Optional controls rendered in the bottom controls row between the attach
+   * button and the trailing actions (the chat composer's model chip). Receives
+   * the disabled/busy state so it can mirror the composer's enablement.
+   */
+  renderControls?: (ctx: { disabled: boolean; busy: boolean }) => ReactNode;
   /**
    * Optional overlay rendered above the input — the slash-command palette. When
    * provided, the composer opens it on `/` at an empty composer or
@@ -71,8 +77,6 @@ export interface PromptComposerProps {
   rows?: number;
   /** Auto-grow ceiling in px. Default 200. */
   maxHeight?: number;
-  /** Where the actions render relative to the input. Default "inline". */
-  actionsPlacement?: "inline" | "below";
   /**
    * One-shot text to inject into the composer (slash-command prefill from the
    * Skills & Commands "Use in chat" action). When it transitions to a non-null
@@ -88,6 +92,7 @@ export interface PromptComposerProps {
 export function PromptComposer({
   onSubmit,
   renderActions,
+  renderControls,
   renderOverlay,
   disabled = false,
   placeholder,
@@ -95,7 +100,6 @@ export function PromptComposer({
   submitOnEnter = true,
   rows = 1,
   maxHeight = 200,
-  actionsPlacement = "inline",
   injectText,
   onInjectConsumed,
   className,
@@ -254,7 +258,6 @@ export function PromptComposer({
   };
 
   const actions = renderActions({ submit, canSubmit, busy, hasContent });
-  const inline = actionsPlacement === "inline";
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: drop-zone wrapper; textarea paste + attach button are the keyboard paths
@@ -272,55 +275,62 @@ export function PromptComposer({
         text,
       })}
 
-      <ImageAttachmentStrip
-        attachments={attachments}
-        errors={errors}
-        onRemove={removeAttachment}
-      />
+      {/* Rounded composer box: textarea above a controls row (attach · controls · spacer · actions). */}
+      <div
+        className={cn(
+          "rounded-xl border border-border bg-bg-raised px-3 pb-2 pt-2.5 transition-colors focus-within:border-accent",
+          disabled && "opacity-60",
+        )}
+      >
+        <ImageAttachmentStrip
+          attachments={attachments}
+          errors={errors}
+          onRemove={removeAttachment}
+        />
 
-      <div className={inline ? "flex items-end gap-2" : undefined}>
-        <div className="flex flex-1 items-end gap-2">
+        <textarea
+          ref={textareaRef}
+          aria-label={ariaLabel}
+          value={text}
+          rows={rows}
+          disabled={disabled}
+          placeholder={placeholder}
+          onChange={(e) => {
+            setText(e.target.value);
+            resize();
+          }}
+          onPaste={onPaste}
+          onKeyDown={(e) => {
+            // `/` at an empty composer opens the overlay (slash palette)
+            // instead of typing a literal slash.
+            if (hasOverlay && e.key === "/" && text === "") {
+              e.preventDefault();
+              setOverlayOpen(true);
+              return;
+            }
+            if (submitOnEnter && e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void submit();
+            }
+          }}
+          style={{ minHeight: `${rows * 1.5 + 1}rem`, maxHeight }}
+          className="scrollbar w-full resize-none bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none disabled:cursor-not-allowed"
+        />
+
+        <div className="mt-1.5 flex items-center gap-1.5">
           <IconButton
             label="Attach images"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled || busy}
-            className="mb-0.5 shrink-0"
+            className="shrink-0"
           >
-            <ImagePlus className="h-4 w-4" />
+            <Paperclip className="h-4 w-4" />
           </IconButton>
-          <textarea
-            ref={textareaRef}
-            aria-label={ariaLabel}
-            value={text}
-            rows={rows}
-            disabled={disabled}
-            placeholder={placeholder}
-            onChange={(e) => {
-              setText(e.target.value);
-              resize();
-            }}
-            onPaste={onPaste}
-            onKeyDown={(e) => {
-              // `/` at an empty composer opens the overlay (slash palette)
-              // instead of typing a literal slash.
-              if (hasOverlay && e.key === "/" && text === "") {
-                e.preventDefault();
-                setOverlayOpen(true);
-                return;
-              }
-              if (submitOnEnter && e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void submit();
-              }
-            }}
-            style={{ minHeight: `${rows * 1.5 + 1}rem`, maxHeight }}
-            className="scrollbar flex-1 resize-none rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:border-accent focus:outline-none disabled:opacity-50"
-          />
+          {renderControls?.({ disabled, busy })}
+          <div className="flex-1" />
+          {actions}
         </div>
-        {inline && <div className="flex items-end gap-2">{actions}</div>}
       </div>
-
-      {!inline && <div className="mt-2">{actions}</div>}
 
       <input
         ref={fileInputRef}
@@ -337,7 +347,7 @@ export function PromptComposer({
       />
 
       {dragging && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-accent bg-bg/85 text-sm font-medium text-accent">
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-accent bg-bg/85 text-sm font-medium text-accent">
           <ImagePlus className="h-5 w-5" />
           Drop images to attach
         </div>

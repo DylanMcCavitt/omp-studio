@@ -1,33 +1,41 @@
-// AGE-666 — the inline model picker for the chat header. Replaces the old
-// full-height rail `Model` panel with a compact toolbar trigger (~h-7) that
+// AGE-666 / AGE-705 — the compact model picker chip. A toolbar trigger that
 // always shows the active model's name and opens a searchable list of the
 // available models, loaded once via `listModels`. Picking one reports its
-// `(provider, id)` and closes. Built on the sanctioned `Popover` primitive; the
-// in-popover search reuses the shared `filterOptions`/`clampIndex`/`moveIndex`
-// helpers so its filtering and keyboard model stay in step with `Combobox`
-// (whose fixed-height trigger is why this rolls its own compact one).
+// `(provider, id)` and closes. AGE-705 leads the chip with a workspace Live Dot
+// (hue = identity, fill = session status) and lives in the chat composer's
+// controls row. Built on the sanctioned `Popover` primitive; the in-popover
+// search reuses the shared `filterOptions`/`clampIndex`/`moveIndex` helpers so
+// its filtering and keyboard model stay in step with `Combobox` (whose
+// fixed-height trigger is why this rolls its own compact one).
 
 import type { ModelInfo } from "@shared/domain";
+import type { WorkspaceColorKey } from "@shared/ipc";
 import type { RpcModel } from "@shared/rpc";
-import { Check, ChevronDown, Cpu, Search } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import {
-  type ComboboxOption,
-  filterOptions,
-  Popover,
-  Spinner,
-} from "@/components/ui";
+import { type ComboboxOption, filterOptions, Popover } from "@/components/ui";
+import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { clampIndex, moveIndex } from "@/lib/slash-commands";
 import { useAsync } from "@/lib/useAsync";
+import type { SessionStatus } from "@/store/session-reducer";
 
 export interface ModelControlProps {
   /** Active model as reported by the session, or null before it resolves. */
   model: RpcModel | null;
   onChange: (provider: string, id: string) => void;
+  /** Active workspace color — paints the leading Live Dot (AGE-705). */
+  color?: WorkspaceColorKey;
+  /** Active session status — drives the leading Live Dot fill. */
+  status?: SessionStatus;
 }
 
-export function ModelControl({ model, onChange }: ModelControlProps) {
+export function ModelControl({
+  model,
+  onChange,
+  color,
+  status,
+}: ModelControlProps) {
   const { data: models, loading } = useAsync(() => window.omp.listModels(), []);
   // The active model carries no `selector`; match it back to the loaded list to
   // know which row is current. Until the list resolves there is no match, but
@@ -61,11 +69,7 @@ export function ModelControl({ model, onChange }: ModelControlProps) {
             "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >
-          {loading ? (
-            <Spinner size={13} className="shrink-0" />
-          ) : (
-            <Cpu className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
-          )}
+          <WorkspaceColorDot color={color} status={status} />
           <span className="min-w-0 truncate">{label}</span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
         </button>
