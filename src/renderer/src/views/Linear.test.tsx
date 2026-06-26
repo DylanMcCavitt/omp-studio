@@ -142,6 +142,38 @@ it("groups fetched issues by workflow state", async () => {
   expect(within(doneGroup).getByText("Merged slice")).toBeInTheDocument();
 });
 
+it("keeps long issue titles from pushing badges out of the row", async () => {
+  const longTitle =
+    "Add shared agent deterministic checkpoint title rendering without clipping adjacent state badges";
+  stubLinear({
+    status: vi.fn().mockResolvedValue(AUTHED),
+    listIssues: vi.fn().mockResolvedValue([
+      issue({
+        id: "age-900",
+        title: longTitle,
+        priority: 1,
+        state: { name: "Backlog", type: "backlog" },
+      }),
+    ]),
+  });
+
+  render(<Linear />);
+
+  const row = (await screen.findByText(longTitle)).closest("button");
+  expect(row).not.toBeNull();
+  const titleLine = (row as HTMLElement).firstElementChild as HTMLElement;
+  const title = within(row as HTMLElement).getByText(longTitle);
+  expect(titleLine.className).toContain("min-w-0");
+  expect(title.className).toContain("min-w-0");
+  expect(title.className).toContain("truncate");
+  expect(within(row as HTMLElement).getByText("Urgent").className).toContain(
+    "shrink-0",
+  );
+  expect(within(row as HTMLElement).getByText("Backlog").className).toContain(
+    "shrink-0",
+  );
+});
+
 it("renders Linear state dots in the live-dot language", async () => {
   const issues = [
     issue({

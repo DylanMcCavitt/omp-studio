@@ -350,16 +350,19 @@ export default function Linear() {
                               onClick={() => window.omp.openExternal(issue.url)}
                               className={ROW}
                             >
-                              <div className="flex items-center gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
                                 <StateDot type={issue.state.type} />
-                                <span className="font-mono text-xs text-ink-faint">
+                                <span className="shrink-0 font-mono text-xs text-ink-faint">
                                   {issue.identifier}
                                 </span>
-                                <span className="flex-1 truncate text-sm text-ink">
+                                <span className="min-w-0 flex-1 truncate text-sm text-ink">
                                   {issue.title}
                                 </span>
                                 {priority && (
-                                  <Badge variant={priority.variant}>
+                                  <Badge
+                                    variant={priority.variant}
+                                    className="shrink-0"
+                                  >
                                     {priority.label}
                                   </Badge>
                                 )}
@@ -367,6 +370,7 @@ export default function Linear() {
                                   variant={
                                     STATE_VARIANT[issue.state.type] ?? "muted"
                                   }
+                                  className="shrink-0"
                                 >
                                   {issue.state.name}
                                 </Badge>
