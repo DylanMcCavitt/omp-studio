@@ -34,25 +34,26 @@ function hasGit(): boolean {
 // ---------------------------------------------------------------------------
 
 test("parseStatusPorcelainZ maps common statuses; renames use the new path", () => {
-  // NUL-separated; each entry is "XY path". A rename ("R ") carries a second
-  // NUL field holding the new (current) path, which must win.
+  // NUL-separated; each entry is "XY path". A rename ("R ") emits two fields
+  // — "R  new.ts" then the old path "old.ts" — so the new (current) path must
+  // win and the old path must not appear as a separate entry.
   const out = [
     " M modified.ts",
     "A  added.ts",
     "D  deleted.ts",
     "?? untracked.ts",
-    "R  old.ts",
-    "new.ts",
+    "R  new.ts",
+    "old.ts",
     "",
   ].join("\0");
-  const byPath = Object.fromEntries(
-    parseStatusPorcelainZ(out).map((f) => [f.relPath, f.status]),
-  );
+  const files = parseStatusPorcelainZ(out);
+  const byPath = Object.fromEntries(files.map((f) => [f.relPath, f.status]));
   expect(byPath["modified.ts"]).toBe("modified");
   expect(byPath["added.ts"]).toBe("added");
   expect(byPath["deleted.ts"]).toBe("deleted");
   expect(byPath["untracked.ts"]).toBe("untracked");
   expect(byPath["new.ts"]).toBe("renamed");
+  expect(files.some((f) => f.relPath === "old.ts")).toBe(false);
 });
 
 test("statusFromXY lets the staged char win over the unstaged char", () => {
@@ -105,6 +106,7 @@ test("isContainedRelPath rejects absolute paths and parent-segment escapes", () 
   expect(isContainedRelPath("../escape.ts")).toBe(false);
   expect(isContainedRelPath("a/../../escape.ts")).toBe(false);
   expect(isContainedRelPath("/etc/passwd")).toBe(false);
+  expect(isContainedRelPath(":(top)x")).toBe(false);
   expect(isContainedRelPath("")).toBe(false);
 });
 
@@ -124,11 +126,14 @@ gitTest(
       git("config user.name t", dir);
       git("config commit.gpgsign false", dir);
 
-      // Commit a baseline, then apply an unstaged edit and add an untracked file.
+      // Commit a baseline, then mix an unstaged edit, a staged rename, and an
+      // untracked file.
       writeFileSync(join(dir, "a.ts"), "a\nb\nc\n", "utf8");
-      git("add a.ts", dir);
+      writeFileSync(join(dir, "stable.ts"), "s\n", "utf8");
+      git("add a.ts stable.ts", dir);
       git("commit -q -m base", dir);
       writeFileSync(join(dir, "a.ts"), "a\nB\nc\n", "utf8");
+      git("mv stable.ts stable-renamed.ts", dir);
       writeFileSync(join(dir, "new.ts"), "hello\n", "utf8");
 
       const svc = createChangesService(() => dir);
@@ -140,6 +145,8 @@ gitTest(
       );
       expect(byPath["a.ts"]).toBe("modified");
       expect(byPath["new.ts"]).toBe("untracked");
+      expect(byPath["stable-renamed.ts"]).toBe("renamed");
+      expect(byPath["stable.ts"]).toBeUndefined();
 
       // Tracked edit: combined working-tree-vs-HEAD diff with add + remove.
       const aDiff = await svc.diff("a.ts");

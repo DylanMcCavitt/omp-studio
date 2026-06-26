@@ -5,6 +5,13 @@
 // mutation, and no network operations. Mirrors the Files service guarantees:
 // never throws, degrades safely (empty status / null diff), and a missing root
 // is itself a refusal.
+//
+// SECURITY: git runs with hostile, repo-configured helpers DISABLED —
+// `core.fsmonitor` is overridden to false (status) and external-diff/textconv
+// drivers are turned off (`--no-ext-diff --no-textconv`) — so a workspace's
+// `.git/config` cannot execute arbitrary commands through this surface. Output
+// is byte-capped to bound memory, and the untracked-file fallback is gated on a
+// realpath containment check so a symlink cannot read files outside the root.
 
 import type {
   ChangedFile,
@@ -15,11 +22,29 @@ import type {
   FileDiff,
 } from "@shared/domain";
 import { runCli } from "./cli";
+import { containedPath } from "./files";
 
 /** Resolves the active workspace root; `undefined` when none is active. */
 export type GetRoot = () => string | undefined;
 
 const EMPTY_STATUS: ChangesStatus = { repo: false, files: [] };
+
+/** Cap collected `git status` output (paths are small; this bounds memory). */
+const MAX_STATUS_BYTES = 512 * 1024;
+/** Cap collected `git diff` output so a huge diff cannot exhaust the process. */
+const MAX_DIFF_BYTES = 1024 * 1024;
+
+/**
+ * Shared git argv prefix: `-c core.fsmonitor=false` disables a repo-configured
+ * fsmonitor hook that `git status` would otherwise invoke.
+ */
+const GIT_BASE = ["-c", "core.fsmonitor=false"] as const;
+/**
+ * `git diff` flags that disable repo-configured external diff drivers and
+ * textconv filters (`diff.external`, `diff.<driver>.command`), which could
+ * otherwise execute arbitrary commands from the workspace's `.git/config`.
+ */
+const DIFF_SAFE = ["--no-ext-diff", "--no-textconv"] as const;
 
 export interface ChangesService {
   status(): Promise<ChangesStatus>;
@@ -36,14 +61,25 @@ export function createChangesService(getRoot: GetRoot): ChangesService {
       // `repo: false` without parsing anything.
       const probe = await runCli(
         "git",
-        ["rev-parse", "--is-inside-work-tree"],
-        { cwd: root },
+        [...GIT_BASE, "rev-parse", "--is-inside-work-tree"],
+        { cwd: root, maxBytes: MAX_STATUS_BYTES },
       );
       if (probe.code !== 0) return { ...EMPTY_STATUS };
+      // `-- .` scopes status to the workspace cwd (so a workspace that is a
+      // subdirectory of a larger repo only reports its own changes); paths come
+      // back workspace-relative.
       const res = await runCli(
         "git",
-        ["status", "--porcelain=v1", "--untracked-files=all", "-z"],
-        { cwd: root },
+        [
+          ...GIT_BASE,
+          "status",
+          "--porcelain=v1",
+          "--untracked-files=all",
+          "-z",
+          "--",
+          ".",
+        ],
+        { cwd: root, maxBytes: MAX_STATUS_BYTES },
       );
       if (res.code !== 0) return { ...EMPTY_STATUS };
       return { repo: true, files: parseStatusPorcelainZ(res.stdout) };
@@ -54,22 +90,38 @@ export function createChangesService(getRoot: GetRoot): ChangesService {
       if (!root) return null;
       if (!isContainedRelPath(relPath)) return null;
       // `git diff HEAD -- <path>` covers committed-vs-worktree for tracked
-      // files (staged + unstaged combined). It shows nothing for untracked
-      // files, so fall back to a no-index diff against /dev/null to render the
-      // whole file as added. Both exit 1 when there are differences.
-      let res = await runCli("git", ["diff", "HEAD", "--", relPath], {
-        cwd: root,
-      });
-      if (res.code > 1 || res.stdout.trim() === "") {
-        res = await runCli(
-          "git",
-          ["diff", "--no-index", "--", "/dev/null", relPath],
-          { cwd: root },
-        );
+      // files (staged + unstaged combined). git diff exits 0 (no changes) or 1
+      // (differences); a spawn failure / timeout / output cap resolves -1.
+      const head = await runCli(
+        "git",
+        [...GIT_BASE, "diff", ...DIFF_SAFE, "HEAD", "--", relPath],
+        { cwd: root, maxBytes: MAX_DIFF_BYTES },
+      );
+      const headOk = head.code === 0 || head.code === 1;
+      if (headOk && head.stdout.trim() !== "") {
+        return parseFileDiff(relPath, head.stdout);
       }
-      // git diff exits 0 (no changes) or 1 (differences); anything else errors.
-      if (res.code > 1) return null;
-      return parseFileDiff(relPath, res.stdout);
+      // If the HEAD diff itself failed/capped, do not attempt a second read.
+      if (!headOk) return null;
+      // Untracked files show nothing against HEAD; render the whole file as
+      // added via a no-index diff. Gate this on a realpath containment check so
+      // an untracked symlink cannot read a target outside the workspace root.
+      if (!containedPath(root, relPath)) return null;
+      const idx = await runCli(
+        "git",
+        [
+          ...GIT_BASE,
+          "diff",
+          ...DIFF_SAFE,
+          "--no-index",
+          "--",
+          "/dev/null",
+          relPath,
+        ],
+        { cwd: root, maxBytes: MAX_DIFF_BYTES },
+      );
+      if (idx.code !== 0 && idx.code !== 1) return null;
+      return parseFileDiff(relPath, idx.stdout);
     },
   };
 }
@@ -90,8 +142,9 @@ const STATUS_RANK: Record<string, ChangeStatus> = {
 };
 
 /**
- * Parse `git status --porcelain=v1 -z` output (NUL-separated). Renames/copies
- * occupy two NUL fields (`XY orig\0 new`); the new (current) path wins.
+ * Parse `git status --porcelain=v1 -z` output (NUL-separated). A rename/copy
+ * occupies two NUL fields — `XY newpath\0 oldpath` — so the current path is the
+ * first field; the second (old path) is discarded.
  */
 export function parseStatusPorcelainZ(out: string): ChangedFile[] {
   if (!out) return [];
@@ -102,14 +155,11 @@ export function parseStatusPorcelainZ(out: string): ChangedFile[] {
     // A real entry is at least "XY " (two status chars + the separator space).
     if (!rec || rec.length < 3) continue;
     const [x = "", y = ""] = rec;
-    let path = rec.slice(3);
+    const path = rec.slice(3);
     const renamed = x === "R" || x === "C" || y === "R" || y === "C";
     if (renamed) {
-      const next = records[i + 1];
-      if (next) {
-        path = next;
-        i++;
-      }
+      // Skip the trailing old-path field; the new (current) path is `path`.
+      if (i + 1 < records.length) i++;
     }
     if (path) {
       const relPath = path.includes("\\") ? path.split("\\").join("/") : path;
@@ -162,12 +212,17 @@ export function parseFileDiff(relPath: string, out: string): FileDiff {
   return { relPath, binary, hunks };
 }
 
-/** Reject absolute paths or any segment that escapes the workspace root. */
+/**
+ * Fast lexical guard for a renderer-supplied relPath: reject absolute paths,
+ * git pathspec magic (`:`), and any `..` segment. (The no-index fallback adds a
+ * realpath containment check on top of this to block symlink escapes.)
+ */
 export function isContainedRelPath(relPath: string): boolean {
   if (
     typeof relPath !== "string" ||
     relPath === "" ||
-    relPath.startsWith("/")
+    relPath.startsWith("/") ||
+    relPath.startsWith(":")
   ) {
     return false;
   }
