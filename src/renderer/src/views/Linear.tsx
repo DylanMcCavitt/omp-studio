@@ -358,6 +358,8 @@ export default function Linear() {
                                 <span className="min-w-0 flex-1 truncate text-sm text-ink">
                                   {issue.title}
                                 </span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 pl-4 text-xs text-ink-faint">
                                 {priority && (
                                   <Badge
                                     variant={priority.variant}
@@ -374,8 +376,6 @@ export default function Linear() {
                                 >
                                   {issue.state.name}
                                 </Badge>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2 pl-4 text-xs text-ink-faint">
                                 {issue.team?.key && (
                                   <Badge variant="muted">
                                     {issue.team.key}
