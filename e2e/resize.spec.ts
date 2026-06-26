@@ -261,7 +261,6 @@ test("real Linear issue rows stay inside a narrow tool panel", async () => {
   expect(rowBox.x + rowBox.width).toBeLessThanOrEqual(
     panelBox.x + panelBox.width + 1,
   );
-  await panel.screenshot({ path: "test-results/linear-narrow-panel.png" });
 
   expect(rendererCrashes).toEqual([]);
   expect(pageErrors).toEqual([]);
