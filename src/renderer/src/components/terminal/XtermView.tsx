@@ -1,9 +1,8 @@
-// The live terminal surface (feature 7): an xterm.js Terminal wired to a single
-// main-process pty. On mount it spawns a pty in `cwd` (via the terminal store),
-// streams the pty's output into the buffer, forwards keystrokes back, and keeps
-// the pty sized to the viewport with the fit addon + a ResizeObserver. On
-// unmount it kills the pty and disposes the xterm instance — scrollback is
-// ephemeral by design.
+// The live terminal surface (feature 7): an xterm.js Terminal attached to one
+// main-process pty id. The pty is created by the Terminal view/store before this
+// component mounts; this component streams output into xterm, forwards genuine
+// xterm keystrokes back to that pty, and resizes it with the fit addon. Unmounting
+// disposes only the xterm instance/subscriptions — it does NOT kill the pty.
 //
 // The pty is a REAL shell at the user's full privilege; nothing here makes it
 // "safe". Output is written straight to the xterm buffer (never reduced into
@@ -17,9 +16,13 @@ import { useEffect, useRef } from "react";
 import { useTerminalStore } from "@/store/terminal";
 
 export interface XtermViewProps {
-  /** Working directory the pty is spawned in (the active workspace). */
+  /** Main-process terminal id this xterm instance is attached to. */
+  id: string;
+  /** Working directory label for this terminal. */
   cwd: string;
-  /** Notified when this terminal's pty exits, so the view can offer a restart. */
+  /** True when this terminal is the selected visible tab. */
+  active?: boolean;
+  /** Notified when this terminal's pty exits, so parent chrome can update. */
   onExit?: (code: number | null) => void;
 }
 
@@ -45,14 +48,18 @@ function readXtermTheme(): ITheme {
   };
 }
 
-export function XtermView({ cwd, onExit }: XtermViewProps) {
+export function XtermView({ id, cwd, active = false, onExit }: XtermViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // Hold the latest onExit in a ref so the mount effect can stay keyed on `cwd`
-  // alone without re-spawning the pty when the parent re-renders.
+  const termRef = useRef<Terminal | null>(null);
+  // Hold the latest onExit in a ref so the mount effect can stay keyed on the
+  // pty id without re-subscribing when the parent re-renders.
   const onExitRef = useRef(onExit);
   useEffect(() => {
     onExitRef.current = onExit;
   }, [onExit]);
+  useEffect(() => {
+    if (active) termRef.current?.focus();
+  }, [active]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -71,6 +78,7 @@ export function XtermView({ cwd, onExit }: XtermViewProps) {
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(container);
+    termRef.current = term;
     try {
       fit.fit();
     } catch {
@@ -78,17 +86,17 @@ export function XtermView({ cwd, onExit }: XtermViewProps) {
       // below re-fits once it does.
     }
 
-    // Track-and-tear-down state for the async spawn (StrictMode mounts twice).
+    // Track-and-tear-down state for this xterm attachment. The pty itself
+    // outlives this component unless the parent explicitly closes the tab.
     let disposed = false;
-    let termId: string | null = null;
     let offData: (() => void) | undefined;
     let offExit: (() => void) | undefined;
 
     const inputDisposable = term.onData((data) => {
-      if (termId) store.write(termId, data);
+      store.write(id, data);
     });
     const resizeDisposable = term.onResize(({ cols, rows }) => {
-      if (termId) store.resize(termId, cols, rows);
+      store.resize(id, cols, rows);
     });
 
     const resizeObserver = new ResizeObserver(() => {
@@ -109,30 +117,14 @@ export function XtermView({ cwd, onExit }: XtermViewProps) {
       attributeFilter: ["class"],
     });
 
-    void (async () => {
-      try {
-        const info = await store.create(cwd, term.cols, term.rows);
-        if (disposed) {
-          // Unmounted before the spawn resolved — kill the orphaned pty.
-          void store.dispose(info.id);
-          return;
-        }
-        termId = info.id;
-        offData = store.subscribeData(info.id, (chunk) => term.write(chunk));
-        offExit = store.subscribeExit(info.id, (code) => {
-          const suffix = code != null ? ` (${code})` : "";
-          term.write(`\r\n\x1b[2m[process exited${suffix}]\x1b[0m\r\n`);
-          onExitRef.current?.(code);
-        });
-        term.focus();
-      } catch (error) {
-        if (disposed) return;
-        const message = error instanceof Error ? error.message : String(error);
-        term.write(
-          `\r\n\x1b[31mFailed to start terminal: ${message}\x1b[0m\r\n`,
-        );
-      }
-    })();
+    offData = store.subscribeData(id, (chunk) => term.write(chunk));
+    offExit = store.subscribeExit(id, (code) => {
+      const suffix = code != null ? ` (${code})` : "";
+      term.write(`\r\n\x1b[2m[process exited${suffix}]\x1b[0m\r\n`);
+      onExitRef.current?.(code);
+    });
+    store.resize(id, term.cols, term.rows);
+    if (!disposed) term.focus();
 
     return () => {
       disposed = true;
@@ -142,10 +134,16 @@ export function XtermView({ cwd, onExit }: XtermViewProps) {
       resizeDisposable.dispose();
       offData?.();
       offExit?.();
-      if (termId) void store.dispose(termId);
+      termRef.current = null;
       term.dispose();
     };
-  }, [cwd]);
+  }, [id]);
 
-  return <div ref={containerRef} className="h-full w-full overflow-hidden" />;
+  return (
+    <div
+      ref={containerRef}
+      data-cwd={cwd}
+      className="h-full w-full overflow-hidden"
+    />
+  );
 }

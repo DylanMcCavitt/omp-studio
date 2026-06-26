@@ -10,14 +10,15 @@
 // `store/terminal.ts`; this view only chooses gate / empty / live and owns the
 // restart affordance after a shell exits.
 
-import { TerminalSquare } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Plus, TerminalSquare, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TerminalGate } from "@/components/terminal/TerminalGate";
 import { XtermView } from "@/components/terminal/XtermView";
 import { Button, EmptyState } from "@/components/ui";
 import { projectLabel } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
+import { useTerminalStore } from "@/store/terminal";
 
 export default function Terminal() {
   const enabled = useSettingsStore(
@@ -25,24 +26,69 @@ export default function Terminal() {
   );
   const cwd = useAppStore((s) => s.selectedProject);
 
-  // Exit banner + restart: a fresh `key` (cwd + nonce) remounts XtermView,
-  // which disposes the dead pty and spawns a new one.
-  const [exitCode, setExitCode] = useState<number | null | undefined>(
-    undefined,
+  const terminals = useTerminalStore((s) => s.terminals);
+  const createTerminal = useTerminalStore((s) => s.create);
+  const disposeTerminal = useTerminalStore((s) => s.dispose);
+  const entries = useMemo(
+    () =>
+      Object.values(terminals)
+        .filter((t) => t.cwd === cwd)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [terminals, cwd],
   );
-  const [restartNonce, setRestartNonce] = useState(0);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [autoStartedCwd, setAutoStartedCwd] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | undefined>();
 
-  // A workspace switch retargets the terminal; clear any stale exit banner.
+  const spawnTerminal = useCallback(async () => {
+    if (!cwd || creating) return;
+    setCreating(true);
+    setCreateError(undefined);
+    try {
+      const info = await createTerminal(cwd, 80, 24);
+      setActiveId(info.id);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCreating(false);
+    }
+  }, [cwd, creating, createTerminal]);
+
   useEffect(() => {
-    setExitCode(undefined);
+    setActiveId(null);
+    setAutoStartedCwd(null);
+    setCreateError(undefined);
   }, [cwd]);
 
-  const restart = () => {
-    setExitCode(undefined);
-    setRestartNonce((n) => n + 1);
-  };
+  useEffect(() => {
+    if (!enabled || !cwd) return;
+    if (activeId && entries.some((entry) => entry.id === activeId)) return;
+    const first = entries[0];
+    if (first) {
+      setActiveId(first.id);
+      return;
+    }
+    if (!creating && autoStartedCwd !== cwd) {
+      setAutoStartedCwd(cwd);
+      void spawnTerminal();
+    }
+  }, [
+    enabled,
+    cwd,
+    entries,
+    activeId,
+    creating,
+    autoStartedCwd,
+    spawnTerminal,
+  ]);
 
-  const exited = exitCode !== undefined;
+  const closeTerminal = async (id: string) => {
+    const index = entries.findIndex((entry) => entry.id === id);
+    const next = entries[index + 1] ?? entries[index - 1] ?? null;
+    if (activeId === id) setActiveId(next?.id ?? null);
+    await disposeTerminal(id);
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -56,18 +102,85 @@ export default function Terminal() {
           </p>
         </div>
       </div>
-
-      {exited && (
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-bg-raised px-6 py-2 text-xs">
-          <span className="text-ink-muted">
-            Shell exited{exitCode != null ? ` (code ${exitCode})` : ""}.
-          </span>
-          <Button size="sm" variant="subtle" onClick={restart}>
-            Restart
+      {enabled && cwd && (
+        <div className="flex shrink-0 items-center gap-1 border-b border-border bg-bg-panel px-3 py-2">
+          <div
+            role="tablist"
+            aria-label="Terminal sessions"
+            className="scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+          >
+            {entries.map((entry, index) => {
+              const selected = entry.id === activeId;
+              const label = `Terminal ${index + 1}${entry.exited ? " exited" : ""}`;
+              return (
+                <div
+                  key={entry.id}
+                  className={[
+                    "flex max-w-64 items-center rounded-md border text-xs transition-colors",
+                    selected
+                      ? "border-accent/50 bg-accent-soft text-accent"
+                      : "border-border-subtle bg-bg-raised text-ink-muted",
+                  ].join(" ")}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setActiveId(entry.id)}
+                    className="flex min-w-0 items-center gap-2 px-2.5 py-1 text-left hover:text-ink"
+                    title={entry.cwd}
+                  >
+                    <span className="truncate">{label}</span>
+                    <span className="font-mono text-[10px] opacity-70">
+                      {projectLabel(entry.cwd)}
+                    </span>
+                    <span
+                      className={
+                        entry.exited
+                          ? "rounded-full bg-warn/10 px-1.5 text-warn"
+                          : "rounded-full bg-success/10 px-1.5 text-success"
+                      }
+                    >
+                      {entry.exited ? "exited" : "live"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Close ${label}`}
+                    className="mr-1 rounded p-0.5 text-ink-faint hover:bg-bg-hover hover:text-danger"
+                    onClick={() => void closeTerminal(entry.id)}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          <Button
+            size="sm"
+            variant="subtle"
+            onClick={() => void spawnTerminal()}
+          >
+            <Plus className="h-4 w-4" />
+            New terminal
           </Button>
         </div>
       )}
-
+      {createError && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/30 bg-danger/5 px-4 py-2 text-sm text-danger"
+        >
+          <span>Terminal failed to start: {createError}</span>
+          <Button
+            size="sm"
+            variant="subtle"
+            onClick={() => void spawnTerminal()}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
       <div className="relative min-h-0 flex-1 bg-bg-raised">
         {!enabled ? (
           <>
@@ -87,12 +200,26 @@ export default function Terminal() {
             title="No workspace selected"
             hint="Select or add a workspace to open a terminal in its directory."
           />
-        ) : (
-          <XtermView
-            key={`${cwd}:${restartNonce}`}
-            cwd={cwd}
-            onExit={(code) => setExitCode(code)}
+        ) : entries.length === 0 ? (
+          <EmptyState
+            className="h-full"
+            icon={<TerminalSquare className="h-8 w-8" />}
+            title={creating ? "Starting terminal…" : "No terminal tabs"}
+            hint="Create a terminal tab for the selected workspace."
           />
+        ) : (
+          entries.map((entry) => (
+            <div
+              key={entry.id}
+              className={entry.id === activeId ? "h-full" : "hidden h-full"}
+            >
+              <XtermView
+                id={entry.id}
+                cwd={entry.cwd}
+                active={entry.id === activeId}
+              />
+            </div>
+          ))
         )}
       </div>
     </div>

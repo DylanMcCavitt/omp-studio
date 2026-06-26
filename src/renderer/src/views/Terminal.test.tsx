@@ -13,11 +13,25 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
+import { useTerminalStore } from "@/store/terminal";
 import Terminal from "./Terminal";
 
 vi.mock("@/components/terminal/XtermView", () => ({
-  XtermView: ({ cwd }: { cwd: string }) => (
-    <div data-testid="xterm-surface" data-cwd={cwd} />
+  XtermView: ({
+    id,
+    cwd,
+    active,
+  }: {
+    id: string;
+    cwd: string;
+    active?: boolean;
+  }) => (
+    <div
+      data-testid="xterm-surface"
+      data-id={id}
+      data-cwd={cwd}
+      data-active={String(active)}
+    />
   ),
 }));
 
@@ -53,8 +67,36 @@ function seedSettings(terminal: StudioSettings["terminal"]) {
   return update;
 }
 
+function installTerminalMock() {
+  let seq = 0;
+  const create = vi.fn(async ({ cwd }: { cwd: string }) => {
+    seq += 1;
+    return {
+      id: `term-${seq}`,
+      cwd,
+      shell: "/bin/zsh",
+      createdAt: `2026-01-01T00:00:0${seq}.000Z`,
+    };
+  });
+  const kill = vi.fn(async () => {});
+  Object.assign(window.omp, {
+    terminal: {
+      create,
+      kill,
+      write: vi.fn(async () => {}),
+      resize: vi.fn(async () => {}),
+      list: vi.fn(async () => []),
+      onData: vi.fn(() => () => {}),
+      onExit: vi.fn(() => () => {}),
+    },
+  });
+  return { create, kill };
+}
+
 beforeEach(() => {
   useAppStore.setState({ selectedProject: "/work/app", route: "dashboard" });
+  useTerminalStore.setState({ terminals: {}, _unsub: null });
+  installTerminalMock();
 });
 
 it("blocks the shell behind an honest acknowledgement gate when disabled", () => {
@@ -102,4 +144,133 @@ it("shows an empty state (no shell) when enabled but no workspace is selected", 
   expect(screen.getByText("No workspace selected")).toBeInTheDocument();
   expect(screen.queryByTestId("xterm-surface")).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("renders workspace-scoped terminal tabs and creates a second tab without killing the first", async () => {
+  const user = userEvent.setup();
+  const terminal = installTerminalMock();
+  seedSettings({ enabled: true, maxConcurrent: 4 });
+
+  render(<Terminal />);
+  expect(await screen.findByRole("tab", { name: /Terminal 1/ })).toBeVisible();
+  expect(screen.getByTestId("xterm-surface")).toHaveAttribute(
+    "data-id",
+    "term-1",
+  );
+
+  await user.click(screen.getByRole("button", { name: "New terminal" }));
+
+  expect(await screen.findByRole("tab", { name: /Terminal 2/ })).toBeVisible();
+  expect(terminal.create).toHaveBeenCalledTimes(2);
+  expect(terminal.kill).not.toHaveBeenCalled();
+  expect(screen.getAllByTestId("xterm-surface")).toHaveLength(2);
+});
+
+it("switches tabs without killing ptys; close tab explicitly kills one", async () => {
+  const user = userEvent.setup();
+  const terminal = installTerminalMock();
+  seedSettings({ enabled: true, maxConcurrent: 4 });
+
+  render(<Terminal />);
+  await screen.findByRole("tab", { name: /Terminal 1/ });
+  await user.click(screen.getByRole("button", { name: "New terminal" }));
+  const first = screen.getByRole("tab", { name: /Terminal 1/ });
+  const second = await screen.findByRole("tab", { name: /Terminal 2/ });
+
+  await user.click(first);
+  expect(first).toHaveAttribute("aria-selected", "true");
+  expect(terminal.kill).not.toHaveBeenCalled();
+  expect(screen.getAllByTestId("xterm-surface")).toHaveLength(2);
+  expect(
+    screen
+      .getAllByTestId("xterm-surface")
+      .find((el) => el.dataset.id === "term-1"),
+  ).toHaveAttribute("data-active", "true");
+
+  await user.click(second);
+  expect(second).toHaveAttribute("aria-selected", "true");
+  expect(
+    screen
+      .getAllByTestId("xterm-surface")
+      .find((el) => el.dataset.id === "term-2"),
+  ).toHaveAttribute("data-active", "true");
+  expect(terminal.kill).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "Close Terminal 1" }));
+  expect(terminal.kill).toHaveBeenCalledWith("term-1");
+});
+
+it("closing and reopening the panel keeps the pty until the tab is closed", async () => {
+  const terminal = installTerminalMock();
+  seedSettings({ enabled: true, maxConcurrent: 4 });
+
+  const { unmount } = render(<Terminal />);
+  expect(await screen.findByRole("tab", { name: /Terminal 1/ })).toBeVisible();
+
+  unmount();
+  expect(terminal.kill).not.toHaveBeenCalled();
+
+  render(<Terminal />);
+
+  expect(await screen.findByRole("tab", { name: /Terminal 1/ })).toBeVisible();
+  expect(screen.getByTestId("xterm-surface")).toHaveAttribute(
+    "data-id",
+    "term-1",
+  );
+  expect(terminal.create).toHaveBeenCalledTimes(1);
+});
+
+it("closing the only tab does not auto-spawn a replacement", async () => {
+  const user = userEvent.setup();
+  const terminal = installTerminalMock();
+  seedSettings({ enabled: true, maxConcurrent: 4 });
+
+  render(<Terminal />);
+  await screen.findByRole("tab", { name: /Terminal 1/ });
+
+  await user.click(screen.getByRole("button", { name: "Close Terminal 1" }));
+
+  expect(terminal.kill).toHaveBeenCalledWith("term-1");
+  expect(terminal.create).toHaveBeenCalledTimes(1);
+  expect(await screen.findByText("No terminal tabs")).toBeInTheDocument();
+});
+
+it("surfaces terminal creation failures with a retry path", async () => {
+  const user = userEvent.setup();
+  const terminal = installTerminalMock();
+  terminal.create.mockRejectedValueOnce(new Error("max terminals reached"));
+  seedSettings({ enabled: true, maxConcurrent: 4 });
+
+  render(<Terminal />);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "max terminals reached",
+  );
+  expect(terminal.create).toHaveBeenCalledTimes(1);
+
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+
+  expect(await screen.findByRole("tab", { name: /Terminal 1/ })).toBeVisible();
+  expect(terminal.create).toHaveBeenCalledTimes(2);
+});
+
+it("lists exited terminal sessions in the tab bar", async () => {
+  seedSettings({ enabled: true, maxConcurrent: 4 });
+  useTerminalStore.setState({
+    terminals: {
+      exited: {
+        id: "exited",
+        cwd: "/work/app",
+        shell: "/bin/zsh",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        exited: true,
+        exitCode: 0,
+      },
+    },
+  });
+
+  render(<Terminal />);
+
+  expect(screen.getByRole("tab", { name: /Terminal 1 exited/ })).toBeVisible();
+  expect(screen.getByText("exited")).toBeInTheDocument();
 });
