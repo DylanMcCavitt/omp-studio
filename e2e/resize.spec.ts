@@ -170,6 +170,46 @@ async function openView(label: string): Promise<void> {
   ).toBeVisible();
 }
 
+async function installMockLinearIssueIpc(): Promise<void> {
+  await app.evaluate(({ ipcMain }) => {
+    const channels = [
+      "linear:status",
+      "linear:teams",
+      "linear:projects",
+      "linear:issues",
+    ] as const;
+    for (const channel of channels) ipcMain.removeHandler(channel);
+
+    ipcMain.handle("linear:status", async () => ({
+      status: "authenticated",
+      writesEnabled: false,
+      viewer: { id: "u1", name: "Ada Lovelace" },
+    }));
+    ipcMain.handle("linear:teams", async () => [
+      { id: "team-1", key: "LOO", name: "Long Operations" },
+    ]);
+    ipcMain.handle("linear:projects", async () => [
+      { id: "project-1", name: "Factory Nucleus With A Long Name" },
+    ]);
+    ipcMain.handle("linear:issues", async () => [
+      {
+        id: "age-900",
+        identifier: "AGE-900",
+        title:
+          "Add shared agent deterministic checkpoint title rendering without clipping adjacent state badges",
+        url: "https://linear.app/dylanmccavitt/issue/AGE-900",
+        priority: 1,
+        state: { name: "Backlog", type: "backlog" },
+        team: { key: "LOO" },
+        project: { name: "Factory Nucleus With A Long Name" },
+        assignee: { name: "Ada Lovelace With A Long Name" },
+        createdAt: "2026-06-01T00:00:00.000Z",
+        updatedAt: "2026-06-26T00:00:00.000Z",
+      },
+    ]);
+  });
+}
+
 for (const width of WIDTHS) {
   test(`no document horizontal overflow across views at ${width}px`, async () => {
     await setContentSize(width, HEIGHT);
@@ -186,6 +226,46 @@ for (const width of WIDTHS) {
     expect(pageErrors).toEqual([]);
   });
 }
+
+test("real Linear issue rows stay inside a narrow tool panel", async () => {
+  await setContentSize(760, HEIGHT);
+  await installMockLinearIssueIpc();
+  await openView("Linear");
+
+  const panel = page.getByRole("complementary", { name: "Linear panel" });
+  const row = panel.locator("button", { hasText: "AGE-900" }).first();
+  await expect(row).toBeVisible();
+  await expect(
+    row.getByText(
+      "Add shared agent deterministic checkpoint title rendering without clipping adjacent state badges",
+    ),
+  ).toBeVisible();
+  await expect(row.getByText("Urgent")).toBeVisible();
+  await expect(row.getByText("Backlog")).toBeVisible();
+  await expect(row.getByText("LOO")).toBeVisible();
+
+  expect(await documentOverflow()).toBeLessThanOrEqual(1);
+  const panelOverflow = await panel.evaluate((el) =>
+    Math.max(0, el.scrollWidth - el.clientWidth),
+  );
+  expect(panelOverflow).toBeLessThanOrEqual(1);
+  const rowOverflow = await row.evaluate((el) =>
+    Math.max(0, el.scrollWidth - el.clientWidth),
+  );
+  expect(rowOverflow).toBeLessThanOrEqual(1);
+
+  const panelBox = await panel.boundingBox();
+  const rowBox = await row.boundingBox();
+  if (!panelBox || !rowBox) throw new Error("Linear row has no bounding box");
+  expect(rowBox.x).toBeGreaterThanOrEqual(panelBox.x);
+  expect(rowBox.x + rowBox.width).toBeLessThanOrEqual(
+    panelBox.x + panelBox.width + 1,
+  );
+  await panel.screenshot({ path: "test-results/linear-narrow-panel.png" });
+
+  expect(rendererCrashes).toEqual([]);
+  expect(pageErrors).toEqual([]);
+});
 
 test("dragging the sidebar splitter to its minimum keeps content in-panel", async () => {
   await setContentSize(760, HEIGHT);

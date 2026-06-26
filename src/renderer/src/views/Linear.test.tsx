@@ -142,7 +142,7 @@ it("groups fetched issues by workflow state", async () => {
   expect(within(doneGroup).getByText("Merged slice")).toBeInTheDocument();
 });
 
-it("keeps long issue titles from pushing badges out of the row", async () => {
+it("keeps narrow issue rows contained without crowding badges", async () => {
   const longTitle =
     "Add shared agent deterministic checkpoint title rendering without clipping adjacent state badges";
   stubLinear({
@@ -152,7 +152,13 @@ it("keeps long issue titles from pushing badges out of the row", async () => {
         id: "age-900",
         title: longTitle,
         priority: 1,
-        state: { name: "Backlog", type: "backlog" },
+        state: {
+          name: "Backlog With A Deliberately Long Workflow State Name",
+          type: "backlog",
+        },
+        team: { key: "LOO" },
+        project: { name: "Factory Nucleus With A Deliberately Long Name" },
+        assignee: { name: "Ada Lovelace With A Deliberately Long Name" },
       }),
     ]),
   });
@@ -161,17 +167,39 @@ it("keeps long issue titles from pushing badges out of the row", async () => {
 
   const row = (await screen.findByText(longTitle)).closest("button");
   expect(row).not.toBeNull();
+  expect((row as HTMLElement).className).toContain("min-w-0");
+  expect((row as HTMLElement).className).toContain("overflow-hidden");
   const titleLine = (row as HTMLElement).firstElementChild as HTMLElement;
+  const metadataLine = (row as HTMLElement).lastElementChild as HTMLElement;
   const title = within(row as HTMLElement).getByText(longTitle);
-  expect(titleLine.className).toContain("min-w-0");
-  expect(title.className).toContain("min-w-0");
-  expect(title.className).toContain("truncate");
+  expect(titleLine.className).toContain("items-start");
+  expect(title.className).toContain("line-clamp-2");
+  expect(title.className).toContain("[overflow-wrap:anywhere]");
+  expect(metadataLine.className).toContain("min-w-0");
+  expect(metadataLine.className).toContain("flex-wrap");
+  expect(metadataLine.className).toContain("gap-y-1");
   expect(within(row as HTMLElement).getByText("Urgent").className).toContain(
     "shrink-0",
   );
-  expect(within(row as HTMLElement).getByText("Backlog").className).toContain(
+  const stateBadge = within(row as HTMLElement).getByText(
+    "Backlog With A Deliberately Long Workflow State Name",
+  );
+  expect(stateBadge.className).toContain("max-w-full");
+  expect(stateBadge.className).toContain("shrink");
+  expect(stateBadge.className).toContain("truncate");
+  expect(within(row as HTMLElement).getByText("LOO").className).toContain(
     "shrink-0",
   );
+  expect(
+    within(row as HTMLElement).getByText(
+      "Factory Nucleus With A Deliberately Long Name",
+    ).className,
+  ).toContain("truncate");
+  expect(
+    within(row as HTMLElement).getByText(
+      "Ada Lovelace With A Deliberately Long Name",
+    ).className,
+  ).toContain("truncate");
 });
 
 it("renders Linear state dots in the live-dot language", async () => {

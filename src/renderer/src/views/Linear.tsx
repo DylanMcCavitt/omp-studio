@@ -33,7 +33,7 @@ import { formatRelativeTime } from "@/lib/format";
 import { useLinearStore } from "@/store/linear";
 
 const ROW =
-  "flex w-full flex-col gap-1 rounded-md border border-border bg-bg-raised px-3 py-2 text-left transition hover:bg-bg-hover";
+  "flex min-w-0 w-full flex-col gap-1 overflow-hidden rounded-md border border-border bg-bg-raised px-3 py-2 text-left transition hover:bg-bg-hover";
 
 /** Linear's numeric priority scale (0 = none … 1 = urgent). */
 const PRIORITY: Record<number, { label: string; variant: BadgeVariant }> = {
@@ -275,7 +275,7 @@ export default function Linear() {
 
             <Combobox
               aria-label="Team filter"
-              className="w-56"
+              className="min-w-0 flex-1 basis-44"
               options={teamOptions}
               value={teamId}
               onChange={(v) => {
@@ -288,7 +288,7 @@ export default function Linear() {
 
             <Combobox
               aria-label="Project filter"
-              className="w-56"
+              className="min-w-0 flex-1 basis-44"
               options={projectOptions}
               value={projectName}
               onChange={setProjectName}
@@ -302,7 +302,7 @@ export default function Linear() {
             </span>
           </div>
 
-          <div className="scrollbar min-h-0 flex-1 overflow-auto px-6 py-4">
+          <div className="scrollbar min-h-0 flex-1 overflow-auto overflow-x-hidden px-6 py-4">
             {loading && issues.length === 0 ? (
               <div className="flex justify-center p-8">
                 <Spinner />
@@ -320,11 +320,15 @@ export default function Linear() {
                 hint="Nothing matches the current filters."
               />
             ) : (
-              <div className="space-y-5">
+              <div className="min-w-0 space-y-5">
                 {visibleGroups.map((group, index) => {
                   const headingId = `linear-state-${index}`;
                   return (
-                    <section key={group.key} aria-labelledby={headingId}>
+                    <section
+                      key={group.key}
+                      aria-labelledby={headingId}
+                      className="min-w-0"
+                    >
                       <div className="mb-2 flex items-center gap-2">
                         <StateDot type={group.type} />
                         <h2
@@ -337,7 +341,7 @@ export default function Linear() {
                           {group.issues.length}
                         </span>
                       </div>
-                      <div className="space-y-2">
+                      <div className="min-w-0 space-y-2">
                         {group.issues.map((issue) => {
                           const priority =
                             issue.priority != null
@@ -350,16 +354,16 @@ export default function Linear() {
                               onClick={() => window.omp.openExternal(issue.url)}
                               className={ROW}
                             >
-                              <div className="flex min-w-0 items-center gap-2">
+                              <div className="flex min-w-0 items-start gap-2">
                                 <StateDot type={issue.state.type} />
-                                <span className="shrink-0 font-mono text-xs text-ink-faint">
+                                <span className="shrink-0 pt-0.5 font-mono text-xs text-ink-faint">
                                   {issue.identifier}
                                 </span>
-                                <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                                <span className="line-clamp-2 min-w-0 flex-1 text-left text-sm leading-5 text-ink [overflow-wrap:anywhere]">
                                   {issue.title}
                                 </span>
                               </div>
-                              <div className="flex flex-wrap items-center gap-2 pl-4 text-xs text-ink-faint">
+                              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-4 text-xs text-ink-faint">
                                 {priority && (
                                   <Badge
                                     variant={priority.variant}
@@ -372,23 +376,27 @@ export default function Linear() {
                                   variant={
                                     STATE_VARIANT[issue.state.type] ?? "muted"
                                   }
-                                  className="shrink-0"
+                                  className="max-w-full shrink truncate"
                                 >
                                   {issue.state.name}
                                 </Badge>
                                 {issue.team?.key && (
-                                  <Badge variant="muted">
+                                  <Badge variant="muted" className="shrink-0">
                                     {issue.team.key}
                                   </Badge>
                                 )}
                                 {issue.project?.name && (
-                                  <span>{issue.project.name}</span>
+                                  <span className="inline-block max-w-[12rem] truncate align-bottom">
+                                    {issue.project.name}
+                                  </span>
                                 )}
                                 {issue.assignee?.name && (
-                                  <span>{issue.assignee.name}</span>
+                                  <span className="inline-block max-w-[12rem] truncate align-bottom">
+                                    {issue.assignee.name}
+                                  </span>
                                 )}
-                                <span>·</span>
-                                <span>
+                                <span className="shrink-0">·</span>
+                                <span className="shrink-0">
                                   {formatRelativeTime(issue.updatedAt)}
                                 </span>
                               </div>
