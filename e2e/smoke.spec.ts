@@ -66,6 +66,10 @@ const RAIL_DESTINATIONS: readonly {
     },
   },
   {
+    label: "Changes",
+    assertRendered: heading("Changes"),
+  },
+  {
     label: "GitHub",
     assertRendered: async (panel) => {
       await heading("GitHub")(panel);

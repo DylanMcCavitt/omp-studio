@@ -3,6 +3,7 @@ import { electronApp, is, optimizer } from "@electron-toolkit/utils";
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { BrowserViewManager } from "./browser/view-manager";
 import { registerBrowserIpc } from "./ipc/browser";
+import { registerChangesIpc } from "./ipc/changes";
 import { registerChatIpc } from "./ipc/chat";
 import { registerDataIpc } from "./ipc/data";
 import { registerFilesIpc } from "./ipc/files";
@@ -113,6 +114,9 @@ void app.whenReady().then(async () => {
   // against main-owned settings. No selected workspace => safe-empty, never a
   // fallback to an unrelated active chat cwd.
   registerFilesIpc(ipcMain);
+  // Read-only local git diff, scoped to the same renderer-selected, settings
+  // validated workspace root as Files. No selected workspace => safe-empty.
+  registerChangesIpc(ipcMain);
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);
   registerLinearIpc(ipcMain);

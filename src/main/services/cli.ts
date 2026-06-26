@@ -10,6 +10,8 @@ export interface CliResult {
 export interface CliOptions {
   cwd?: string;
   timeoutMs?: number;
+  /** Kill the child and resolve `code: -1` once stdout exceeds this many bytes. */
+  maxBytes?: number;
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
@@ -28,6 +30,7 @@ export async function runCli(
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let capped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const finish = (result: CliResult): void => {
@@ -51,7 +54,13 @@ export async function runCli(
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
+      if (capped) return;
       stdout += chunk.toString();
+      if (opts.maxBytes !== undefined && stdout.length > opts.maxBytes) {
+        capped = true;
+        child.kill("SIGKILL");
+        finish({ stdout, stderr, code: -1 });
+      }
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();

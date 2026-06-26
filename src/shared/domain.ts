@@ -300,3 +300,52 @@ export interface FileContent {
   /** True when the file looks binary (NUL bytes) and was not decoded. */
   binary: boolean;
 }
+// ---------------------------------------------------------------------------
+// Changes (feature 9) — read-only local git diff for the active workspace. All
+// git access happens in the main process, scoped to the active workspace cwd;
+// the renderer only ever sees these mapped shapes.
+// ---------------------------------------------------------------------------
+
+export type ChangeStatus =
+  | "modified"
+  | "added"
+  | "deleted"
+  | "renamed"
+  | "untracked";
+
+/** One locally changed file (staged + unstaged combined) under the workspace. */
+export interface ChangedFile {
+  /** Workspace-relative path (POSIX-style). */
+  relPath: string;
+  status: ChangeStatus;
+}
+
+/** Status result: a clean repo returns `repo: true` with an empty file list. */
+export interface ChangesStatus {
+  /** False when the workspace is not a git repo or `git` is unavailable. */
+  repo: boolean;
+  files: ChangedFile[];
+}
+
+export type DiffLineType = "context" | "add" | "remove";
+
+export interface DiffLine {
+  type: DiffLineType;
+  text: string;
+}
+
+export interface DiffHunk {
+  oldStart: number;
+  newStart: number;
+  lines: DiffLine[];
+}
+
+/**
+ * Parsed unified diff for a single file; `binary` is true (with empty `hunks`)
+ * when git reports a binary change.
+ */
+export interface FileDiff {
+  relPath: string;
+  binary: boolean;
+  hunks: DiffHunk[];
+}

@@ -5,8 +5,10 @@
 import type {
   AgentInfo,
   BrowserViewState,
+  ChangesStatus,
   DashboardData,
   FileContent,
+  FileDiff,
   FileEntry,
   GhIssue,
   GhPr,
@@ -130,6 +132,9 @@ export const CH = {
   filesReadDir: "files:readDir",
   filesReadFile: "files:readFile",
   filesWriteFile: "files:writeFile",
+  // feature 9 — changes (req/resp; read-only git diff scoped to active workspace cwd)
+  changesStatus: "changes:status",
+  changesDiff: "changes:diff",
 } as const;
 
 export type ChannelName = (typeof CH)[keyof typeof CH];
@@ -467,5 +472,15 @@ export interface OmpApi {
       text: string,
       workspaceRoot?: string | null,
     ): Promise<{ ok: boolean; error?: string }>;
+  };
+
+  changes: {
+    /** Workspace uncommitted status; `repo: false` when not a git workspace. */
+    status(workspaceRoot?: string | null): Promise<ChangesStatus>;
+    /** Unified diff for one workspace-relative file; `null` when unavailable. */
+    diff(
+      relPath: string,
+      workspaceRoot?: string | null,
+    ): Promise<FileDiff | null>;
   };
 }
