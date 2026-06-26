@@ -62,6 +62,18 @@ function stubLinear(over: Record<string, unknown>) {
   } as unknown as Partial<OmpApi>);
 }
 
+function issueTitles(group: HTMLElement, titles: string[]): string[] {
+  return within(group)
+    .getAllByRole("button")
+    .map((row) => {
+      const title = titles.find((candidate) =>
+        row.textContent?.includes(candidate),
+      );
+      if (!title) throw new Error(`No known issue title in ${row.textContent}`);
+      return title;
+    });
+}
+
 beforeEach(resetStore);
 
 it("degrades to the connect form (and fires no issue query) when unauthenticated", async () => {
@@ -140,6 +152,120 @@ it("groups fetched issues by workflow state", async () => {
   expect(within(todoGroup).getByText("Refine copy")).toBeInTheDocument();
   expect(within(runningGroup).getByText("Ship panel")).toBeInTheDocument();
   expect(within(doneGroup).getByText("Merged slice")).toBeInTheDocument();
+});
+
+it("sorts visible issues inside state groups", async () => {
+  const user = userEvent.setup();
+  const titles = [
+    "Other project urgent",
+    "Urgent older",
+    "High newest",
+    "Low created newest",
+    "No priority newer",
+  ];
+  const issues = [
+    issue({
+      id: "age-10",
+      title: "No priority newer",
+      project: { name: "Apollo" },
+      updatedAt: "2026-06-03T00:00:00.000Z",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    }),
+    issue({
+      id: "age-2",
+      title: "Urgent older",
+      priority: 1,
+      project: { name: "Apollo" },
+      updatedAt: "2026-06-01T00:00:00.000Z",
+      createdAt: "2026-01-02T00:00:00.000Z",
+    }),
+    issue({
+      id: "age-3",
+      title: "High newest",
+      priority: 2,
+      project: { name: "Apollo" },
+      updatedAt: "2026-06-04T00:00:00.000Z",
+      createdAt: "2026-01-03T00:00:00.000Z",
+    }),
+    issue({
+      id: "age-4",
+      title: "Low created newest",
+      priority: 4,
+      project: { name: "Apollo" },
+      updatedAt: "2026-06-02T00:00:00.000Z",
+      createdAt: "2026-01-04T00:00:00.000Z",
+    }),
+    issue({
+      id: "age-1",
+      title: "Other project urgent",
+      priority: 1,
+      project: { name: "Zephyr" },
+      updatedAt: "2026-06-05T00:00:00.000Z",
+      createdAt: "2025-12-31T00:00:00.000Z",
+    }),
+  ];
+  stubLinear({
+    status: vi.fn().mockResolvedValue(AUTHED),
+    listProjects: vi.fn().mockResolvedValue([
+      { id: "p1", name: "Apollo" },
+      { id: "p2", name: "Zephyr" },
+    ]),
+    listIssues: vi.fn().mockResolvedValue(issues),
+  });
+
+  render(<Linear />);
+
+  const todoGroup = await screen.findByRole("region", { name: "Todo" });
+  expect(issueTitles(todoGroup, titles)).toEqual([
+    "Other project urgent",
+    "High newest",
+    "No priority newer",
+    "Low created newest",
+    "Urgent older",
+  ]);
+
+  await user.click(screen.getByRole("button", { name: /Sort issues:/ }));
+  await user.click(await screen.findByRole("menuitem", { name: "Priority" }));
+  expect(issueTitles(todoGroup, titles)).toEqual([
+    "Other project urgent",
+    "Urgent older",
+    "High newest",
+    "Low created newest",
+    "No priority newer",
+  ]);
+
+  await user.click(screen.getByRole("button", { name: /Sort issues:/ }));
+  await user.click(await screen.findByRole("menuitem", { name: "Created" }));
+  expect(issueTitles(todoGroup, titles)).toEqual([
+    "Low created newest",
+    "High newest",
+    "Urgent older",
+    "No priority newer",
+    "Other project urgent",
+  ]);
+
+  await user.click(screen.getByRole("button", { name: /Sort issues:/ }));
+  await user.click(await screen.findByRole("menuitem", { name: "Issue key" }));
+  expect(issueTitles(todoGroup, titles)).toEqual([
+    "Other project urgent",
+    "Urgent older",
+    "High newest",
+    "Low created newest",
+    "No priority newer",
+  ]);
+
+  await user.click(screen.getByRole("button", { name: /Sort issues:/ }));
+  await user.click(await screen.findByRole("menuitem", { name: "Priority" }));
+  await user.click(screen.getByRole("combobox", { name: "Project filter" }));
+  await user.click(await screen.findByRole("option", { name: "Apollo" }));
+
+  expect(issueTitles(todoGroup, titles)).toEqual([
+    "Urgent older",
+    "High newest",
+    "Low created newest",
+    "No priority newer",
+  ]);
+  expect(window.omp.linear.listIssues).toHaveBeenCalledTimes(1);
 });
 
 it("keeps narrow issue rows contained without crowding badges", async () => {

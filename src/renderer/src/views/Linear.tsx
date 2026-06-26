@@ -64,6 +64,20 @@ const STATE_TONE: Record<string, LinearStateTone> = {
   canceled: "todo",
 };
 
+type SortMode = "updated" | "priority" | "created" | "identifier";
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "updated", label: "Recently updated" },
+  { value: "priority", label: "Priority" },
+  { value: "created", label: "Created" },
+  { value: "identifier", label: "Issue key" },
+];
+
+const IDENTIFIER_COLLATOR = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
 interface IssueStateGroup {
   key: string;
   name: string;
@@ -71,7 +85,52 @@ interface IssueStateGroup {
   issues: LinearIssue[];
 }
 
-function groupIssuesByState(issues: LinearIssue[]): IssueStateGroup[] {
+function timestamp(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function priorityRank(issue: LinearIssue): number {
+  return issue.priority != null && PRIORITY[issue.priority]
+    ? issue.priority
+    : 5;
+}
+
+function compareIssueIdentifier(a: LinearIssue, b: LinearIssue): number {
+  return IDENTIFIER_COLLATOR.compare(a.identifier, b.identifier);
+}
+
+function compareIssues(
+  a: LinearIssue,
+  b: LinearIssue,
+  sortMode: SortMode,
+): number {
+  switch (sortMode) {
+    case "priority":
+      return (
+        priorityRank(a) - priorityRank(b) ||
+        timestamp(b.updatedAt) - timestamp(a.updatedAt) ||
+        compareIssueIdentifier(a, b)
+      );
+    case "created":
+      return (
+        timestamp(b.createdAt) - timestamp(a.createdAt) ||
+        compareIssueIdentifier(a, b)
+      );
+    case "identifier":
+      return compareIssueIdentifier(a, b);
+    case "updated":
+      return (
+        timestamp(b.updatedAt) - timestamp(a.updatedAt) ||
+        compareIssueIdentifier(a, b)
+      );
+  }
+}
+
+function groupIssuesByState(
+  issues: LinearIssue[],
+  sortMode: SortMode,
+): IssueStateGroup[] {
   const groups = new Map<string, IssueStateGroup>();
   for (const issue of issues) {
     const key = `${issue.state.type}:${issue.state.name}`;
@@ -86,6 +145,9 @@ function groupIssuesByState(issues: LinearIssue[]): IssueStateGroup[] {
         issues: [issue],
       });
     }
+  }
+  for (const group of groups.values()) {
+    group.issues.sort((a, b) => compareIssues(a, b, sortMode));
   }
   return [...groups.values()];
 }
@@ -148,7 +210,7 @@ export default function Linear() {
   const [teamId, setTeamId] = useState("");
   const [assignedToMe, setAssignedToMe] = useState(false);
   const [projectName, setProjectName] = useState("");
-
+  const [sortMode, setSortMode] = useState<SortMode>("updated");
   const authed = status?.status === "authenticated";
 
   useEffect(() => {
@@ -179,7 +241,10 @@ export default function Linear() {
         : issues,
     [issues, projectName],
   );
-  const visibleGroups = useMemo(() => groupIssuesByState(visible), [visible]);
+  const visibleGroups = useMemo(
+    () => groupIssuesByState(visible, sortMode),
+    [visible, sortMode],
+  );
 
   const teamOptions = [
     { value: "", label: "All teams" },
@@ -189,6 +254,9 @@ export default function Linear() {
     { value: "", label: "All projects" },
     ...projects.map((p) => ({ value: p.name, label: p.name })),
   ];
+  const sortLabel =
+    SORT_OPTIONS.find((option) => option.value === sortMode)?.label ??
+    "Recently updated";
 
   return (
     <div className="flex h-full flex-col">
@@ -295,6 +363,32 @@ export default function Linear() {
               placeholder="All projects"
               searchPlaceholder="Filter projects…"
             />
+
+            <Menu
+              aria-label="Issue sort"
+              trigger={({ open, toggle, triggerRef }) => (
+                <button
+                  ref={triggerRef}
+                  type="button"
+                  onClick={toggle}
+                  aria-expanded={open}
+                  aria-haspopup="menu"
+                  aria-label={`Sort issues: ${sortLabel}`}
+                  className="flex items-center gap-2 rounded-lg border border-border-subtle bg-bg-raised px-3 py-2 text-sm text-ink transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                >
+                  Sort: {sortLabel}
+                </button>
+              )}
+            >
+              {SORT_OPTIONS.map((option) => (
+                <MenuItem
+                  key={option.value}
+                  onClick={() => setSortMode(option.value)}
+                >
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Menu>
 
             <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-ink-faint">
               <ListFilter className="h-3.5 w-3.5" />
