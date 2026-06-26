@@ -88,6 +88,7 @@ const RAIL_DESTINATIONS: readonly Destination[] = [
       ).toBeVisible();
     },
   },
+  { label: "Changes", title: "Changes" },
   { label: "GitHub", title: "GitHub" },
   {
     label: "Linear",

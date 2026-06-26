@@ -18,6 +18,7 @@ const ALL_ROUTES = [
   "agents",
   "terminal",
   "browser",
+  "changes",
   "github",
   "linear",
   "settings",

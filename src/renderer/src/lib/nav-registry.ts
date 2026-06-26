@@ -1,5 +1,6 @@
 import {
   Bot,
+  GitBranch,
   Github,
   Globe,
   History,
@@ -16,6 +17,7 @@ import type { ComponentType } from "react";
 import type { Route } from "@/store/app";
 import Agents from "@/views/Agents";
 import Browser from "@/views/Browser";
+import Changes from "@/views/Changes";
 import Chat from "@/views/Chat";
 import Dashboard from "@/views/Dashboard";
 import GitHub from "@/views/GitHub";
@@ -88,6 +90,12 @@ const NAV_REGISTRY = {
     group: "tools",
   },
   browser: { label: "Browser", icon: Globe, view: Browser, group: "tools" },
+  changes: {
+    label: "Changes",
+    icon: GitBranch,
+    view: Changes,
+    group: "tools",
+  },
   github: {
     label: "GitHub",
     icon: Github,

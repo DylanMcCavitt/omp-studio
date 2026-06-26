@@ -16,6 +16,7 @@ export type Route =
   | "linear"
   | "terminal"
   | "browser"
+  | "changes"
   | "settings";
 
 /** A request to open a specific session transcript scrolled to a message. */

@@ -61,7 +61,7 @@ export function registerFilesIpc(ipcMain: IpcMain): void {
   );
 }
 
-async function resolveFilesRoot(
+export async function resolveFilesRoot(
   workspaceRoot: string | null | undefined,
 ): Promise<string | undefined> {
   if (

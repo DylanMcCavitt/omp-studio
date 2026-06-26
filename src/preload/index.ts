@@ -213,6 +213,13 @@ const api: OmpApi = {
     writeFile: (relPath: string, text: string, workspaceRoot?: string | null) =>
       ipcRenderer.invoke(CH.filesWriteFile, relPath, text, workspaceRoot),
   },
+
+  changes: {
+    status: (workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(CH.changesStatus, workspaceRoot),
+    diff: (relPath: string, workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(CH.changesDiff, relPath, workspaceRoot),
+  },
 };
 
 if (process.contextIsolated) {
