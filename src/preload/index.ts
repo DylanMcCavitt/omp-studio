@@ -217,6 +217,8 @@ const api: OmpApi = {
   changes: {
     status: (workspaceRoot?: string | null) =>
       ipcRenderer.invoke(CH.changesStatus, workspaceRoot),
+    workspaceInfo: (workspaceRoot?: string | null) =>
+      ipcRenderer.invoke(CH.changesWorkspaceInfo, workspaceRoot),
     diff: (relPath: string, workspaceRoot?: string | null) =>
       ipcRenderer.invoke(CH.changesDiff, relPath, workspaceRoot),
   },

@@ -4,6 +4,7 @@
 // bumps its recency — it never touches live sessions, and selecting or adding
 // spawns nothing.
 
+import type { GitWorkspaceInfo } from "@shared/domain";
 import type { Workspace } from "@shared/ipc";
 import {
   Check,
@@ -12,7 +13,7 @@ import {
   Plus,
   SlidersHorizontal,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, MenuItem, MenuSeparator } from "@/components/ui";
 import { AddWorkspaceDialog } from "@/components/workspace/AddWorkspaceDialog";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
@@ -46,6 +47,44 @@ export function WorkspaceSwitcher() {
     : selectedProject
       ? projectLabel(selectedProject)
       : "Select workspace";
+  const [gitInfo, setGitInfo] = useState<GitWorkspaceInfo>({
+    repo: false,
+    branch: null,
+    worktreePath: null,
+  });
+  const gitMeta = gitInfo.repo
+    ? [gitInfo.branch, gitInfo.worktreePath].filter(Boolean).join(" · ")
+    : "";
+
+  useEffect(() => {
+    let alive = true;
+    const empty: GitWorkspaceInfo = {
+      repo: false,
+      branch: null,
+      worktreePath: null,
+    };
+    const load = () => {
+      if (!selectedProject || !window.omp.changes?.workspaceInfo) {
+        setGitInfo(empty);
+        return;
+      }
+      window.omp.changes.workspaceInfo(selectedProject).then(
+        (info) => {
+          if (alive) setGitInfo(info);
+        },
+        () => {
+          if (alive) setGitInfo(empty);
+        },
+      );
+    };
+
+    load();
+    window.addEventListener("focus", load);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", load);
+    };
+  }, [selectedProject]);
 
   const select = (workspace: Workspace) => {
     setSelectedProject(workspace.cwd);
@@ -90,19 +129,27 @@ export function WorkspaceSwitcher() {
               "transition-colors hover:border-border-strong",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
             )}
+            title={gitMeta || currentLabel}
           >
             {current?.color ? (
               <WorkspaceColorDot color={current.color} className="h-3 w-3" />
             ) : (
               <FolderOpen className="h-4 w-4 shrink-0 text-ink-muted" />
             )}
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate",
-                current ? "text-ink" : "text-ink-faint",
+            <span className="min-w-0 flex-1">
+              <span
+                className={cn(
+                  "block truncate",
+                  current ? "text-ink" : "text-ink-faint",
+                )}
+              >
+                {currentLabel}
+              </span>
+              {gitMeta && (
+                <span className="block truncate font-mono text-[11px] leading-tight text-ink-faint">
+                  {gitMeta}
+                </span>
               )}
-            >
-              {currentLabel}
             </span>
             <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-faint" />
           </button>

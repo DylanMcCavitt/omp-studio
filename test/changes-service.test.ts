@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -132,11 +132,18 @@ gitTest(
       writeFileSync(join(dir, "stable.ts"), "s\n", "utf8");
       git("add a.ts stable.ts", dir);
       git("commit -q -m base", dir);
+      git("checkout -q -b feature/metadata", dir);
       writeFileSync(join(dir, "a.ts"), "a\nB\nc\n", "utf8");
       git("mv stable.ts stable-renamed.ts", dir);
       writeFileSync(join(dir, "new.ts"), "hello\n", "utf8");
 
       const svc = createChangesService(() => dir);
+      const info = await svc.workspaceInfo();
+      expect(info).toEqual({
+        repo: true,
+        branch: "feature/metadata",
+        worktreePath: realpathSync(dir),
+      });
 
       const status = await svc.status();
       expect(status.repo).toBe(true);
@@ -179,6 +186,12 @@ gitTest(
         const degraded = await noGit.status();
         expect(degraded.repo).toBe(false);
         expect(degraded.files).toEqual([]);
+        const noGitInfo = await noGit.workspaceInfo();
+        expect(noGitInfo).toEqual({
+          repo: false,
+          branch: null,
+          worktreePath: null,
+        });
       } finally {
         rmSync(notRepo, { recursive: true, force: true });
       }

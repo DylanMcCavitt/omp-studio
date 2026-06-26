@@ -26,6 +26,11 @@ function seedWorkspace(color: WorkspaceColorKey | undefined) {
     recordWorkspace: vi.fn(),
   });
   useAppStore.setState({ selectedProject: "/p/alpha" } as never);
+  Object.assign(window.omp, {
+    changes: {
+      workspaceInfo: vi.fn(() => new Promise(() => {})),
+    },
+  });
 }
 
 it("shows the current workspace's color swatch in the trigger when set", () => {
@@ -44,4 +49,42 @@ it("shows no swatch in the trigger when the workspace has no color", () => {
 
   const trigger = screen.getByRole("button", { name: /Alpha/ });
   expect(trigger.querySelector("span[style]")).toBeNull();
+});
+
+it("shows active git branch and worktree path in the trigger", async () => {
+  seedWorkspace("blue");
+  vi.mocked(window.omp.changes.workspaceInfo).mockResolvedValue({
+    repo: true,
+    branch: "feature/alpha",
+    worktreePath: "/private/tmp/omp-wt/age-741",
+  });
+
+  render(<WorkspaceSwitcher />);
+
+  expect(
+    await screen.findByText(/feature\/alpha .*\/private\/tmp\/omp-wt\/age-741/),
+  ).toBeInTheDocument();
+  expect(window.omp.changes.workspaceInfo).toHaveBeenCalledWith("/p/alpha");
+});
+
+it("refreshes git metadata when the window regains focus", async () => {
+  seedWorkspace("blue");
+  vi.mocked(window.omp.changes.workspaceInfo)
+    .mockResolvedValueOnce({
+      repo: true,
+      branch: "main",
+      worktreePath: "/p/alpha",
+    })
+    .mockResolvedValueOnce({
+      repo: true,
+      branch: "feature/focus",
+      worktreePath: "/p/alpha",
+    });
+
+  render(<WorkspaceSwitcher />);
+  await screen.findByText(/main .*\/p\/alpha/);
+
+  window.dispatchEvent(new Event("focus"));
+
+  await screen.findByText(/feature\/focus .*\/p\/alpha/);
 });

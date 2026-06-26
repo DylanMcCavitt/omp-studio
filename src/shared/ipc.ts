@@ -13,6 +13,7 @@ import type {
   GhIssue,
   GhPr,
   GhRepo,
+  GitWorkspaceInfo,
   LinearIssue,
   LinearProjectInfo,
   LinearStatusInfo,
@@ -134,6 +135,7 @@ export const CH = {
   filesWriteFile: "files:writeFile",
   // feature 9 — changes (req/resp; read-only git diff scoped to active workspace cwd)
   changesStatus: "changes:status",
+  changesWorkspaceInfo: "changes:workspaceInfo",
   changesDiff: "changes:diff",
 } as const;
 
@@ -477,6 +479,8 @@ export interface OmpApi {
   changes: {
     /** Workspace uncommitted status; `repo: false` when not a git workspace. */
     status(workspaceRoot?: string | null): Promise<ChangesStatus>;
+    /** Branch + worktree metadata for workspace chrome. */
+    workspaceInfo(workspaceRoot?: string | null): Promise<GitWorkspaceInfo>;
     /** Unified diff for one workspace-relative file; `null` when unavailable. */
     diff(
       relPath: string,
