@@ -8,7 +8,7 @@
 // separate sandboxed view — we state the model plainly and never call it
 // "secure". On unmount the view is destroyed and the subscription released.
 
-import { Globe, ShieldAlert } from "lucide-react";
+import { Globe, Navigation, ShieldAlert } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 import { BrowserChrome } from "@/components/browser/BrowserChrome";
 import { useBrowserBounds } from "@/components/browser/useBrowserBounds";
@@ -25,6 +25,7 @@ export default function Browser() {
   const viewId = useBrowserStore((s) => s.viewId);
   const state = useBrowserStore((s) => s.state);
   const history = useBrowserStore((s) => s.history);
+  const error = useBrowserStore((s) => s.error);
   const ensureSubscribed = useBrowserStore((s) => s.ensureSubscribed);
   const teardown = useBrowserStore((s) => s.teardown);
   const createView = useBrowserStore((s) => s.create);
@@ -106,9 +107,47 @@ export default function Browser() {
         onForward={forward}
         onReload={reload}
       />
+      <BrowserPanelState state={state} error={error} />
       {/* Empty overlay target — the main-owned WebContentsView is positioned on
           top of this rect (see useBrowserBounds); no remote content lives here. */}
       <div ref={placeholderRef} className="min-h-0 flex-1" />
+    </div>
+  );
+}
+
+function BrowserPanelState({
+  state,
+  error,
+}: {
+  state: { url: string; loading: boolean; error?: string } | null;
+  error: string | undefined;
+}) {
+  if (error) {
+    return (
+      <div
+        role="alert"
+        className="border-b border-danger/30 px-4 py-3 text-sm text-danger"
+      >
+        Browser view failed to start: {error}
+      </div>
+    );
+  }
+
+  if (state?.url || state?.loading || state?.error) return null;
+
+  return (
+    <div className="border-b border-border-subtle bg-bg-panel px-4 py-3">
+      <div className="flex items-start gap-3 text-sm">
+        <Navigation className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+        <div>
+          <p className="font-medium text-ink">Start with an http(s) URL.</p>
+          <p className="mt-1 text-xs leading-5 text-ink-muted">
+            Enter a website above. The page opens in an isolated, ephemeral
+            WebContentsView with no preload, Node access, OMP bridge, or agent
+            auto-control.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -117,5 +117,79 @@ it("creates the main-owned view and renders the chrome when enabled", async () =
   });
   // The chrome (not the gate) is mounted.
   expect(screen.getByLabelText("Address")).toBeInTheDocument();
+  expect(screen.getByText("Start with an http(s) URL.")).toBeInTheDocument();
   expect(screen.queryByText("Embedded browser is off")).not.toBeInTheDocument();
+});
+
+it("shows loading and navigation errors in the enabled panel", async () => {
+  seedSettings(true);
+  const initial: BrowserViewState = {
+    id: "v1",
+    url: "https://example.com",
+    title: "",
+    canGoBack: false,
+    canGoForward: false,
+    loading: true,
+    error:
+      "Blocked file:///etc/passwd. Embedded browser navigation allows only http(s) URLs.",
+  };
+  Object.assign(window.omp, {
+    browser: {
+      create: vi.fn().mockResolvedValue(initial),
+      onState: vi.fn(() => () => {}),
+      setBounds: vi.fn(),
+      navigate: vi.fn(),
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      destroy: vi.fn(),
+    },
+  } as unknown as Partial<OmpApi>);
+
+  render(<Browser />);
+
+  expect(await screen.findByRole("status")).toHaveTextContent("Loading page");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "allows only http(s) URLs",
+  );
+});
+
+it("explains blocked address schemes before navigating", async () => {
+  seedSettings(true);
+  const navigate = vi.fn();
+  const initial: BrowserViewState = {
+    id: "v1",
+    url: "",
+    title: "",
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  };
+  Object.assign(window.omp, {
+    browser: {
+      create: vi.fn().mockResolvedValue(initial),
+      onState: vi.fn(() => () => {}),
+      setBounds: vi.fn(),
+      navigate,
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      destroy: vi.fn(),
+    },
+  } as unknown as Partial<OmpApi>);
+
+  render(<Browser />);
+  const input = await screen.findByLabelText("Address");
+
+  await userEvent.type(input, "file:///etc/passwd");
+  await userEvent.click(screen.getByRole("button", { name: "Go" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Blocked scheme");
+  expect(navigate).not.toHaveBeenCalled();
+
+  await userEvent.clear(input);
+  await userEvent.type(input, "localhost:3000");
+  await userEvent.click(screen.getByRole("button", { name: "Go" }));
+
+  expect(navigate).toHaveBeenCalledWith("v1", "https://localhost:3000");
 });

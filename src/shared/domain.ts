@@ -267,6 +267,8 @@ export interface BrowserViewState {
   canGoBack: boolean;
   canGoForward: boolean;
   loading: boolean;
+  /** Latest visible navigation error, if the main process blocked/failed a load. */
+  error?: string;
 }
 
 // ---------------------------------------------------------------------------
