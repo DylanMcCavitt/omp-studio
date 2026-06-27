@@ -327,6 +327,16 @@ export interface ChangesStatus {
   files: ChangedFile[];
 }
 
+/** Active git identity for the selected workspace chrome. */
+export interface GitWorkspaceInfo {
+  /** False when the workspace is not a git repo or `git` is unavailable. */
+  repo: boolean;
+  /** Current branch name; null for detached HEAD or unavailable metadata. */
+  branch: string | null;
+  /** Git worktree root path as reported by git; null when unavailable. */
+  worktreePath: string | null;
+}
+
 export type DiffLineType = "context" | "add" | "remove";
 
 export interface DiffLine {

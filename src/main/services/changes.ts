@@ -20,6 +20,7 @@ import type {
   DiffHunk,
   DiffLineType,
   FileDiff,
+  GitWorkspaceInfo,
 } from "@shared/domain";
 import { runCli } from "./cli";
 import { containedPath } from "./files";
@@ -28,6 +29,11 @@ import { containedPath } from "./files";
 export type GetRoot = () => string | undefined;
 
 const EMPTY_STATUS: ChangesStatus = { repo: false, files: [] };
+const EMPTY_WORKSPACE_INFO: GitWorkspaceInfo = {
+  repo: false,
+  branch: null,
+  worktreePath: null,
+};
 
 /** Cap collected `git status` output (paths are small; this bounds memory). */
 const MAX_STATUS_BYTES = 512 * 1024;
@@ -48,6 +54,7 @@ const DIFF_SAFE = ["--no-ext-diff", "--no-textconv"] as const;
 
 export interface ChangesService {
   status(): Promise<ChangesStatus>;
+  workspaceInfo(): Promise<GitWorkspaceInfo>;
   diff(relPath: string): Promise<FileDiff | null>;
 }
 
@@ -83,6 +90,40 @@ export function createChangesService(getRoot: GetRoot): ChangesService {
       );
       if (res.code !== 0) return { ...EMPTY_STATUS };
       return { repo: true, files: parseStatusPorcelainZ(res.stdout) };
+    },
+
+    async workspaceInfo(): Promise<GitWorkspaceInfo> {
+      const root = getRoot();
+      if (!root) return { ...EMPTY_WORKSPACE_INFO };
+      const probe = await runCli(
+        "git",
+        [...GIT_BASE, "rev-parse", "--is-inside-work-tree"],
+        { cwd: root, maxBytes: MAX_STATUS_BYTES },
+      );
+      if (probe.code !== 0) return { ...EMPTY_WORKSPACE_INFO };
+
+      const [branch, worktree] = await Promise.all([
+        runCli("git", [...GIT_BASE, "branch", "--show-current"], {
+          cwd: root,
+          maxBytes: MAX_STATUS_BYTES,
+        }),
+        runCli("git", [...GIT_BASE, "rev-parse", "--show-toplevel"], {
+          cwd: root,
+          maxBytes: MAX_STATUS_BYTES,
+        }),
+      ]);
+
+      return {
+        repo: true,
+        branch:
+          branch.code === 0 && branch.stdout.trim() !== ""
+            ? branch.stdout.trim()
+            : null,
+        worktreePath:
+          worktree.code === 0 && worktree.stdout.trim() !== ""
+            ? worktree.stdout.trim()
+            : null,
+      };
     },
 
     async diff(relPath: string): Promise<FileDiff | null> {

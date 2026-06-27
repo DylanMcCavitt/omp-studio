@@ -1,4 +1,4 @@
-import type { ChangesStatus, FileDiff } from "@shared/domain";
+import type { ChangesStatus, FileDiff, GitWorkspaceInfo } from "@shared/domain";
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
 import { createChangesService } from "../services/changes";
@@ -22,6 +22,20 @@ export function registerChangesIpc(ipcMain: IpcMain): void {
         return await (await serviceFor(workspaceRoot)).status();
       } catch {
         return { repo: false, files: [] };
+      }
+    },
+  );
+
+  ipcMain.handle(
+    CH.changesWorkspaceInfo,
+    async (
+      _event,
+      workspaceRoot?: string | null,
+    ): Promise<GitWorkspaceInfo> => {
+      try {
+        return await (await serviceFor(workspaceRoot)).workspaceInfo();
+      } catch {
+        return { repo: false, branch: null, worktreePath: null };
       }
     },
   );
