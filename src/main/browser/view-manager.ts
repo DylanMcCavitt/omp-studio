@@ -146,9 +146,22 @@ function defaultOpenExternal(url: string): void {
   void electron().shell.openExternal(url);
 }
 
+function blockedMessage(url: string, allowlist?: readonly string[]): string {
+  const hostHint =
+    allowlist && allowlist.length > 0
+      ? ` and these hosts: ${allowlist.join(", ")}`
+      : "";
+  return `Blocked ${url}. Embedded browser navigation allows only http(s) URLs${hostHint}.`;
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 interface ViewRecord {
   id: string;
   view: ManagedView;
+  error?: string;
 }
 
 export class BrowserViewManager {
@@ -183,12 +196,13 @@ export class BrowserViewManager {
   create(opts: { url: string; bounds: ViewBounds }): BrowserViewState {
     const id = randomUUID();
     const view = this.createView({ partition: this.partition });
-    this.views.set(id, { id, view });
+    const record: ViewRecord = { id, view };
+    this.views.set(id, record);
     this.wire(id, view);
     view.setBounds(opts.bounds);
     this.attach(view);
     this.load(id, opts.url);
-    return this.stateOf(id, view);
+    return this.stateOf(id, record);
   }
 
   navigate(id: string, url: string): void {
@@ -206,7 +220,11 @@ export class BrowserViewManager {
   }
 
   reload(id: string): void {
-    this.views.get(id)?.view.webContents.reload();
+    const record = this.views.get(id);
+    if (!record) return;
+    record.error = undefined;
+    this.emitState(id);
+    record.view.webContents.reload();
   }
 
   setBounds(id: string, bounds: ViewBounds): void {
@@ -228,15 +246,27 @@ export class BrowserViewManager {
   // ---- internals --------------------------------------------------------
 
   private load(id: string, url: string): void {
-    const wc = this.views.get(id)?.view.webContents;
-    if (!wc) return;
-    if (!isUrlAllowed(url, this.allowlist)) {
-      log.warn("blocked navigation to disallowed url", { id, url });
+    const record = this.views.get(id);
+    const wc = record?.view.webContents;
+    if (!record || !wc) return;
+    if (url.trim() === "") {
+      record.error = undefined;
+      this.emitState(id);
       return;
     }
+    if (!isUrlAllowed(url, this.allowlist)) {
+      record.error = blockedMessage(url, this.allowlist);
+      log.warn("blocked navigation to disallowed url", { id, url });
+      this.emitState(id);
+      return;
+    }
+    record.error = undefined;
+    this.emitState(id);
     // Fire-and-forget: title/loading/can-go-* flow back via the wired events.
     void wc.loadURL(url).catch((error) => {
+      record.error = `Failed to load ${url}: ${messageOf(error)}`;
       log.warn("loadURL failed", { id, url, error });
+      this.emitState(id);
     });
   }
 
@@ -255,13 +285,19 @@ export class BrowserViewManager {
       wc.on(eventName, (...args) => {
         const event = args[0] as { url: string; preventDefault(): void };
         if (!isUrlAllowed(event.url, this.allowlist)) {
+          const record = this.views.get(id);
+          if (record) record.error = blockedMessage(event.url, this.allowlist);
           log.warn("blocked navigation", {
             id,
             event: eventName,
             url: event.url,
           });
           event.preventDefault();
+          this.emitState(id);
+          return;
         }
+        const record = this.views.get(id);
+        if (record && eventName === "will-navigate") record.error = undefined;
       });
     };
     guard("will-navigate");
@@ -275,15 +311,30 @@ export class BrowserViewManager {
     });
     // Re-emit state on every navigation / title / loading transition.
     const push = (): void => this.emitState(id);
+    const clearAndPush = (): void => {
+      const record = this.views.get(id);
+      if (record) record.error = undefined;
+      this.emitState(id);
+    };
     for (const event of [
       "did-navigate",
       "did-navigate-in-page",
-      "page-title-updated",
       "did-start-loading",
-      "did-stop-loading",
     ]) {
+      wc.on(event, clearAndPush);
+    }
+    for (const event of ["page-title-updated", "did-stop-loading"]) {
       wc.on(event, push);
     }
+    wc.on(
+      "did-fail-load",
+      (_event, code, description, validatedUrl, isMainFrame) => {
+        const record = this.views.get(id);
+        if (!record || code === -3 || isMainFrame === false) return;
+        record.error = `Failed to load ${String(validatedUrl || wc.getURL())}: ${String(description || "navigation failed")}`;
+        this.emitState(id);
+      },
+    );
   }
 
   private attach(view: ManagedView): void {
@@ -307,13 +358,13 @@ export class BrowserViewManager {
   private emitState(id: string): void {
     const record = this.views.get(id);
     if (!record) return;
-    const state = this.stateOf(id, record.view);
+    const state = this.stateOf(id, record);
     for (const cb of this.stateListeners) cb(state);
   }
 
-  private stateOf(id: string, view: ManagedView): BrowserViewState {
-    const wc = view.webContents;
-    return {
+  private stateOf(id: string, record: ViewRecord): BrowserViewState {
+    const wc = record.view.webContents;
+    const state: BrowserViewState = {
       id,
       url: wc.getURL(),
       title: wc.getTitle(),
@@ -321,5 +372,7 @@ export class BrowserViewManager {
       canGoForward: wc.navigationHistory.canGoForward(),
       loading: wc.isLoading(),
     };
+    if (record.error) state.error = record.error;
+    return state;
   }
 }

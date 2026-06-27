@@ -4,7 +4,7 @@
 // the inline swatch element, never an exact hex.
 
 import type { WorkspaceColorKey } from "@shared/ipc";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -87,4 +87,51 @@ it("refreshes git metadata when the window regains focus", async () => {
   window.dispatchEvent(new Event("focus"));
 
   await screen.findByText(/feature\/focus .*\/p\/alpha/);
+});
+
+it("clears stale git metadata while a new workspace is loading", async () => {
+  useSettingsStore.setState({
+    settings: {
+      workspaces: [
+        {
+          id: "w1",
+          cwd: "/p/alpha",
+          label: "Alpha",
+          pinned: false,
+          lastUsedAt: "t",
+        },
+        {
+          id: "w2",
+          cwd: "/p/beta",
+          label: "Beta",
+          pinned: false,
+          lastUsedAt: "t",
+        },
+      ],
+    } as never,
+    recordWorkspace: vi.fn(),
+  });
+  useAppStore.setState({ selectedProject: "/p/alpha" } as never);
+  Object.assign(window.omp, {
+    changes: {
+      workspaceInfo: vi
+        .fn()
+        .mockResolvedValueOnce({
+          repo: true,
+          branch: "feature/alpha",
+          worktreePath: "/p/alpha",
+        })
+        .mockImplementationOnce(() => new Promise(() => {})),
+    },
+  });
+
+  render(<WorkspaceSwitcher />);
+  await screen.findByText(/feature\/alpha .*\/p\/alpha/);
+
+  useAppStore.setState({ selectedProject: "/p/beta" } as never);
+
+  await waitFor(() => {
+    expect(screen.queryByText(/feature\/alpha/)).not.toBeInTheDocument();
+  });
+  expect(screen.getByRole("button", { name: /Beta/ })).toBeInTheDocument();
 });

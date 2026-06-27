@@ -209,6 +209,47 @@ test("navigate only loads allowlisted http(s) urls", () => {
   ]);
 });
 
+test("blocked and failed navigations surface visible error state", () => {
+  const { manager, created, states } = harness(["example.com"]);
+  const { id } = manager.create({ url: "https://example.com", bounds: BOUNDS });
+  const wc = wcOf(created[0]);
+  states.length = 0;
+
+  manager.navigate(id, "file:///etc/passwd");
+  expect(states.at(-1)?.error).toContain("allows only http(s) URLs");
+
+  wc.emit(
+    "did-fail-load",
+    {},
+    -105,
+    "Name not resolved",
+    "https://example.com",
+  );
+  expect(states.at(-1)?.error).toContain("Name not resolved");
+
+  states.length = 0;
+  wc.emit(
+    "did-fail-load",
+    {},
+    -105,
+    "Iframe failed",
+    "https://example.com/iframe",
+    false,
+  );
+  expect(states).toHaveLength(0);
+
+  manager.reload(id);
+  expect(wc.reloaded).toBe(true);
+  expect(states.at(-1)?.error).toBeUndefined();
+
+  manager.navigate(id, "file:///etc/passwd");
+  expect(states.at(-1)?.error).toContain("allows only http(s) URLs");
+  wc.url = "https://example.com/recovered";
+  wc.emit("did-navigate");
+  expect(states.at(-1)?.url).toBe("https://example.com/recovered");
+  expect(states.at(-1)?.error).toBeUndefined();
+});
+
 test("will-navigate is prevented for disallowed targets, allowed otherwise", () => {
   const { manager, created } = harness(["example.com"]);
   manager.create({ url: "https://example.com", bounds: BOUNDS });
