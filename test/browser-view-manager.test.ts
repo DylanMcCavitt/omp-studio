@@ -227,6 +227,17 @@ test("blocked and failed navigations surface visible error state", () => {
   );
   expect(states.at(-1)?.error).toContain("Name not resolved");
 
+  states.length = 0;
+  wc.emit(
+    "did-fail-load",
+    {},
+    -105,
+    "Iframe failed",
+    "https://example.com/iframe",
+    false,
+  );
+  expect(states).toHaveLength(0);
+
   manager.reload(id);
   expect(wc.reloaded).toBe(true);
   expect(states.at(-1)?.error).toBeUndefined();

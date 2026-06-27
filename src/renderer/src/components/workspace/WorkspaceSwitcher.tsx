@@ -68,6 +68,7 @@ export function WorkspaceSwitcher() {
         setGitInfo(empty);
         return;
       }
+      setGitInfo(empty);
       window.omp.changes.workspaceInfo(selectedProject).then(
         (info) => {
           if (alive) setGitInfo(info);

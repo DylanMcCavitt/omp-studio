@@ -326,12 +326,15 @@ export class BrowserViewManager {
     for (const event of ["page-title-updated", "did-stop-loading"]) {
       wc.on(event, push);
     }
-    wc.on("did-fail-load", (_event, code, description, validatedUrl) => {
-      const record = this.views.get(id);
-      if (!record || code === -3) return;
-      record.error = `Failed to load ${String(validatedUrl || wc.getURL())}: ${String(description || "navigation failed")}`;
-      this.emitState(id);
-    });
+    wc.on(
+      "did-fail-load",
+      (_event, code, description, validatedUrl, isMainFrame) => {
+        const record = this.views.get(id);
+        if (!record || code === -3 || isMainFrame === false) return;
+        record.error = `Failed to load ${String(validatedUrl || wc.getURL())}: ${String(description || "navigation failed")}`;
+        this.emitState(id);
+      },
+    );
   }
 
   private attach(view: ManagedView): void {
