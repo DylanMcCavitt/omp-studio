@@ -15,6 +15,8 @@
 import type { TerminalInfo } from "@shared/domain";
 import { create } from "zustand";
 
+const MAX_DETACHED_BUFFER_CHARS = 64 * 1024;
+
 /** Coarse, render-worthy lifecycle for one open terminal (not its scrollback). */
 export interface TerminalEntry {
   id: string;
@@ -78,8 +80,11 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => {
   // through `set` — it is written straight to the bound xterm instance.
   const dataSinks = new Map<string, Set<(data: string) => void>>();
   const exitSinks = new Map<string, Set<(code: number | null) => void>>();
-  // Output buffered before a sink attaches, per id, flushed on subscribe.
+  // Output buffered before a sink attaches, per id, flushed on subscribe. A
+  // retained pty can keep writing while its panel is closed, so detached buffers
+  // are capped to the latest output instead of growing renderer memory forever.
   const dataBuffers = new Map<string, string[]>();
+  const dataBufferSizes = new Map<string, number>();
 
   return {
     terminals: {},
@@ -93,10 +98,33 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => {
           for (const cb of sinks) cb(data);
           return;
         }
-        // No live sink yet: hold the bytes until the view subscribes.
-        const buf = dataBuffers.get(id);
-        if (buf) buf.push(data);
-        else dataBuffers.set(id, [data]);
+        // No live sink yet: hold a bounded tail until the view subscribes.
+        let buf = dataBuffers.get(id);
+        let size = dataBufferSizes.get(id) ?? 0;
+        if (!buf) {
+          buf = [];
+          dataBuffers.set(id, buf);
+        }
+        if (data.length >= MAX_DETACHED_BUFFER_CHARS) {
+          buf.splice(0, buf.length, data.slice(-MAX_DETACHED_BUFFER_CHARS));
+          size = MAX_DETACHED_BUFFER_CHARS;
+        } else {
+          buf.push(data);
+          size += data.length;
+        }
+        while (size > MAX_DETACHED_BUFFER_CHARS && buf.length > 0) {
+          const overflow = size - MAX_DETACHED_BUFFER_CHARS;
+          const first = buf[0];
+          if (!first) break;
+          if (first.length <= overflow) {
+            size -= first.length;
+            buf.shift();
+          } else {
+            buf[0] = first.slice(overflow);
+            size -= overflow;
+          }
+        }
+        dataBufferSizes.set(id, size);
       });
       const offExit = window.omp.terminal.onExit(({ id, code }) => {
         set((s) => {
@@ -163,6 +191,7 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => {
       dataSinks.delete(id);
       exitSinks.delete(id);
       dataBuffers.delete(id);
+      dataBufferSizes.delete(id);
       set((s) => {
         if (!(id in s.terminals)) return s;
         const terminals = { ...s.terminals };
@@ -181,6 +210,7 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => {
       const buffered = dataBuffers.get(id);
       if (buffered) {
         dataBuffers.delete(id);
+        dataBufferSizes.delete(id);
         for (const chunk of buffered) cb(chunk);
       }
       sinks.add(cb);

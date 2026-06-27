@@ -115,6 +115,25 @@ it("buffers output that arrives before a sink attaches, then replays it in order
   expect(got).toEqual(["first", "second", "third"]);
 });
 
+it("caps detached output buffering to a bounded tail", () => {
+  const h = installTerminalMock();
+  const store = useTerminalStore.getState();
+  store.ensureSubscribed();
+
+  const id = uid();
+  h.emitData(id, "old");
+  h.emitData(id, "x".repeat(70 * 1024));
+  h.emitData(id, "tail");
+
+  const got: string[] = [];
+  store.subscribeData(id, (d) => got.push(d));
+
+  const replayed = got.join("");
+  expect(replayed).not.toContain("old");
+  expect(replayed).toHaveLength(64 * 1024);
+  expect(replayed.endsWith("tail")).toBe(true);
+});
+
 it("create records the terminal; dispose kills it and drops it", async () => {
   const h = installTerminalMock();
   const id = uid();
