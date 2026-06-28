@@ -49,6 +49,8 @@ interface BrowserStore {
   back(): void;
   forward(): void;
   reload(): void;
+  openDevTools(): void;
+  openExternal(): void;
   /** Destroy the live view and clear local nav state. */
   destroy(): void;
   /** Reduce an incoming state push for the active view (ignores foreign ids). */
@@ -110,6 +112,16 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   reload() {
     const id = get().viewId;
     if (id) void window.omp.browser.reload(id);
+  },
+
+  openDevTools() {
+    const id = get().viewId;
+    if (id) void window.omp.browser.openDevTools(id);
+  },
+
+  openExternal() {
+    const id = get().viewId;
+    if (id) void window.omp.browser.openExternal(id);
   },
 
   destroy() {

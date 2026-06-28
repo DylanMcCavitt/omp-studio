@@ -9,7 +9,14 @@
 // All web content is the main-owned sandboxed view; this is just chrome.
 
 import type { BrowserViewState } from "@shared/domain";
-import { ArrowLeft, ArrowRight, CornerDownLeft, RotateCw } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bug,
+  CornerDownLeft,
+  ExternalLink,
+  RotateCw,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Combobox, IconButton } from "@/components/ui";
 import { cn } from "@/lib/cn";
@@ -23,6 +30,8 @@ export interface BrowserChromeProps {
   onBack: () => void;
   onForward: () => void;
   onReload: () => void;
+  onOpenDevTools: () => void;
+  onOpenExternal: () => void;
 }
 
 /**
@@ -54,6 +63,8 @@ export function BrowserChrome({
   onBack,
   onForward,
   onReload,
+  onOpenDevTools,
+  onOpenExternal,
 }: BrowserChromeProps) {
   const [address, setAddress] = useState("");
   const [inputError, setInputError] = useState<string | undefined>();
@@ -92,6 +103,20 @@ export function BrowserChrome({
           <RotateCw
             className={cn("h-4 w-4", state?.loading && "animate-spin")}
           />
+        </IconButton>
+        <IconButton
+          label="Open current page externally"
+          disabled={!state?.url}
+          onClick={onOpenExternal}
+        >
+          <ExternalLink className="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          label="Open browser DevTools"
+          disabled={!state}
+          onClick={onOpenDevTools}
+        >
+          <Bug className="h-4 w-4" />
         </IconButton>
 
         <form

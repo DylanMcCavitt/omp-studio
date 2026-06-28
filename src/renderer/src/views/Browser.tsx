@@ -33,6 +33,8 @@ export default function Browser() {
   const back = useBrowserStore((s) => s.back);
   const forward = useBrowserStore((s) => s.forward);
   const reload = useBrowserStore((s) => s.reload);
+  const openDevTools = useBrowserStore((s) => s.openDevTools);
+  const openExternal = useBrowserStore((s) => s.openExternal);
   const destroy = useBrowserStore((s) => s.destroy);
 
   const placeholderRef = useRef<HTMLDivElement>(null);
@@ -106,6 +108,8 @@ export default function Browser() {
         onBack={back}
         onForward={forward}
         onReload={reload}
+        onOpenDevTools={openDevTools}
+        onOpenExternal={openExternal}
       />
       <BrowserPanelState state={state} error={error} />
       {/* Empty overlay target — the main-owned WebContentsView is positioned on

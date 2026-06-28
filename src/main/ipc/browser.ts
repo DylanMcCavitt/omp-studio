@@ -30,6 +30,12 @@ export function registerBrowserIpc(
     manager.goForward(id),
   );
   ipcMain.handle(CH.browserReload, (_event, id: string) => manager.reload(id));
+  ipcMain.handle(CH.browserOpenDevTools, (_event, id: string) =>
+    manager.openDevTools(id),
+  );
+  ipcMain.handle(CH.browserOpenExternal, (_event, id: string) =>
+    manager.openExternal(id),
+  );
   ipcMain.handle(
     CH.browserSetBounds,
     (_event, id: string, bounds: ViewBounds) => manager.setBounds(id, bounds),

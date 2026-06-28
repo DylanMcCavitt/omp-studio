@@ -116,7 +116,17 @@ it("forwards control intents to the bridge with the active view id", () => {
   const goForward = vi.fn();
   const reload = vi.fn();
   const destroy = vi.fn();
-  stubBrowser({ navigate, goBack, goForward, reload, destroy });
+  const openDevTools = vi.fn();
+  const openExternal = vi.fn();
+  stubBrowser({
+    navigate,
+    goBack,
+    goForward,
+    reload,
+    openDevTools,
+    openExternal,
+    destroy,
+  });
   useBrowserStore.setState({ viewId: "v1" });
 
   const s = useBrowserStore.getState();
@@ -124,12 +134,16 @@ it("forwards control intents to the bridge with the active view id", () => {
   s.back();
   s.forward();
   s.reload();
+  s.openDevTools();
+  s.openExternal();
   s.destroy();
 
   expect(navigate).toHaveBeenCalledWith("v1", "https://c.com");
   expect(goBack).toHaveBeenCalledWith("v1");
   expect(goForward).toHaveBeenCalledWith("v1");
   expect(reload).toHaveBeenCalledWith("v1");
+  expect(openDevTools).toHaveBeenCalledWith("v1");
+  expect(openExternal).toHaveBeenCalledWith("v1");
   expect(destroy).toHaveBeenCalledWith("v1");
   // destroy clears local state so a late push can't resurrect it.
   expect(useBrowserStore.getState().viewId).toBeNull();
@@ -139,13 +153,19 @@ it("forwards control intents to the bridge with the active view id", () => {
 it("control intents are no-ops when there is no live view", () => {
   const navigate = vi.fn();
   const reload = vi.fn();
-  stubBrowser({ navigate, reload });
+  const openDevTools = vi.fn();
+  const openExternal = vi.fn();
+  stubBrowser({ navigate, reload, openDevTools, openExternal });
 
   useBrowserStore.getState().navigate("https://x.com");
   useBrowserStore.getState().reload();
+  useBrowserStore.getState().openDevTools();
+  useBrowserStore.getState().openExternal();
 
   expect(navigate).not.toHaveBeenCalled();
   expect(reload).not.toHaveBeenCalled();
+  expect(openDevTools).not.toHaveBeenCalled();
+  expect(openExternal).not.toHaveBeenCalled();
 });
 
 it("subscribes once and releases the listener on teardown", () => {

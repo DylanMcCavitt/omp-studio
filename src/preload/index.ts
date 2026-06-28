@@ -178,6 +178,10 @@ const api: OmpApi = {
     goBack: (id: string) => ipcRenderer.invoke(CH.browserGoBack, id),
     goForward: (id: string) => ipcRenderer.invoke(CH.browserGoForward, id),
     reload: (id: string) => ipcRenderer.invoke(CH.browserReload, id),
+    openDevTools: (id: string) =>
+      ipcRenderer.invoke(CH.browserOpenDevTools, id),
+    openExternal: (id: string) =>
+      ipcRenderer.invoke(CH.browserOpenExternal, id),
     setBounds: (
       id: string,
       bounds: { x: number; y: number; width: number; height: number },

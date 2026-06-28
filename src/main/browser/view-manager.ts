@@ -48,6 +48,10 @@ export interface ManagedWebContents {
   isLoading(): boolean;
   isDestroyed(): boolean;
   reload(): void;
+  openDevTools(opts?: {
+    mode?: "right" | "bottom" | "undocked" | "detach";
+    activate?: boolean;
+  }): void;
   stop(): void;
   close(): void;
   readonly navigationHistory: {
@@ -146,12 +150,12 @@ function defaultOpenExternal(url: string): void {
   void electron().shell.openExternal(url);
 }
 
-function blockedMessage(url: string, allowlist?: readonly string[]): string {
+function blockedMessage(allowlist?: readonly string[]): string {
   const hostHint =
     allowlist && allowlist.length > 0
       ? ` and these hosts: ${allowlist.join(", ")}`
       : "";
-  return `Blocked ${url}. Embedded browser navigation allows only http(s) URLs${hostHint}.`;
+  return `Blocked navigation. Embedded browser navigation allows only http(s) URLs${hostHint}.`;
 }
 
 function messageOf(error: unknown): string {
@@ -172,7 +176,7 @@ export class BrowserViewManager {
   private readonly createView: ViewFactory;
   private readonly partition: string;
   private readonly allowlist?: readonly string[];
-  private readonly openExternal: (url: string) => void;
+  private readonly openExternalUrl: (url: string) => void;
 
   constructor(
     private readonly getWindow: () => BrowserWindow | null,
@@ -181,7 +185,7 @@ export class BrowserViewManager {
     this.createView = options.createView ?? defaultCreateView;
     this.partition = options.partition ?? DEFAULT_PARTITION;
     this.allowlist = options.allowlist;
-    this.openExternal = options.openExternal ?? defaultOpenExternal;
+    this.openExternalUrl = options.openExternal ?? defaultOpenExternal;
   }
 
   /** Subscribe to per-view state pushes; returns an unsubscribe. */
@@ -207,6 +211,26 @@ export class BrowserViewManager {
 
   navigate(id: string, url: string): void {
     this.load(id, url);
+  }
+
+  openDevTools(id: string): void {
+    this.views.get(id)?.view.webContents.openDevTools({
+      mode: "detach",
+      activate: true,
+    });
+  }
+
+  openExternal(id: string): void {
+    const record = this.views.get(id);
+    const url = record?.view.webContents.getURL();
+    if (!record || !url) return;
+    if (!isUrlAllowed(url, this.allowlist)) {
+      record.error =
+        "Cannot open externally. The current browser URL is not an allowed http(s) URL.";
+      this.emitState(id);
+      return;
+    }
+    this.openExternalUrl(url);
   }
 
   goBack(id: string): void {
@@ -255,7 +279,7 @@ export class BrowserViewManager {
       return;
     }
     if (!isUrlAllowed(url, this.allowlist)) {
-      record.error = blockedMessage(url, this.allowlist);
+      record.error = blockedMessage(this.allowlist);
       log.warn("blocked navigation to disallowed url", { id, url });
       this.emitState(id);
       return;
@@ -286,7 +310,7 @@ export class BrowserViewManager {
         const event = args[0] as { url: string; preventDefault(): void };
         if (!isUrlAllowed(event.url, this.allowlist)) {
           const record = this.views.get(id);
-          if (record) record.error = blockedMessage(event.url, this.allowlist);
+          if (record) record.error = blockedMessage(this.allowlist);
           log.warn("blocked navigation", {
             id,
             event: eventName,
@@ -306,7 +330,7 @@ export class BrowserViewManager {
     // Deny every popup / new window inside the embedded view; open an allowed
     // target in the OS browser instead. The view never spawns child windows.
     wc.setWindowOpenHandler(({ url }) => {
-      if (isUrlAllowed(url, this.allowlist)) this.openExternal(url);
+      if (isUrlAllowed(url, this.allowlist)) this.openExternalUrl(url);
       return { action: "deny" };
     });
     // Re-emit state on every navigation / title / loading transition.
@@ -328,10 +352,10 @@ export class BrowserViewManager {
     }
     wc.on(
       "did-fail-load",
-      (_event, code, description, validatedUrl, isMainFrame) => {
+      (_event, code, description, _validatedUrl, isMainFrame) => {
         const record = this.views.get(id);
         if (!record || code === -3 || isMainFrame === false) return;
-        record.error = `Failed to load ${String(validatedUrl || wc.getURL())}: ${String(description || "navigation failed")}`;
+        record.error = `Failed to load current page: ${String(description || "navigation failed")}`;
         this.emitState(id);
       },
     );

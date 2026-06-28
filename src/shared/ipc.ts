@@ -126,6 +126,8 @@ export const CH = {
   browserGoBack: "browser:goBack",
   browserGoForward: "browser:goForward",
   browserReload: "browser:reload",
+  browserOpenDevTools: "browser:openDevTools",
+  browserOpenExternal: "browser:openExternal",
   browserSetBounds: "browser:setBounds",
   browserDestroy: "browser:destroy",
   evtBrowserState: "evt:browser-state",
@@ -435,6 +437,8 @@ export interface OmpApi {
     goBack(id: string): Promise<void>;
     goForward(id: string): Promise<void>;
     reload(id: string): Promise<void>;
+    openDevTools(id: string): Promise<void>;
+    openExternal(id: string): Promise<void>;
     setBounds(
       id: string,
       bounds: { x: number; y: number; width: number; height: number },

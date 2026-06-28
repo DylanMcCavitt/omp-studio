@@ -18,6 +18,7 @@ class FakeWebContents {
   forward = false;
   readonly loadCalls: string[] = [];
   reloaded = false;
+  openedDevTools = false;
   stopped = false;
   closed = false;
   windowOpenHandler?: (d: { url: string }) => { action: "allow" | "deny" };
@@ -55,6 +56,9 @@ class FakeWebContents {
   }
   reload(): void {
     this.reloaded = true;
+  }
+  openDevTools(): void {
+    this.openedDevTools = true;
   }
   stop(): void {
     this.stopped = true;
@@ -324,6 +328,32 @@ test("setWindowOpenHandler always denies; opens allowed targets externally", () 
   expect(handler?.({ url: "file:///x" })).toEqual({ action: "deny" });
   // Only the allowed http(s) target is handed to the OS browser.
   expect(openedExternally).toEqual(["https://example.com/pop"]);
+});
+
+test("devtools and open-external are explicit manager actions", () => {
+  const { manager, created, openedExternally } = harness(["example.com"]);
+  const { id } = manager.create({
+    url: "https://example.com/page",
+    bounds: BOUNDS,
+  });
+  const wc = wcOf(created[0]);
+
+  manager.openDevTools(id);
+  manager.openExternal(id);
+
+  expect(wc.openedDevTools).toBe(true);
+  expect(openedExternally).toEqual(["https://example.com/page"]);
+});
+
+test("openExternal refuses non-http(s) current URLs without shelling out", () => {
+  const { manager, created, states, openedExternally } = harness();
+  const { id } = manager.create({ url: "https://example.com", bounds: BOUNDS });
+  wcOf(created[0]).url = "file:///etc/passwd";
+
+  manager.openExternal(id);
+
+  expect(openedExternally).toEqual([]);
+  expect(states.at(-1)?.error).toContain("not an allowed http(s) URL");
 });
 
 // ---- back/forward/reload/setBounds/destroy lifecycle ---------------------

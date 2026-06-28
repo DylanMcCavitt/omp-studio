@@ -121,6 +121,46 @@ it("creates the main-owned view and renders the chrome when enabled", async () =
   expect(screen.queryByText("Embedded browser is off")).not.toBeInTheDocument();
 });
 
+it("dispatches explicit diagnostics affordances from local user clicks", async () => {
+  seedSettings(true);
+  const openDevTools = vi.fn();
+  const openExternal = vi.fn();
+  const initial: BrowserViewState = {
+    id: "v1",
+    url: "https://example.com",
+    title: "",
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  };
+  Object.assign(window.omp, {
+    browser: {
+      create: vi.fn().mockResolvedValue(initial),
+      onState: vi.fn(() => () => {}),
+      setBounds: vi.fn(),
+      navigate: vi.fn(),
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      openDevTools,
+      openExternal,
+      destroy: vi.fn(),
+    },
+  } as unknown as Partial<OmpApi>);
+
+  render(<Browser />);
+
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Open browser DevTools" }),
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Open current page externally" }),
+  );
+
+  expect(openDevTools).toHaveBeenCalledWith("v1");
+  expect(openExternal).toHaveBeenCalledWith("v1");
+});
+
 it("shows loading and navigation errors in the enabled panel", async () => {
   seedSettings(true);
   const initial: BrowserViewState = {
