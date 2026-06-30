@@ -8,7 +8,7 @@
 // XtermView is stubbed: it owns a live xterm.js/canvas pipeline that jsdom
 // can't run, and this suite is about the gate, not the pty.
 
-import type { StudioSettings } from "@shared/ipc";
+import type { ExternalTerminalLauncherInfo, StudioSettings } from "@shared/ipc";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/store/app";
@@ -67,7 +67,7 @@ function seedSettings(terminal: StudioSettings["terminal"]) {
   return update;
 }
 
-function installTerminalMock() {
+function installTerminalMock(launchers?: ExternalTerminalLauncherInfo[]) {
   let seq = 0;
   const create = vi.fn(async ({ cwd }: { cwd: string }) => {
     seq += 1;
@@ -79,6 +79,18 @@ function installTerminalMock() {
     };
   });
   const kill = vi.fn(async () => {});
+  const externalLaunchers = vi.fn(() =>
+    launchers ? Promise.resolve(launchers) : new Promise(() => {}),
+  );
+  const openExternal = vi.fn(
+    async ({ cwd, profile }: { cwd: string; profile?: string }) => ({
+      id: "launch-1",
+      cwd,
+      profile: profile ?? "system",
+      label: profile === "ghostty" ? "Ghostty" : "System terminal",
+      launchedAt: "2026-01-01T00:00:00.000Z",
+    }),
+  );
   Object.assign(window.omp, {
     terminal: {
       create,
@@ -86,11 +98,13 @@ function installTerminalMock() {
       write: vi.fn(async () => {}),
       resize: vi.fn(async () => {}),
       list: vi.fn(async () => []),
+      externalLaunchers,
+      openExternal,
       onData: vi.fn(() => () => {}),
       onExit: vi.fn(() => () => {}),
     },
   });
-  return { create, kill };
+  return { create, kill, externalLaunchers, openExternal };
 }
 
 beforeEach(() => {
@@ -169,6 +183,67 @@ it("renders workspace-scoped terminal tabs and creates a second tab without kill
   expect(terminal.create).toHaveBeenCalledTimes(2);
   expect(terminal.kill).not.toHaveBeenCalled();
   expect(screen.getAllByTestId("xterm-surface")).toHaveLength(2);
+});
+
+it("opens the selected external terminal without spawning a built-in tab", async () => {
+  const user = userEvent.setup();
+  const terminal = installTerminalMock([
+    {
+      profile: "ghostty",
+      label: "Ghostty",
+      available: true,
+      kind: "mac-app",
+      detectedPath: "/Applications/Ghostty.app",
+    },
+  ]);
+  seedSettings({
+    enabled: true,
+    maxConcurrent: 4,
+    defaultTarget: "external",
+    externalProfile: "ghostty",
+  });
+
+  render(<Terminal />);
+
+  const openExternal = await screen.findByRole("button", {
+    name: /open ghostty/i,
+  });
+  expect(screen.getByText("No terminal tabs")).toBeInTheDocument();
+  expect(terminal.create).not.toHaveBeenCalled();
+
+  await user.click(openExternal);
+
+  expect(terminal.openExternal).toHaveBeenCalledWith({
+    cwd: "/work/app",
+    profile: "ghostty",
+  });
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "Opened Ghostty for app.",
+  );
+});
+
+it("disables the external affordance when the selected profile is unavailable", async () => {
+  installTerminalMock([
+    {
+      profile: "ghostty",
+      label: "Ghostty",
+      available: false,
+      kind: "unavailable",
+      reason: "Not installed",
+    },
+  ]);
+  seedSettings({
+    enabled: true,
+    maxConcurrent: 4,
+    defaultTarget: "external",
+    externalProfile: "ghostty",
+  });
+
+  render(<Terminal />);
+
+  expect(
+    await screen.findByRole("button", { name: /open ghostty/i }),
+  ).toBeDisabled();
 });
 
 it("switches tabs without killing ptys; close tab explicitly kills one", async () => {
