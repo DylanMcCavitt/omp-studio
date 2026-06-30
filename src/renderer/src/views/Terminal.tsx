@@ -10,7 +10,8 @@
 // `store/terminal.ts`; this view only chooses gate / empty / live and owns the
 // restart affordance after a shell exits.
 
-import { Plus, TerminalSquare, X } from "lucide-react";
+import type { ExternalTerminalLauncherInfo } from "@shared/ipc";
+import { ExternalLink, Plus, TerminalSquare, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TerminalGate } from "@/components/terminal/TerminalGate";
 import { XtermView } from "@/components/terminal/XtermView";
@@ -21,9 +22,10 @@ import { useSettingsStore } from "@/store/settings";
 import { useTerminalStore } from "@/store/terminal";
 
 export default function Terminal() {
-  const enabled = useSettingsStore(
-    (s) => s.settings?.terminal?.enabled === true,
-  );
+  const terminalSettings = useSettingsStore((s) => s.settings?.terminal);
+  const enabled = terminalSettings?.enabled === true;
+  const defaultTarget = terminalSettings?.defaultTarget ?? "built-in";
+  const externalProfile = terminalSettings?.externalProfile ?? "system";
   const cwd = useAppStore((s) => s.selectedProject);
 
   const terminals = useTerminalStore((s) => s.terminals);
@@ -40,6 +42,13 @@ export default function Terminal() {
   const [creating, setCreating] = useState(false);
   const [autoStartedCwd, setAutoStartedCwd] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | undefined>();
+  const [externalLaunchers, setExternalLaunchers] = useState<
+    ExternalTerminalLauncherInfo[]
+  >([]);
+  const [externalLoading, setExternalLoading] = useState(false);
+  const [openingExternal, setOpeningExternal] = useState(false);
+  const [externalError, setExternalError] = useState<string | undefined>();
+  const [externalStatus, setExternalStatus] = useState<string | undefined>();
 
   const spawnTerminal = useCallback(async () => {
     if (!cwd || creating) return;
@@ -56,9 +65,39 @@ export default function Terminal() {
   }, [cwd, creating, createTerminal]);
 
   useEffect(() => {
+    if (!enabled || !cwd) {
+      setExternalLaunchers([]);
+      return;
+    }
+    let cancelled = false;
+    setExternalLoading(true);
+    void window.omp.terminal
+      .externalLaunchers()
+      .then((launchers) => {
+        if (!cancelled) setExternalLaunchers(launchers);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setExternalLaunchers([]);
+          setExternalError(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setExternalLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, cwd]);
+
+  useEffect(() => {
     setActiveId(null);
     setAutoStartedCwd(null);
     setCreateError(undefined);
+    setExternalError(undefined);
+    setExternalStatus(undefined);
   }, [cwd]);
 
   useEffect(() => {
@@ -69,6 +108,7 @@ export default function Terminal() {
       setActiveId(first.id);
       return;
     }
+    if (defaultTarget === "external") return;
     if (!creating && autoStartedCwd !== cwd) {
       setAutoStartedCwd(cwd);
       void spawnTerminal();
@@ -81,6 +121,7 @@ export default function Terminal() {
     creating,
     autoStartedCwd,
     spawnTerminal,
+    defaultTarget,
   ]);
 
   const closeTerminal = async (id: string) => {
@@ -88,6 +129,37 @@ export default function Terminal() {
     const next = entries[index + 1] ?? entries[index - 1] ?? null;
     if (activeId === id) setActiveId(next?.id ?? null);
     await disposeTerminal(id);
+  };
+
+  const preferredExternal = useMemo(() => {
+    if (externalProfile === "system") {
+      return (
+        externalLaunchers.find(
+          (launcher) => launcher.profile === "system" && launcher.available,
+        ) ?? externalLaunchers.find((launcher) => launcher.available)
+      );
+    }
+    return externalLaunchers.find(
+      (launcher) => launcher.profile === externalProfile,
+    );
+  }, [externalLaunchers, externalProfile]);
+
+  const openExternalTerminal = async () => {
+    if (!cwd || openingExternal) return;
+    setOpeningExternal(true);
+    setExternalError(undefined);
+    setExternalStatus(undefined);
+    try {
+      const result = await window.omp.terminal.openExternal({
+        cwd,
+        profile: externalProfile,
+      });
+      setExternalStatus(`Opened ${result.label} for ${projectLabel(cwd)}.`);
+    } catch (error) {
+      setExternalError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpeningExternal(false);
+    }
   };
 
   return (
@@ -158,6 +230,26 @@ export default function Terminal() {
           </div>
           <Button
             size="sm"
+            variant={defaultTarget === "external" ? "primary" : "subtle"}
+            disabled={
+              externalLoading ||
+              openingExternal ||
+              !preferredExternal?.available
+            }
+            title={
+              preferredExternal?.available
+                ? `Open ${preferredExternal.label}`
+                : "No matching external terminal is available"
+            }
+            onClick={() => void openExternalTerminal()}
+          >
+            <ExternalLink className="h-4 w-4" />
+            {openingExternal
+              ? "Opening…"
+              : `Open ${preferredExternal?.label ?? "external"}`}
+          </Button>
+          <Button
+            size="sm"
             variant="subtle"
             onClick={() => void spawnTerminal()}
           >
@@ -179,6 +271,29 @@ export default function Terminal() {
           >
             Retry
           </Button>
+        </div>
+      )}
+      {externalError && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/30 bg-danger/5 px-4 py-2 text-sm text-danger"
+        >
+          <span>External terminal failed to open: {externalError}</span>
+          <Button
+            size="sm"
+            variant="subtle"
+            onClick={() => void openExternalTerminal()}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+      {externalStatus && (
+        <div
+          role="status"
+          className="border-b border-success/30 bg-success/5 px-4 py-2 text-sm text-success"
+        >
+          {externalStatus}
         </div>
       )}
       <div className="relative min-h-0 flex-1 bg-bg-raised">
@@ -205,7 +320,11 @@ export default function Terminal() {
             className="h-full"
             icon={<TerminalSquare className="h-8 w-8" />}
             title={creating ? "Starting terminal…" : "No terminal tabs"}
-            hint="Create a terminal tab for the selected workspace."
+            hint={
+              defaultTarget === "external"
+                ? "Open your preferred external terminal, or create a built-in tab for this workspace."
+                : "Create a terminal tab for the selected workspace."
+            }
           />
         ) : (
           entries.map((entry) => (
