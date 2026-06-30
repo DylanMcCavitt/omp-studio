@@ -12,6 +12,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
+  BrowserBookmark,
+  BrowserHistoryEntry,
   LayoutSettings,
   OpenSessionDescriptor,
   RecentProject,
@@ -215,6 +217,8 @@ const TOKEN_MARKER =
   /(secret|token|password|passwd|api[-_]?key|apikey|credential|private[-_]?key|bearer)/i;
 const TOKEN_PREFIX =
   /^(sk-|sk_|pk_|rk_|ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|glpat-|xox[abprs]-|lin_|akia|asia|aiza|ya29\.|eyj)/i;
+const BROWSER_SECRET_QUERY_NAME =
+  /(secret|token|password|passwd|api[-_]?key|apikey|credential|private[-_]?key|bearer|authorization|auth[-_]?token|access[-_]?token|refresh[-_]?token|id[-_]?token)/i;
 
 function isSafeId(value: string): boolean {
   return (
@@ -391,9 +395,127 @@ function coerceTerminal(
   return { enabled: value.enabled, maxConcurrent };
 }
 
+function sanitizeBrowserUrl(value: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return undefined;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return undefined;
+  }
+  parsed.username = "";
+  parsed.password = "";
+  parsed.hash = "";
+  for (const segment of parsed.pathname.split("/")) {
+    let decodedSegment = segment;
+    try {
+      decodedSegment = decodeURIComponent(segment);
+    } catch {
+      return undefined;
+    }
+    if (
+      TOKEN_MARKER.test(decodedSegment) ||
+      TOKEN_PREFIX.test(decodedSegment)
+    ) {
+      return undefined;
+    }
+  }
+  for (const [name, queryValue] of parsed.searchParams) {
+    if (
+      BROWSER_SECRET_QUERY_NAME.test(name) ||
+      TOKEN_MARKER.test(queryValue) ||
+      TOKEN_PREFIX.test(queryValue)
+    ) {
+      return undefined;
+    }
+  }
+  return parsed.href;
+}
+
+function coerceBrowserBookmarks(value: unknown): BrowserBookmark[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: BrowserBookmark[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const { url, title, createdAt } = item;
+    if (
+      typeof url !== "string" ||
+      typeof title !== "string" ||
+      typeof createdAt !== "string"
+    ) {
+      continue;
+    }
+    const safeUrl = sanitizeBrowserUrl(url);
+    if (
+      !safeUrl ||
+      Number.isNaN(Date.parse(createdAt)) ||
+      TOKEN_MARKER.test(createdAt) ||
+      TOKEN_PREFIX.test(createdAt)
+    ) {
+      continue;
+    }
+    out.push({
+      url: safeUrl,
+      title: TOKEN_MARKER.test(title) || TOKEN_PREFIX.test(title) ? "" : title,
+      createdAt,
+    });
+  }
+  if (value.length > 0 && out.length === 0) return undefined;
+  return out;
+}
+
+function coerceBrowserHistory(
+  value: unknown,
+): BrowserHistoryEntry[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out: BrowserHistoryEntry[] = [];
+  for (const item of value) {
+    if (!isRecord(item)) continue;
+    const { url, title, lastVisitedAt } = item;
+    if (
+      typeof url !== "string" ||
+      typeof title !== "string" ||
+      typeof lastVisitedAt !== "string"
+    ) {
+      continue;
+    }
+    const safeUrl = sanitizeBrowserUrl(url);
+    if (
+      !safeUrl ||
+      Number.isNaN(Date.parse(lastVisitedAt)) ||
+      TOKEN_MARKER.test(lastVisitedAt) ||
+      TOKEN_PREFIX.test(lastVisitedAt)
+    ) {
+      continue;
+    }
+    out.push({
+      url: safeUrl,
+      title: TOKEN_MARKER.test(title) || TOKEN_PREFIX.test(title) ? "" : title,
+      lastVisitedAt,
+    });
+  }
+  if (value.length > 0 && out.length === 0) return undefined;
+  return out;
+}
+
 function coerceBrowser(value: unknown): StudioSettings["browser"] | undefined {
   if (!isRecord(value) || typeof value.enabled !== "boolean") return undefined;
-  return { enabled: value.enabled };
+  const out: NonNullable<StudioSettings["browser"]> = {
+    enabled: value.enabled,
+  };
+  if ("bookmarks" in value) {
+    const bookmarks = coerceBrowserBookmarks(value.bookmarks);
+    if (!bookmarks) return undefined;
+    out.bookmarks = bookmarks;
+  }
+  if ("history" in value) {
+    const history = coerceBrowserHistory(value.history);
+    if (!history) return undefined;
+    out.history = history;
+  }
+  return out;
 }
 
 /** One pinned-false workspace per recent project (1:1, used by the V1→V2 migration). */

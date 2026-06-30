@@ -9,14 +9,18 @@
 // All web content is the main-owned sandboxed view; this is just chrome.
 
 import type { BrowserViewState } from "@shared/domain";
+import type { BrowserBookmark, BrowserHistoryEntry } from "@shared/ipc";
 import {
   ArrowLeft,
   ArrowRight,
+  Bookmark,
+  BookmarkCheck,
   Bug,
   CornerDownLeft,
   ExternalLink,
   Plus,
   RotateCw,
+  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -43,7 +47,9 @@ export interface BrowserChromeProps {
   /** Latest nav state for the active view, or null before one is created. */
   state: BrowserViewState | null;
   /** Visited URLs (most-recent first) backing the history dropdown. */
-  history: string[];
+  history: BrowserHistoryEntry[];
+  /** Explicit bookmarks persisted in settings metadata. */
+  bookmarks: BrowserBookmark[];
   onCreateTab: () => void;
   onSwitchTab: (id: string) => void;
   onCloseTab: (id: string) => void;
@@ -53,6 +59,10 @@ export interface BrowserChromeProps {
   onReload: () => void;
   onOpenDevTools: () => void;
   onOpenExternal: () => void;
+  onSaveBookmark: () => void;
+  onRemoveBookmark: () => void;
+  onClearMetadata: () => void;
+  isCurrentBookmarked: boolean;
 }
 
 /**
@@ -82,6 +92,7 @@ export function BrowserChrome({
   activeTabId,
   state,
   history,
+  bookmarks,
   onCreateTab,
   onSwitchTab,
   onCloseTab,
@@ -91,6 +102,10 @@ export function BrowserChrome({
   onReload,
   onOpenDevTools,
   onOpenExternal,
+  onSaveBookmark,
+  onRemoveBookmark,
+  onClearMetadata,
+  isCurrentBookmarked,
 }: BrowserChromeProps) {
   const [address, setAddress] = useState("");
   const [inputError, setInputError] = useState<string | undefined>();
@@ -122,6 +137,22 @@ export function BrowserChrome({
     setInputError(next.error);
     if (next.url) onNavigate(next.url);
   };
+
+  const hasCurrentUrl = Boolean(state?.url);
+  const hasMetadata = bookmarks.length > 0 || history.length > 0;
+  const bookmarkLabel = isCurrentBookmarked
+    ? "Remove current page bookmark"
+    : "Save current page bookmark";
+  const bookmarkOptions = bookmarks.map((entry) => ({
+    value: entry.url,
+    label: entry.title || entry.url,
+    description: entry.url,
+  }));
+  const historyOptions = history.map((entry) => ({
+    value: entry.url,
+    label: entry.title || entry.url,
+    description: entry.url,
+  }));
 
   return (
     <div className="shrink-0 border-b border-border">
@@ -174,7 +205,7 @@ export function BrowserChrome({
           <Plus size={14} className="shrink-0" />
         </button>
       </div>
-      <div className="flex items-center gap-1.5 px-3 py-2">
+      <div className="flex items-center gap-1.5 px-3 pt-2">
         <IconButton label="Back" disabled={!state?.canGoBack} onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </IconButton>
@@ -203,6 +234,24 @@ export function BrowserChrome({
           onClick={onOpenDevTools}
         >
           <Bug className="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          label={bookmarkLabel}
+          disabled={!hasCurrentUrl}
+          onClick={isCurrentBookmarked ? onRemoveBookmark : onSaveBookmark}
+        >
+          {isCurrentBookmarked ? (
+            <BookmarkCheck className="h-4 w-4" />
+          ) : (
+            <Bookmark className="h-4 w-4" />
+          )}
+        </IconButton>
+        <IconButton
+          label="Clear browser bookmarks and history metadata"
+          disabled={!hasMetadata}
+          onClick={onClearMetadata}
+        >
+          <Trash2 className="h-4 w-4" />
         </IconButton>
 
         <form
@@ -236,23 +285,39 @@ export function BrowserChrome({
             <CornerDownLeft className="h-4 w-4" />
           </IconButton>
         </form>
+      </div>
 
-        {state && history.length > 0 && (
-          <Combobox
-            aria-label="History"
-            className="w-44"
-            align="end"
-            value=""
-            options={history.map((url) => ({ value: url, label: url }))}
-            onChange={(url) => {
-              setAddress(url);
-              go(url);
-            }}
-            placeholder="History"
-            searchPlaceholder="Search history…"
-            emptyText="No history"
-          />
-        )}
+      <div className="flex justify-end gap-1.5 px-3 py-2">
+        <Combobox
+          aria-label="Bookmarks"
+          className="w-44"
+          align="end"
+          value=""
+          options={bookmarkOptions}
+          disabled={!state || bookmarkOptions.length === 0}
+          onChange={(url) => {
+            setAddress(url);
+            go(url);
+          }}
+          placeholder="Bookmarks"
+          searchPlaceholder="Search bookmarks…"
+          emptyText="No bookmarks"
+        />
+        <Combobox
+          aria-label="Recent pages"
+          className="w-44"
+          align="end"
+          value=""
+          options={historyOptions}
+          disabled={!state || historyOptions.length === 0}
+          onChange={(url) => {
+            setAddress(url);
+            go(url);
+          }}
+          placeholder="Recent pages"
+          searchPlaceholder="Search recent pages…"
+          emptyText="No recent pages"
+        />
       </div>
       {state?.loading && (
         <div role="status" className="px-3 pb-2 text-xs text-ink-muted">

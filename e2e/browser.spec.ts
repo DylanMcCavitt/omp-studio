@@ -107,39 +107,83 @@ test.afterAll(async () => {
     rmSync(tempWorkspaceDir, { recursive: true, force: true });
 });
 
-test("browser tabs create, switch, navigate, and close from the UI", async () => {
+test("browser tabs create, switch, navigate, bookmark, revisit, clear metadata, and close from the UI", async () => {
   await page.getByRole("button", { name: "Browser", exact: true }).click();
   const panel = page.getByRole("complementary", { name: "Browser panel" });
   await expect(panel.getByText("Start with an http(s) URL.")).toBeVisible();
 
   const tabStrip = panel.getByLabel("Browser tabs");
+  const address = panel.getByLabel("Address");
+  const bookmarks = panel.getByRole("combobox", { name: "Bookmarks" });
+  const recentPages = panel.getByRole("combobox", { name: "Recent pages" });
+  const clearMetadata = panel.getByRole("button", {
+    name: "Clear browser bookmarks and history metadata",
+  });
+
   await expect(tabStrip).toBeVisible();
   await expect(tabStrip.getByText("New tab", { exact: true })).toHaveCount(1);
+  await expect(address).toHaveValue("");
+  await expect(
+    panel.getByRole("button", { name: "Save current page bookmark" }),
+  ).toBeDisabled();
+  await expect(bookmarks).toBeDisabled();
+  await expect(recentPages).toBeDisabled();
+  await expect(clearMetadata).toBeDisabled();
 
   await panel.getByRole("button", { name: "New browser tab" }).click();
   await expect(tabStrip.getByText("New tab", { exact: true })).toHaveCount(2);
 
-  const address = panel.getByLabel("Address");
-  await expect(address).toHaveValue("");
   await address.fill(localUrl);
   await panel.getByRole("button", { name: "Go" }).click();
 
-  await expect(panel.getByRole("combobox", { name: "History" })).toBeVisible();
   await expect(address).toHaveValue(localUrl);
   await expect(
     tabStrip.getByText("OMP Browser Fixture", { exact: true }),
   ).toBeVisible();
+  await expect(recentPages).toBeEnabled();
+
+  await panel
+    .getByRole("button", { name: "Save current page bookmark" })
+    .click();
+  await expect(
+    panel.getByRole("button", { name: "Remove current page bookmark" }),
+  ).toBeEnabled();
+  await expect(bookmarks).toBeEnabled();
 
   await tabStrip.getByText("New tab", { exact: true }).click();
   await expect(address).toHaveValue("");
   await expect(panel.getByText("Start with an http(s) URL.")).toBeVisible();
 
-  await tabStrip.getByText("OMP Browser Fixture", { exact: true }).click();
+  await bookmarks.click();
+  await page.getByRole("option", { name: /OMP Browser Fixture/ }).click();
   await expect(address).toHaveValue(localUrl);
 
-  await tabStrip.getByRole("button", { name: "Close tab 1: New tab" }).click();
-  await expect(tabStrip.getByText("New tab", { exact: true })).toHaveCount(0);
+  await panel.getByRole("button", { name: "New browser tab" }).click();
+  await expect(address).toHaveValue("");
+  await recentPages.click();
+  await page.getByRole("option", { name: /OMP Browser Fixture/ }).click();
   await expect(address).toHaveValue(localUrl);
+
+  await clearMetadata.click();
+  await expect(
+    panel.getByRole("button", { name: "Save current page bookmark" }),
+  ).toBeEnabled();
+  await expect(bookmarks).toBeDisabled();
+  await expect(recentPages).toBeDisabled();
+  await expect(clearMetadata).toBeDisabled();
+
+  await expect(
+    tabStrip.getByText("OMP Browser Fixture", { exact: true }),
+  ).toHaveCount(3);
+
+  await tabStrip
+    .getByRole("button", { name: "Close tab 3: OMP Browser Fixture" })
+    .click();
+  await expect(
+    tabStrip.getByText("OMP Browser Fixture", { exact: true }),
+  ).toHaveCount(2);
+  await expect(address).toHaveValue(localUrl);
+
   await expect(panel.getByRole("alert")).toHaveCount(0);
   expect(pageErrors).toEqual([]);
   expect(rendererCrashes).toEqual([]);

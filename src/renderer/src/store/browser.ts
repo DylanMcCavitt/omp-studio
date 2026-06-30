@@ -65,6 +65,8 @@ interface BrowserStore {
   close(id: string): void;
   /** Destroy every known tab/view and clear local nav state. */
   destroyAll(): void;
+  /** Clear local visited-URL history without touching live browser views. */
+  clearHistory(): void;
   /** Navigate the live view to `url`. */
   navigate(url: string): void;
   back(): void;
@@ -193,6 +195,10 @@ export const useBrowserStore = create<BrowserStore>((set, get) => ({
   forward() {
     const id = get().viewId;
     if (id) void window.omp.browser.goForward(id);
+  },
+
+  clearHistory() {
+    set({ history: [] });
   },
 
   reload() {

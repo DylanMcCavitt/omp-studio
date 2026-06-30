@@ -31,10 +31,21 @@ class FakeResizeObserver {
   disconnect() {}
 }
 
-function seedSettings(enabled: boolean) {
-  const update = vi.fn().mockResolvedValue(undefined);
+function seedSettings(
+  browser: boolean | NonNullable<StudioSettings["browser"]>,
+  applyUpdates = false,
+) {
+  const initialBrowser =
+    typeof browser === "boolean" ? { enabled: browser } : browser;
+  const update = vi.fn(async (patch: Partial<StudioSettings>) => {
+    if (!applyUpdates) return;
+    const current = useSettingsStore.getState().settings ?? BASE;
+    useSettingsStore.setState({
+      settings: { ...current, ...patch },
+    });
+  });
   useSettingsStore.setState({
-    settings: { ...BASE, browser: { enabled } },
+    settings: { ...BASE, browser: initialBrowser },
     loading: false,
     error: undefined,
     update,
@@ -258,7 +269,23 @@ it("disambiguates duplicate tab labels and clears stale blank-tab input on switc
 
 it("shows a no-tab state after closing the last tab and recovers with a new tab", async () => {
   const user = userEvent.setup();
-  seedSettings(true);
+  seedSettings({
+    enabled: true,
+    bookmarks: [
+      {
+        url: "https://bookmark.test",
+        title: "Bookmark",
+        createdAt: "2026-06-30T00:00:00.000Z",
+      },
+    ],
+    history: [
+      {
+        url: "https://history.test",
+        title: "History",
+        lastVisitedAt: "2026-06-30T00:00:00.000Z",
+      },
+    ],
+  });
   const first: BrowserViewState = {
     id: "v1",
     url: "",
@@ -304,6 +331,8 @@ it("shows a no-tab state after closing the last tab and recovers with a new tab"
   expect(screen.getByText("No browser tabs are open.")).toBeInTheDocument();
   expect(screen.getByLabelText("Address")).toBeDisabled();
   expect(screen.getByRole("button", { name: "Go" })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "Bookmarks" })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "Recent pages" })).toBeDisabled();
 
   const [, emptyStateNewTab] = screen.getAllByRole("button", {
     name: "New browser tab",
@@ -476,4 +505,291 @@ it("explains blocked address schemes before navigating", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Go" }));
 
   expect(navigate).toHaveBeenCalledWith("v1", "https://localhost:3000");
+});
+
+it("saves and removes the current page bookmark metadata only", async () => {
+  const user = userEvent.setup();
+  const update = seedSettings(
+    { enabled: true, bookmarks: [], history: [] },
+    true,
+  );
+  const initial: BrowserViewState = {
+    id: "v1",
+    url: "https://example.com/docs",
+    title: "",
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  };
+  Object.assign(window.omp, {
+    browser: {
+      create: vi.fn().mockResolvedValue(initial),
+      onState: vi.fn(() => () => {}),
+      setBounds: vi.fn(),
+      navigate: vi.fn(),
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      destroy: vi.fn(),
+    },
+  } as unknown as Partial<OmpApi>);
+
+  render(<Browser />);
+
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Save current page bookmark",
+    }),
+  );
+
+  await waitFor(() =>
+    expect(update).toHaveBeenLastCalledWith({
+      browser: {
+        enabled: true,
+        bookmarks: [
+          {
+            url: "https://example.com/docs",
+            title: "https://example.com/docs",
+            createdAt: expect.any(String),
+          },
+        ],
+        history: [
+          {
+            url: "https://example.com/docs",
+            title: "https://example.com/docs",
+            lastVisitedAt: expect.any(String),
+          },
+        ],
+      },
+    }),
+  );
+  expect(update.mock.lastCall?.[0].browser).not.toHaveProperty("partition");
+
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Remove current page bookmark",
+    }),
+  );
+
+  await waitFor(() =>
+    expect(update).toHaveBeenLastCalledWith({
+      browser: {
+        enabled: true,
+        bookmarks: [],
+        history: [
+          {
+            url: "https://example.com/docs",
+            title: "https://example.com/docs",
+            lastVisitedAt: expect.any(String),
+          },
+        ],
+      },
+    }),
+  );
+});
+
+it("persists history metadata across remounts and navigates bookmark and history picks", async () => {
+  const user = userEvent.setup();
+  const navigate = vi.fn();
+  seedSettings(
+    {
+      enabled: true,
+      bookmarks: [
+        {
+          url: "https://bookmark.test",
+          title: "Bookmark",
+          createdAt: "2026-06-30T00:00:00.000Z",
+        },
+      ],
+      history: [],
+    },
+    true,
+  );
+  const initial: BrowserViewState = {
+    id: "v1",
+    url: "https://docs.test",
+    title: "Docs",
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  };
+  const remounted: BrowserViewState = {
+    id: "v2",
+    url: "",
+    title: "",
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  };
+  const create = vi
+    .fn()
+    .mockResolvedValueOnce(initial)
+    .mockResolvedValueOnce(remounted);
+  Object.assign(window.omp, {
+    browser: {
+      create,
+      onState: vi.fn(() => () => {}),
+      setBounds: vi.fn(),
+      navigate,
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      destroy: vi.fn(),
+    },
+  } as unknown as Partial<OmpApi>);
+
+  const view = render(<Browser />);
+
+  await waitFor(() =>
+    expect(useSettingsStore.getState().settings?.browser?.history).toEqual([
+      {
+        url: "https://docs.test",
+        title: "Docs",
+        lastVisitedAt: expect.any(String),
+      },
+    ]),
+  );
+
+  view.unmount();
+  resetBrowserStore();
+  render(<Browser />);
+  await waitFor(() => expect(create).toHaveBeenCalledTimes(2));
+
+  await user.click(await screen.findByRole("combobox", { name: "Bookmarks" }));
+  await user.click(await screen.findByRole("option", { name: /Bookmark/ }));
+  expect(navigate).toHaveBeenCalledWith("v2", "https://bookmark.test");
+
+  await user.click(screen.getByRole("combobox", { name: "Recent pages" }));
+  await user.click(await screen.findByRole("option", { name: /Docs/ }));
+  expect(navigate).toHaveBeenCalledWith("v2", "https://docs.test");
+});
+
+it("clears bookmark and history metadata without disabling the browser", async () => {
+  const user = userEvent.setup();
+  const update = seedSettings(
+    {
+      enabled: true,
+      bookmarks: [
+        {
+          url: "https://bookmark.test",
+          title: "Bookmark",
+          createdAt: "2026-06-30T00:00:00.000Z",
+        },
+      ],
+      history: [
+        {
+          url: "https://history.test",
+          title: "History",
+          lastVisitedAt: "2026-06-30T00:00:00.000Z",
+        },
+      ],
+    },
+    true,
+  );
+  const initial: BrowserViewState = {
+    id: "v1",
+    url: "",
+    title: "",
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  };
+  Object.assign(window.omp, {
+    browser: {
+      create: vi.fn().mockResolvedValue(initial),
+      onState: vi.fn(() => () => {}),
+      setBounds: vi.fn(),
+      navigate: vi.fn(),
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      destroy: vi.fn(),
+    },
+  } as unknown as Partial<OmpApi>);
+
+  render(<Browser />);
+
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Clear browser bookmarks and history metadata",
+    }),
+  );
+
+  await waitFor(() =>
+    expect(update).toHaveBeenLastCalledWith({
+      browser: { enabled: true, bookmarks: [], history: [] },
+    }),
+  );
+  expect(
+    screen.getByRole("button", { name: "Save current page bookmark" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "Bookmarks" })).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "Recent pages" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", {
+      name: "Clear browser bookmarks and history metadata",
+    }),
+  ).toBeDisabled();
+});
+
+it("saves a same-url revisit after clearing metadata", async () => {
+  const user = userEvent.setup();
+  seedSettings(
+    {
+      enabled: true,
+      bookmarks: [],
+      history: [
+        {
+          url: "https://same.test",
+          title: "Same",
+          lastVisitedAt: "2026-06-30T00:00:00.000Z",
+        },
+      ],
+    },
+    true,
+  );
+  const initial: BrowserViewState = {
+    id: "v1",
+    url: "https://same.test",
+    title: "",
+    canGoBack: false,
+    canGoForward: false,
+    loading: false,
+  };
+  const navigate = vi.fn();
+  Object.assign(window.omp, {
+    browser: {
+      create: vi.fn().mockResolvedValue(initial),
+      onState: vi.fn(() => () => {}),
+      setBounds: vi.fn(),
+      navigate,
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      destroy: vi.fn(),
+    },
+  } as unknown as Partial<OmpApi>);
+
+  render(<Browser />);
+
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Clear browser bookmarks and history metadata",
+    }),
+  );
+  await waitFor(() =>
+    expect(useSettingsStore.getState().settings?.browser?.history).toEqual([]),
+  );
+
+  await user.click(screen.getByRole("button", { name: "Go" }));
+  expect(navigate).toHaveBeenCalledWith("v1", "https://same.test");
+  await waitFor(() =>
+    expect(useSettingsStore.getState().settings?.browser?.history).toEqual([
+      {
+        url: "https://same.test",
+        title: "https://same.test",
+        lastVisitedAt: expect.any(String),
+      },
+    ]),
+  );
 });

@@ -299,6 +299,18 @@ export interface UiPrefs {
   pinnedCommands?: string[];
 }
 
+export interface BrowserBookmark {
+  url: string;
+  title: string;
+  createdAt: string;
+}
+
+export interface BrowserHistoryEntry {
+  url: string;
+  title: string;
+  lastVisitedAt: string;
+}
+
 export interface StudioSettingsV2 extends Omit<StudioSettingsV1, "version"> {
   version: 2;
   /** Feature 1 — workspaces (synthesised from recentProjects on migrate). */
@@ -312,7 +324,11 @@ export interface StudioSettingsV2 extends Omit<StudioSettingsV1, "version"> {
   /** Feature 7 — terminal capability (off by default). */
   terminal?: { enabled: boolean; maxConcurrent: number };
   /** Feature 8 — embedded browser capability (off by default). */
-  browser?: { enabled: boolean };
+  browser?: {
+    enabled: boolean;
+    bookmarks?: BrowserBookmark[];
+    history?: BrowserHistoryEntry[];
+  };
 }
 
 /**

@@ -332,7 +332,25 @@ test("round-trips a patch of each new V2 namespace (they coexist, not clobber)",
     linear: { writesEnabled: true, defaultTeamId: "TEAM-1" },
   });
   await updateSettings({ terminal: { enabled: true, maxConcurrent: 8 } });
-  await updateSettings({ browser: { enabled: true } });
+  await updateSettings({
+    browser: {
+      enabled: true,
+      bookmarks: [
+        {
+          url: "https://user:pass@example.com/docs?topic=browser",
+          title: "Docs",
+          createdAt: "2026-06-30T00:00:00Z",
+        },
+      ],
+      history: [
+        {
+          url: "http://example.com/recent",
+          title: "Recent",
+          lastVisitedAt: "2026-06-30T00:01:00Z",
+        },
+      ],
+    },
+  });
 
   const loaded = await loadSettings();
   expect(loaded.workspaces).toEqual([
@@ -353,7 +371,23 @@ test("round-trips a patch of each new V2 namespace (they coexist, not clobber)",
     defaultTeamId: "TEAM-1",
   });
   expect(loaded.terminal).toEqual({ enabled: true, maxConcurrent: 8 });
-  expect(loaded.browser).toEqual({ enabled: true });
+  expect(loaded.browser).toEqual({
+    enabled: true,
+    bookmarks: [
+      {
+        url: "https://example.com/docs?topic=browser",
+        title: "Docs",
+        createdAt: "2026-06-30T00:00:00Z",
+      },
+    ],
+    history: [
+      {
+        url: "http://example.com/recent",
+        title: "Recent",
+        lastVisitedAt: "2026-06-30T00:01:00Z",
+      },
+    ],
+  });
 });
 
 test("rejects a malformed V2 namespace patch, preserving the prior value", async () => {
@@ -366,6 +400,140 @@ test("rejects a malformed V2 namespace patch, preserving the prior value", async
   expect(loaded.terminal).toEqual({ enabled: true, maxConcurrent: 3 });
 });
 
+test("browser metadata clears without changing enabled", async () => {
+  await updateSettings({
+    browser: {
+      enabled: true,
+      bookmarks: [
+        {
+          url: "https://example.com/docs",
+          title: "Docs",
+          createdAt: "2026-06-30T00:00:00Z",
+        },
+      ],
+      history: [
+        {
+          url: "https://example.com/recent",
+          title: "Recent",
+          lastVisitedAt: "2026-06-30T00:01:00Z",
+        },
+      ],
+    },
+  });
+
+  await updateSettings({
+    browser: { enabled: true, bookmarks: [], history: [] },
+  });
+
+  const loaded = await loadSettings();
+  expect(loaded.browser).toEqual({
+    enabled: true,
+    bookmarks: [],
+    history: [],
+  });
+});
+
+test("browser metadata drops invalid entries and unknown fields", async () => {
+  await updateSettings({
+    browser: {
+      enabled: false,
+      bookmarks: [
+        {
+          url: "ftp://example.com/file",
+          title: "Bad scheme",
+          createdAt: "2026-06-30T00:00:00Z",
+        },
+        {
+          url: "https://example.com/good",
+          title: "ghp_title_is_blank",
+          createdAt: "2026-06-30T00:02:00Z",
+          favicon: "ignored",
+        },
+      ],
+      history: [
+        {
+          url: "https://example.com/recent",
+          title: "Recent",
+          lastVisitedAt: "2026-06-30T00:03:00Z",
+          formData: "ignored",
+        },
+        {
+          url: "not a url",
+          title: "Bad",
+          lastVisitedAt: "2026-06-30T00:04:00Z",
+        },
+      ],
+    } as unknown as StudioSettings["browser"],
+  });
+
+  const loaded = await loadSettings();
+  expect(loaded.browser).toEqual({
+    enabled: false,
+    bookmarks: [
+      {
+        url: "https://example.com/good",
+        title: "",
+        createdAt: "2026-06-30T00:02:00Z",
+      },
+    ],
+    history: [
+      {
+        url: "https://example.com/recent",
+        title: "Recent",
+        lastVisitedAt: "2026-06-30T00:03:00Z",
+      },
+    ],
+  });
+});
+
+test("malformed browser metadata preserves the prior browser value", async () => {
+  await updateSettings({
+    browser: {
+      enabled: true,
+      bookmarks: [
+        {
+          url: "https://example.com/saved",
+          title: "Saved",
+          createdAt: "2026-06-30T00:00:00Z",
+        },
+      ],
+      history: [
+        {
+          url: "https://example.com/recent",
+          title: "Recent",
+          lastVisitedAt: "2026-06-30T00:01:00Z",
+        },
+      ],
+    },
+  });
+
+  await updateSettings({
+    browser: {
+      enabled: false,
+      bookmarks: [{ url: "javascript:alert(1)", title: "Bad", createdAt: "t" }],
+    } as unknown as StudioSettings["browser"],
+  });
+
+  const loaded = await loadSettings();
+  expect(loaded.browser).toEqual({
+    enabled: true,
+    bookmarks: [
+      {
+        url: "https://example.com/saved",
+        title: "Saved",
+        createdAt: "2026-06-30T00:00:00Z",
+      },
+    ],
+    history: [
+      {
+        url: "https://example.com/recent",
+        title: "Recent",
+        lastVisitedAt: "2026-06-30T00:01:00Z",
+      },
+    ],
+  });
+});
+
 test("never writes a secret to disk, even nested inside a known namespace", async () => {
   const SECRET = "lin_api_supersecret_DO_NOT_PERSIST";
   await updateSettings({
@@ -374,6 +542,53 @@ test("never writes a secret to disk, even nested inside a known namespace", asyn
     accessToken: SECRET,
     linear: { writesEnabled: true, defaultTeamId: "T", apiKey: SECRET },
     terminal: { enabled: false, maxConcurrent: 2, token: SECRET },
+    browser: {
+      enabled: true,
+      bookmarks: [
+        {
+          url: "https://example.com/safe",
+          title: SECRET,
+          createdAt: "2026-06-30T00:00:00Z",
+        },
+        {
+          url: `https://example.com/leak?next=${SECRET}`,
+          title: "Leak",
+          createdAt: "2026-06-30T00:01:00Z",
+        },
+        {
+          url: `https://example.com/reset/${SECRET}`,
+          title: "Path leak",
+          createdAt: "2026-06-30T00:03:00Z",
+        },
+        {
+          url: `https://example.com/fragment#access_token=${SECRET}`,
+          title: "Fragment leak",
+          createdAt: "2026-06-30T00:02:00Z",
+        },
+        {
+          url: "https://example.com/bad-created-at",
+          title: "Timestamp leak",
+          createdAt: SECRET,
+        },
+      ],
+      history: [
+        {
+          url: "https://example.com/recent?api_key=abc",
+          title: "Leak",
+          lastVisitedAt: "2026-06-30T00:04:00Z",
+        },
+        {
+          url: "https://example.com/bad-visited-at",
+          title: "Timestamp leak",
+          lastVisitedAt: SECRET,
+        },
+        {
+          url: "https://example.com/recent#section",
+          title: "Recent",
+          lastVisitedAt: "2026-06-30T00:05:00Z",
+        },
+      ],
+    },
   } as unknown as Partial<StudioSettings>);
 
   const raw = readFileSync(settingsFile(), "utf8");
@@ -387,6 +602,28 @@ test("never writes a secret to disk, even nested inside a known namespace", asyn
   // Non-secret metadata persists; the smuggled key was stripped.
   expect(onDisk.linear).toEqual({ writesEnabled: true, defaultTeamId: "T" });
   expect(onDisk.terminal).toEqual({ enabled: false, maxConcurrent: 2 });
+  expect(onDisk.browser).toEqual({
+    enabled: true,
+    bookmarks: [
+      {
+        url: "https://example.com/safe",
+        title: "",
+        createdAt: "2026-06-30T00:00:00Z",
+      },
+      {
+        url: "https://example.com/fragment",
+        title: "Fragment leak",
+        createdAt: "2026-06-30T00:02:00Z",
+      },
+    ],
+    history: [
+      {
+        url: "https://example.com/recent",
+        title: "Recent",
+        lastVisitedAt: "2026-06-30T00:05:00Z",
+      },
+    ],
+  });
 });
 
 // ---------------------------------------------------------------------------

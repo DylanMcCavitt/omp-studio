@@ -8,8 +8,16 @@
 // separate sandboxed view — we state the model plainly and never call it
 // "secure". On unmount all views are destroyed and the subscription released.
 
+import type { BrowserHistoryEntry } from "@shared/ipc";
 import { Globe, Navigation, ShieldAlert } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BrowserChrome } from "@/components/browser/BrowserChrome";
 import { useBrowserBounds } from "@/components/browser/useBrowserBounds";
 import { Button, EmptyState } from "@/components/ui";
@@ -18,9 +26,10 @@ import { useBrowserStore } from "@/store/browser";
 import { useSettingsStore } from "@/store/settings";
 
 export default function Browser() {
-  const enabled = useSettingsStore(
-    (s) => s.settings?.browser?.enabled ?? false,
-  );
+  const browserSettings = useSettingsStore((s) => s.settings?.browser);
+  const enabled = browserSettings?.enabled ?? false;
+  const bookmarks = browserSettings?.bookmarks ?? [];
+  const persistedHistory = browserSettings?.history ?? [];
   const updateSettings = useSettingsStore((s) => s.update);
 
   const tabs = useBrowserStore((s) => s.tabs);
@@ -41,8 +50,14 @@ export default function Browser() {
   const openDevTools = useBrowserStore((s) => s.openDevTools);
   const openExternal = useBrowserStore((s) => s.openExternal);
   const destroyAll = useBrowserStore((s) => s.destroyAll);
+  const clearLocalHistory = useBrowserStore((s) => s.clearHistory);
 
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const lastPersistedHistoryKey = useRef("");
+  const metadataUpdateQueue = useRef(Promise.resolve());
+  const [clearedHistoryUrls, setClearedHistoryUrls] = useState<Set<string>>(
+    () => new Set(),
+  );
   useBrowserBounds(viewId, placeholderRef);
   const createBlankTab = useCallback(() => {
     void createTab({
@@ -50,6 +65,95 @@ export default function Browser() {
       bounds: getPlaceholderBounds(placeholderRef.current),
     });
   }, [createTab]);
+
+  const updateBrowserMetadata = useCallback(
+    (
+      patch: (
+        browser: NonNullable<typeof browserSettings>,
+      ) => Pick<NonNullable<typeof browserSettings>, "bookmarks" | "history">,
+    ) => {
+      metadataUpdateQueue.current = metadataUpdateQueue.current
+        .catch(() => undefined)
+        .then(async () => {
+          const browser = useSettingsStore.getState().settings?.browser;
+          if (!browser) return;
+          await updateSettings({ browser: { ...browser, ...patch(browser) } });
+        });
+    },
+    [updateSettings],
+  );
+
+  useEffect(() => {
+    if (!enabled) return;
+    const entry = toHistoryEntry(state);
+    if (!entry) return;
+    if (clearedHistoryUrls.has(entry.url)) return;
+    if (clearedHistoryUrls.size > 0) setClearedHistoryUrls(new Set());
+    const key = `${state?.id ?? ""}\n${entry.url}\n${entry.title}`;
+    if (key === lastPersistedHistoryKey.current) return;
+    lastPersistedHistoryKey.current = key;
+    updateBrowserMetadata((browser) => ({
+      history: [
+        entry,
+        ...(browser.history ?? []).filter((h) => h.url !== entry.url),
+      ].slice(0, 50),
+    }));
+  }, [
+    enabled,
+    state?.id,
+    state?.title,
+    state?.url,
+    clearedHistoryUrls,
+    updateBrowserMetadata,
+  ]);
+
+  const historyOptions = useMemo(
+    () =>
+      mergeHistory(persistedHistory, history).filter(
+        (entry) => !clearedHistoryUrls.has(entry.url),
+      ),
+    [persistedHistory, history, clearedHistoryUrls],
+  );
+
+  const currentUrl = state?.url?.trim() ?? "";
+  const currentTitle = state?.title?.trim() || currentUrl;
+  const currentBookmark = bookmarks.find((b) => b.url === currentUrl);
+  const saveCurrentBookmark = useCallback(() => {
+    if (!currentUrl) return;
+    updateBrowserMetadata((browser) => {
+      const currentBookmarks = browser.bookmarks ?? [];
+      const existing = currentBookmarks.find((b) => b.url === currentUrl);
+      return {
+        bookmarks: [
+          {
+            url: currentUrl,
+            title: currentTitle,
+            createdAt: existing?.createdAt ?? new Date().toISOString(),
+          },
+          ...currentBookmarks.filter((b) => b.url !== currentUrl),
+        ],
+      };
+    });
+  }, [currentTitle, currentUrl, updateBrowserMetadata]);
+
+  const removeCurrentBookmark = useCallback(() => {
+    if (!currentUrl) return;
+    updateBrowserMetadata((browser) => ({
+      bookmarks: (browser.bookmarks ?? []).filter((b) => b.url !== currentUrl),
+    }));
+  }, [currentUrl, updateBrowserMetadata]);
+
+  const clearBrowserMetadata = useCallback(() => {
+    setClearedHistoryUrls(
+      new Set([
+        ...historyOptions.map((historyEntry) => historyEntry.url),
+        ...(state?.url ? [state.url] : []),
+      ]),
+    );
+    clearLocalHistory();
+    lastPersistedHistoryKey.current = "";
+    updateBrowserMetadata(() => ({ bookmarks: [], history: [] }));
+  }, [clearLocalHistory, historyOptions, state, updateBrowserMetadata]);
 
   // While this view is mounted (and the capability is on): subscribe to state
   // pushes BEFORE creating, create the first blank tab once the placeholder has
@@ -90,7 +194,9 @@ export default function Browser() {
             <Button
               variant="primary"
               onClick={() =>
-                void updateSettings({ browser: { enabled: true } })
+                void updateSettings({
+                  browser: { ...(browserSettings ?? {}), enabled: true },
+                })
               }
             >
               <ShieldAlert className="h-4 w-4" />
@@ -108,16 +214,24 @@ export default function Browser() {
         tabs={tabs}
         activeTabId={viewId}
         state={state}
-        history={history}
+        history={historyOptions}
+        bookmarks={bookmarks}
         onCreateTab={createBlankTab}
         onSwitchTab={switchTo}
         onCloseTab={closeTab}
-        onNavigate={navigate}
+        onNavigate={(url) => {
+          if (clearedHistoryUrls.size > 0) setClearedHistoryUrls(new Set());
+          navigate(url);
+        }}
         onBack={back}
         onForward={forward}
         onReload={reload}
         onOpenDevTools={openDevTools}
         onOpenExternal={openExternal}
+        onSaveBookmark={saveCurrentBookmark}
+        onRemoveBookmark={removeCurrentBookmark}
+        onClearMetadata={clearBrowserMetadata}
+        isCurrentBookmarked={Boolean(currentBookmark)}
       />
       <BrowserPanelState
         state={state}
@@ -205,4 +319,45 @@ function getPlaceholderBounds(el: HTMLDivElement | null): BrowserBounds {
     width: Math.round(r?.width ?? 0),
     height: Math.round(r?.height ?? 0),
   };
+}
+
+function toHistoryEntry(
+  state: { url: string; title: string } | null,
+): BrowserHistoryEntry | null {
+  const url = state?.url.trim() ?? "";
+  const title = state?.title.trim() || url;
+  if (!url) return null;
+  return { url, title, lastVisitedAt: new Date().toISOString() };
+}
+
+function mergeHistory(
+  persisted: BrowserHistoryEntry[],
+  transient: string[],
+): BrowserHistoryEntry[] {
+  const byUrl = new Map(persisted.map((entry) => [entry.url, entry]));
+  const merged: BrowserHistoryEntry[] = [];
+  const seen = new Set<string>();
+
+  for (const url of transient) {
+    if (seen.has(url)) continue;
+    const persistedEntry = byUrl.get(url);
+    merged.push(
+      persistedEntry ?? {
+        url,
+        title: url,
+        lastVisitedAt: "",
+      },
+    );
+    seen.add(url);
+  }
+
+  for (const entry of [...persisted].sort((a, b) =>
+    b.lastVisitedAt.localeCompare(a.lastVisitedAt),
+  )) {
+    if (seen.has(entry.url)) continue;
+    merged.push(entry);
+    seen.add(entry.url);
+  }
+
+  return merged;
 }
