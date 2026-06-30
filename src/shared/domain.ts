@@ -170,6 +170,51 @@ export interface GhPr {
 }
 
 // ---------------------------------------------------------------------------
+// OMP stats (local `omp stats --json`; permissive because CLI fields may grow)
+// ---------------------------------------------------------------------------
+
+export interface OmpStatsAggregate {
+  totalRequests?: number;
+  successfulRequests?: number;
+  failedRequests?: number;
+  errorRate?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCacheReadTokens?: number;
+  totalCacheWriteTokens?: number;
+  cacheRate?: number;
+  totalCost?: number;
+  avgDuration?: number;
+  avgTtft?: number;
+  avgTokensPerSecond?: number;
+  firstTimestamp?: number;
+  lastTimestamp?: number;
+  [key: string]: unknown;
+}
+
+export interface OmpStatsBreakdown extends OmpStatsAggregate {
+  provider?: string;
+  model?: string;
+  folder?: string;
+  agentType?: string;
+  name?: string;
+  timestamp?: number;
+}
+
+export interface OmpStatsSnapshot {
+  overall?: OmpStatsAggregate;
+  byModel?: OmpStatsBreakdown[];
+  byFolder?: OmpStatsBreakdown[];
+  byAgentType?: OmpStatsBreakdown[];
+  timeSeries?: OmpStatsBreakdown[];
+  modelSeries?: OmpStatsBreakdown[];
+  modelPerformanceSeries?: OmpStatsBreakdown[];
+  costSeries?: OmpStatsBreakdown[];
+  generatedAt: string;
+  [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------------------
 // Dashboard aggregate
 // ---------------------------------------------------------------------------
 

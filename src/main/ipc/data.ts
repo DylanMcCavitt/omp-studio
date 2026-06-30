@@ -20,6 +20,7 @@ import {
   listPrs,
   listRepos,
 } from "../services/github";
+import { getOmpStats } from "../services/omp-stats";
 import {
   archiveSession,
   deleteSession,
@@ -102,6 +103,7 @@ export function registerDataIpc(
   const resolveCwd = (cwd?: string): string | undefined => cwd ?? activeCwd();
 
   ipcMain.handle(CH.dashboard, () => buildDashboard(activeCwd()));
+  ipcMain.handle(CH.ompStats, () => getOmpStats());
 
   ipcMain.handle(CH.listSessions, (_event, opts?: ListSessionsOptions) =>
     listSessions(opts),
