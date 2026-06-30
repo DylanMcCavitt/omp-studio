@@ -9,14 +9,16 @@
 // originates from the local terminal view via terminal:write; it is NEVER
 // auto-fed from agent output, evt:rpc frames, or remote content.
 
-import { CH } from "@shared/ipc";
+import { CH, type ExternalTerminalProfile } from "@shared/ipc";
 import type { BrowserWindow, IpcMain } from "electron";
+import type { ExternalTerminalLaunchers } from "../terminal/external-launchers";
 import type { PtySession } from "../terminal/pty-session";
 import type { TerminalRegistry } from "../terminal/registry";
 
 export function registerTerminalIpc(
   ipcMain: IpcMain,
   registry: TerminalRegistry,
+  externalTerminals: ExternalTerminalLaunchers,
   getWindow: () => BrowserWindow | null,
 ): void {
   const handle = <Args extends unknown[], Result>(
@@ -71,4 +73,10 @@ export function registerTerminalIpc(
     registry.get(id)?.kill();
   });
   handle(CH.terminalList, () => registry.list());
+  handle(CH.terminalExternalLaunchers, () => externalTerminals.list());
+  handle(
+    CH.terminalOpenExternal,
+    (opts: { cwd: string; profile?: ExternalTerminalProfile }) =>
+      externalTerminals.open(opts),
+  );
 }

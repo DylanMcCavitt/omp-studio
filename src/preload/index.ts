@@ -9,6 +9,7 @@ import type {
   ChatRpcEvent,
   ChatUiRequestEvent,
   ChatUiRespondPayload,
+  ExternalTerminalProfile,
   OmpApi,
   OpenSessionDescriptor,
   PromptOptions,
@@ -164,6 +165,9 @@ const api: OmpApi = {
       ipcRenderer.invoke(CH.terminalResize, id, cols, rows),
     kill: (id: string) => ipcRenderer.invoke(CH.terminalKill, id),
     list: () => ipcRenderer.invoke(CH.terminalList),
+    externalLaunchers: () => ipcRenderer.invoke(CH.terminalExternalLaunchers),
+    openExternal: (opts: { cwd: string; profile?: ExternalTerminalProfile }) =>
+      ipcRenderer.invoke(CH.terminalOpenExternal, opts),
     onData: onTerminalData,
     onExit: onTerminalExit,
   },

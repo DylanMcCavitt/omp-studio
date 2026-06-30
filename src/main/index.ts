@@ -13,11 +13,13 @@ import { registerTerminalIpc } from "./ipc/terminal";
 import { scoped } from "./logger";
 import { SessionRegistry } from "./omp/registry";
 import { loadSettings, setSettingsDir } from "./services/settings-service";
+import { ExternalTerminalLaunchers } from "./terminal/external-launchers";
 import { TerminalRegistry } from "./terminal/registry";
 
 let mainWindow: BrowserWindow | null = null;
 const registry = new SessionRegistry();
 const terminals = new TerminalRegistry();
+const externalTerminals = new ExternalTerminalLaunchers();
 const browsers = new BrowserViewManager(() => mainWindow);
 const log = scoped("main");
 
@@ -120,7 +122,7 @@ void app.whenReady().then(async () => {
   registerChatIpc(ipcMain, registry, () => mainWindow);
   registerSettingsIpc(ipcMain);
   registerLinearIpc(ipcMain);
-  registerTerminalIpc(ipcMain, terminals, () => mainWindow);
+  registerTerminalIpc(ipcMain, terminals, externalTerminals, () => mainWindow);
   registerBrowserIpc(ipcMain, browsers, () => mainWindow);
 
   createWindow();

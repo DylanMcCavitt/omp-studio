@@ -118,6 +118,8 @@ export const CH = {
   terminalResize: "terminal:resize",
   terminalKill: "terminal:kill",
   terminalList: "terminal:list",
+  terminalExternalLaunchers: "terminal:externalLaunchers",
+  terminalOpenExternal: "terminal:openExternal",
   evtTerminalData: "evt:terminal-data",
   evtTerminalExit: "evt:terminal-exit",
   // feature 8 — embedded browser (req/resp + view-state events)
@@ -308,6 +310,28 @@ export type ExternalTerminalProfile =
   | "alacritty"
   | "wezterm";
 
+export type ExternalTerminalLauncherKind =
+  | "mac-app"
+  | "command"
+  | "unavailable";
+
+export interface ExternalTerminalLauncherInfo {
+  profile: ExternalTerminalProfile;
+  label: string;
+  available: boolean;
+  kind: ExternalTerminalLauncherKind;
+  detectedPath?: string;
+  reason?: string;
+}
+
+export interface ExternalTerminalLaunchResult {
+  id: string;
+  profile: ExternalTerminalProfile;
+  label: string;
+  cwd: string;
+  launchedAt: string;
+}
+
 export interface TerminalSettings {
   enabled: boolean;
   maxConcurrent: number;
@@ -457,6 +481,11 @@ export interface OmpApi {
     resize(id: string, cols: number, rows: number): Promise<void>;
     kill(id: string): Promise<void>;
     list(): Promise<TerminalInfo[]>;
+    externalLaunchers(): Promise<ExternalTerminalLauncherInfo[]>;
+    openExternal(opts: {
+      cwd: string;
+      profile?: ExternalTerminalProfile;
+    }): Promise<ExternalTerminalLaunchResult>;
     onData(cb: (e: { id: string; data: string }) => void): () => void;
     onExit(cb: (e: { id: string; code: number | null }) => void): () => void;
   };
