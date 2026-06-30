@@ -299,6 +299,24 @@ export interface UiPrefs {
   pinnedCommands?: string[];
 }
 
+export type TerminalDefaultTarget = "built-in" | "external";
+export type ExternalTerminalProfile =
+  | "system"
+  | "ghostty"
+  | "kitty"
+  | "iterm2"
+  | "alacritty"
+  | "wezterm";
+
+export interface TerminalSettings {
+  enabled: boolean;
+  maxConcurrent: number;
+  /** Where terminal affordances should open by default. */
+  defaultTarget?: TerminalDefaultTarget;
+  /** Which external app to prefer when defaultTarget is "external". */
+  externalProfile?: ExternalTerminalProfile;
+}
+
 export interface BrowserBookmark {
   url: string;
   title: string;
@@ -321,8 +339,7 @@ export interface StudioSettingsV2 extends Omit<StudioSettingsV1, "version"> {
   ui?: UiPrefs;
   /** Feature 2 — NON-SECRET Linear metadata only (key lives in the OS keychain). */
   linear?: { writesEnabled: boolean; defaultTeamId?: string | null };
-  /** Feature 7 — terminal capability (off by default). */
-  terminal?: { enabled: boolean; maxConcurrent: number };
+  terminal?: TerminalSettings;
   /** Feature 8 — embedded browser capability (off by default). */
   browser?: {
     enabled: boolean;

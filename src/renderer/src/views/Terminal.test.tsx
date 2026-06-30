@@ -125,9 +125,14 @@ it("enabling flips settings.terminal.enabled (preserving the cap) and reveals th
 
   await user.click(screen.getByRole("button", { name: /enable terminal/i }));
 
-  // Flips enabled while preserving the persisted concurrency cap.
+  // Flips enabled while preserving the persisted terminal settings.
   expect(update).toHaveBeenCalledWith({
-    terminal: { enabled: true, maxConcurrent: 7 },
+    terminal: {
+      enabled: true,
+      maxConcurrent: 7,
+      defaultTarget: "built-in",
+      externalProfile: "system",
+    },
   });
   // Gate dismissed; the shell mounts scoped to the active workspace cwd.
   const surface = await screen.findByTestId("xterm-surface");

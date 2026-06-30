@@ -3,7 +3,14 @@ import type {
   ProviderAuthStatus,
   ProviderInfo,
 } from "@shared/domain";
-import type { ThemeMode, Workspace, WorkspaceColorKey } from "@shared/ipc";
+import type {
+  ExternalTerminalProfile,
+  TerminalDefaultTarget,
+  TerminalSettings,
+  ThemeMode,
+  Workspace,
+  WorkspaceColorKey,
+} from "@shared/ipc";
 import type { ApprovalMode, ThinkingLevel } from "@shared/rpc";
 import {
   Boxes,
@@ -23,6 +30,7 @@ import {
   SlidersHorizontal,
   SquareKanban,
   Star,
+  TerminalSquare,
   Trash2,
   TriangleAlert,
   X,
@@ -74,6 +82,23 @@ const THEME_MODES: { value: ThemeMode; label: string }[] = [
   { value: "system", label: "System" },
   { value: "dark", label: "Dark" },
   { value: "light", label: "Light" },
+];
+
+const TERMINAL_TARGETS: { value: TerminalDefaultTarget; label: string }[] = [
+  { value: "built-in", label: "Built-in tab" },
+  { value: "external", label: "External app" },
+];
+
+const EXTERNAL_TERMINAL_PROFILES: {
+  value: ExternalTerminalProfile;
+  label: string;
+}[] = [
+  { value: "system", label: "System default" },
+  { value: "ghostty", label: "Ghostty" },
+  { value: "kitty", label: "Kitty" },
+  { value: "iterm2", label: "iTerm2" },
+  { value: "alacritty", label: "Alacritty" },
+  { value: "wezterm", label: "WezTerm" },
 ];
 
 const AUTH_BADGE: Record<
@@ -143,6 +168,7 @@ export default function Settings() {
             modelsLoading={models.loading}
             requestDanger={setDanger}
           />
+          <TerminalPanel requestDanger={setDanger} />
           <AppearancePanel />
           <WorkspacesPanel />
           <ProvidersPanel state={providers} />
@@ -311,6 +337,155 @@ function DefaultsPanel({
           </span>
         </div>
       )}
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Terminal (capability + default launch target)
+// ---------------------------------------------------------------------------
+
+function TerminalPanel({
+  requestDanger,
+}: {
+  requestDanger: (req: DangerRequest) => void;
+}) {
+  const settings = useSettingsStore((s) => s.settings);
+  const update = useSettingsStore((s) => s.update);
+  const terminal = settings?.terminal;
+  const enabled = terminal?.enabled ?? false;
+  const maxConcurrent = terminal?.maxConcurrent ?? 4;
+  const defaultTarget = terminal?.defaultTarget ?? "built-in";
+  const externalProfile = terminal?.externalProfile ?? "system";
+  const updateTerminal = (patch: Partial<TerminalSettings>) =>
+    void update({
+      terminal: {
+        enabled,
+        maxConcurrent,
+        defaultTarget,
+        externalProfile,
+        ...patch,
+      },
+    });
+
+  const onEnableToggle = () => {
+    if (!enabled) {
+      requestDanger({
+        title: "Enable the built-in terminal?",
+        message:
+          "The built-in terminal runs a real shell with your full user-account privileges. Commands can read, change, or delete files and reach the network.",
+        confirmLabel: "Enable terminal",
+        onConfirm: () => updateTerminal({ enabled: true }),
+      });
+      return;
+    }
+    updateTerminal({ enabled: false });
+  };
+
+  const title = (
+    <span className="flex items-center gap-2">
+      <TerminalSquare className="h-4 w-4 text-accent" />
+      Terminal
+      <Badge variant={enabled ? "success" : "muted"}>
+        {enabled ? "enabled" : "disabled"}
+      </Badge>
+    </span>
+  );
+
+  if (!settings) {
+    return (
+      <Panel title={title}>
+        <div className="flex justify-center p-4">
+          <Spinner />
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel title={title} bodyClassName="space-y-4 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-xs font-medium text-ink-muted">
+            Built-in shell tabs
+          </div>
+          <p className="mt-1 text-xs text-ink-muted">
+            Off by default. Enable only when you want Studio to spawn local
+            shell sessions.
+          </p>
+        </div>
+        <Toggle
+          checked={enabled}
+          danger={enabled}
+          label="Enable built-in terminal"
+          onChange={onEnableToggle}
+        />
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field
+          label="Default terminal target"
+          hint="Used by terminal affordances that can choose between Studio tabs and an external app."
+        >
+          <select
+            aria-label="Default terminal target"
+            className={selectClass}
+            value={defaultTarget}
+            onChange={(e) =>
+              updateTerminal({
+                defaultTarget: e.target.value as TerminalDefaultTarget,
+              })
+            }
+          >
+            {TERMINAL_TARGETS.map((target) => (
+              <option key={target.value} value={target.value}>
+                {target.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field
+          label="External terminal profile"
+          hint="Preference only; launcher detection/availability is handled by the external terminal workflow."
+        >
+          <select
+            aria-label="External terminal profile"
+            className={selectClass}
+            value={externalProfile}
+            onChange={(e) =>
+              updateTerminal({
+                externalProfile: e.target.value as ExternalTerminalProfile,
+              })
+            }
+          >
+            {EXTERNAL_TERMINAL_PROFILES.map((profile) => (
+              <option key={profile.value} value={profile.value}>
+                {profile.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
+
+      <Field label="Maximum built-in tabs">
+        <input
+          aria-label="Maximum built-in terminal tabs"
+          className={selectClass}
+          min={1}
+          max={32}
+          type="number"
+          value={maxConcurrent}
+          onChange={(e) =>
+            updateTerminal({
+              maxConcurrent: Math.max(
+                1,
+                Math.min(32, Number.parseInt(e.target.value, 10) || 1),
+              ),
+            })
+          }
+        />
+      </Field>
     </Panel>
   );
 }

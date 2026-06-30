@@ -180,6 +180,8 @@ test("defaultSettings returns V2 with secure capability defaults", () => {
   expect(d.browser?.enabled).toBe(false);
   expect(d.linear?.writesEnabled).toBe(false);
   expect(typeof d.terminal?.maxConcurrent).toBe("number");
+  expect(d.terminal?.defaultTarget).toBe("built-in");
+  expect(d.terminal?.externalProfile).toBe("system");
 });
 
 test("a fresh install (missing file) loads the secure V2 defaults", async () => {
@@ -331,7 +333,14 @@ test("round-trips a patch of each new V2 namespace (they coexist, not clobber)",
   await updateSettings({
     linear: { writesEnabled: true, defaultTeamId: "TEAM-1" },
   });
-  await updateSettings({ terminal: { enabled: true, maxConcurrent: 8 } });
+  await updateSettings({
+    terminal: {
+      enabled: true,
+      maxConcurrent: 8,
+      defaultTarget: "external",
+      externalProfile: "ghostty",
+    },
+  });
   await updateSettings({
     browser: {
       enabled: true,
@@ -370,7 +379,12 @@ test("round-trips a patch of each new V2 namespace (they coexist, not clobber)",
     writesEnabled: true,
     defaultTeamId: "TEAM-1",
   });
-  expect(loaded.terminal).toEqual({ enabled: true, maxConcurrent: 8 });
+  expect(loaded.terminal).toEqual({
+    enabled: true,
+    maxConcurrent: 8,
+    defaultTarget: "external",
+    externalProfile: "ghostty",
+  });
   expect(loaded.browser).toEqual({
     enabled: true,
     bookmarks: [
@@ -391,13 +405,39 @@ test("round-trips a patch of each new V2 namespace (they coexist, not clobber)",
 });
 
 test("rejects a malformed V2 namespace patch, preserving the prior value", async () => {
-  await updateSettings({ terminal: { enabled: true, maxConcurrent: 3 } });
+  await updateSettings({
+    terminal: {
+      enabled: true,
+      maxConcurrent: 3,
+      defaultTarget: "external",
+      externalProfile: "ghostty",
+    },
+  });
   // `enabled` missing → coercion returns undefined → the prior value is kept.
   await updateSettings({
     terminal: { maxConcurrent: 50 } as unknown as StudioSettings["terminal"],
   });
   const loaded = await loadSettings();
-  expect(loaded.terminal).toEqual({ enabled: true, maxConcurrent: 3 });
+  expect(loaded.terminal).toEqual({
+    enabled: true,
+    maxConcurrent: 3,
+    defaultTarget: "external",
+    externalProfile: "ghostty",
+  });
+});
+
+test("drops invalid terminal target/profile strings", async () => {
+  await updateSettings({
+    terminal: {
+      enabled: true,
+      maxConcurrent: 2,
+      defaultTarget: "dock" as never,
+      externalProfile: "Terminal.app" as never,
+    },
+  });
+
+  const loaded = await loadSettings();
+  expect(loaded.terminal).toEqual({ enabled: true, maxConcurrent: 2 });
 });
 
 test("browser metadata clears without changing enabled", async () => {

@@ -14,10 +14,12 @@ import { join } from "node:path";
 import type {
   BrowserBookmark,
   BrowserHistoryEntry,
+  ExternalTerminalProfile,
   LayoutSettings,
   OpenSessionDescriptor,
   RecentProject,
   StudioSettings,
+  TerminalDefaultTarget,
   ThemeMode,
   UiPrefs,
   Workspace,
@@ -43,6 +45,15 @@ const THINKING_LEVELS = [
   "xhigh",
 ] as const;
 const SESSION_STATUSES = ["open", "hibernated", "closed"] as const;
+const TERMINAL_DEFAULT_TARGETS = ["built-in", "external"] as const;
+const EXTERNAL_TERMINAL_PROFILES = [
+  "system",
+  "ghostty",
+  "kitty",
+  "iterm2",
+  "alacritty",
+  "wezterm",
+] as const;
 
 // Default concurrency cap for the (off-by-default) terminal capability. Only
 // materialised on a fresh install; an upgraded V1 file leaves `terminal`
@@ -101,6 +112,8 @@ export function defaultSettings(): StudioSettings {
     terminal: {
       enabled: false,
       maxConcurrent: DEFAULT_TERMINAL_MAX_CONCURRENT,
+      defaultTarget: "built-in",
+      externalProfile: "system",
     },
     browser: { enabled: false },
   };
@@ -392,7 +405,27 @@ function coerceTerminal(
     typeof mc === "number" && Number.isFinite(mc) && mc >= 1
       ? Math.floor(mc)
       : DEFAULT_TERMINAL_MAX_CONCURRENT;
-  return { enabled: value.enabled, maxConcurrent };
+  const out: NonNullable<StudioSettings["terminal"]> = {
+    enabled: value.enabled,
+    maxConcurrent,
+  };
+  if (
+    isOneOf<TerminalDefaultTarget>(
+      value.defaultTarget,
+      TERMINAL_DEFAULT_TARGETS,
+    )
+  ) {
+    out.defaultTarget = value.defaultTarget;
+  }
+  if (
+    isOneOf<ExternalTerminalProfile>(
+      value.externalProfile,
+      EXTERNAL_TERMINAL_PROFILES,
+    )
+  ) {
+    out.externalProfile = value.externalProfile;
+  }
+  return out;
 }
 
 function sanitizeBrowserUrl(value: string): string | undefined {

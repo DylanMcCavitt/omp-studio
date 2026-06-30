@@ -33,6 +33,8 @@ export function TerminalGate() {
         enabled: true,
         maxConcurrent:
           current?.maxConcurrent ?? DEFAULT_TERMINAL_MAX_CONCURRENT,
+        defaultTarget: current?.defaultTarget ?? "built-in",
+        externalProfile: current?.externalProfile ?? "system",
       },
     });
     setEnabling(false);
