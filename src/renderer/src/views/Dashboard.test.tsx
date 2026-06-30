@@ -106,6 +106,40 @@ it("keeps the dashboard usable when OMP stats are unavailable", async () => {
   ).toBeInTheDocument();
 });
 
+it("keeps raw folder labels when workspace basename matching is ambiguous", async () => {
+  stubBridge({
+    getDashboard: vi.fn(async () => ({
+      ...DASHBOARD,
+      sessions: {
+        ...DASHBOARD.sessions,
+        byProject: [
+          {
+            project: "alpha",
+            cwd: "/tmp/app",
+            count: 1,
+            lastActive: "2026-06-30T12:00:00.000Z",
+          },
+          {
+            project: "beta",
+            cwd: "/work/app",
+            count: 1,
+            lastActive: "2026-06-30T12:00:00.000Z",
+          },
+        ],
+      },
+    })),
+    getOmpStats: vi.fn(async () => ({
+      ...STATS,
+      byFolder: [{ folder: "app", totalRequests: 3, totalCost: 0.1 }],
+    })),
+  });
+
+  render(<Dashboard />);
+
+  expect(await screen.findByText("OMP stats")).toBeInTheDocument();
+  expect(screen.getByText("app")).toBeInTheDocument();
+});
+
 it("refreshes dashboard data and stats from the same reload button", async () => {
   const user = userEvent.setup();
   render(<Dashboard />);

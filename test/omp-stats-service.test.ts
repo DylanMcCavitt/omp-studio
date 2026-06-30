@@ -60,9 +60,17 @@ test("getOmpStats degrades to null when the CLI result is unavailable", async ()
   await expect(getOmpStats()).resolves.toBeNull();
 });
 
-test("parseJsonOutput accepts OMP sync prelude before JSON", () => {
+test("getOmpStats rejects unsupported stats shapes", async () => {
+  nextResult = {};
+  await expect(getOmpStats()).resolves.toBeNull();
+
+  nextResult = { byModel: { provider: "openai" } };
+  await expect(getOmpStats()).resolves.toBeNull();
+});
+
+test("parseJsonOutput accepts bracketed warnings before JSON", () => {
   const parsed = cli.parseJsonOutput<{ ok: boolean }>(
-    'Syncing session files...\nSynced 3 entries\n{"ok":true}',
+    '[WARN] extension skipped\nSyncing session files...\n{"ok":true}',
   );
 
   expect(parsed).toEqual({ ok: true });

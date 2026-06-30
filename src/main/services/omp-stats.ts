@@ -9,6 +9,53 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const BREAKDOWN_KEYS = [
+  "byModel",
+  "byFolder",
+  "byAgentType",
+  "timeSeries",
+  "modelSeries",
+  "modelPerformanceSeries",
+  "costSeries",
+] as const;
+
+function normalizeRecord(
+  value: unknown,
+): Record<string, unknown> | undefined | null {
+  if (value === undefined) return undefined;
+  return isRecord(value) ? value : null;
+}
+
+function normalizeBreakdown(
+  value: unknown,
+): Record<string, unknown>[] | undefined | null {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return null;
+  return value.filter(isRecord);
+}
+
+function normalizeStats(raw: Record<string, unknown>): OmpStatsSnapshot | null {
+  const overall = normalizeRecord(raw.overall);
+  if (overall === null) return null;
+
+  const arrays: Partial<
+    Record<(typeof BREAKDOWN_KEYS)[number], Record<string, unknown>[]>
+  > = {};
+  for (const key of BREAKDOWN_KEYS) {
+    const normalized = normalizeBreakdown(raw[key]);
+    if (normalized === null) return null;
+    if (normalized !== undefined) arrays[key] = normalized;
+  }
+
+  if (overall === undefined && Object.keys(arrays).length === 0) return null;
+  return {
+    ...raw,
+    ...arrays,
+    overall,
+    generatedAt: new Date().toISOString(),
+  } as OmpStatsSnapshot;
+}
+
 /**
  * Read the local OMP stats snapshot through the OMP CLI stats engine.
  *
@@ -27,5 +74,5 @@ export async function getOmpStats(): Promise<OmpStatsSnapshot | null> {
     },
   );
   if (!isRecord(raw)) return null;
-  return { ...raw, generatedAt: new Date().toISOString() } as OmpStatsSnapshot;
+  return normalizeStats(raw);
 }

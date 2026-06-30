@@ -344,13 +344,17 @@ function folderLabel(
 ): string {
   const folder =
     compactLabel(row.folder) ?? compactLabel(row.name) ?? "Unknown folder";
-  const match = projects.find((project) => {
-    const cwdBase = project.cwd.split(/[\\/]/).filter(Boolean).at(-1);
-    return (
-      project.project === folder || project.cwd === folder || cwdBase === folder
-    );
-  });
-  return match ? match.project : folder;
+  const exact = projects.find(
+    (project) => project.project === folder || project.cwd === folder,
+  );
+  if (exact) return exact.project;
+
+  const basenameMatches = projects.filter(
+    (project) => project.cwd.split(/[\\/]/).filter(Boolean).at(-1) === folder,
+  );
+  return basenameMatches.length === 1
+    ? (basenameMatches[0]?.project ?? folder)
+    : folder;
 }
 
 function agentLabel(row: OmpStatsBreakdown): string {

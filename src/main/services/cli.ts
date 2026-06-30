@@ -138,13 +138,17 @@ export async function probeCredential(
 
 /** Parse CLI JSON output that may include human-readable prelude text. */
 export function parseJsonOutput<T>(stdout: string): T | null {
-  const start = stdout.search(/[{[]/);
-  if (start < 0) return null;
-  try {
-    return JSON.parse(stdout.slice(start)) as T;
-  } catch {
-    return null;
+  for (let index = 0; index < stdout.length; index += 1) {
+    const char = stdout[index];
+    if (char !== "{" && char !== "[") continue;
+    try {
+      return JSON.parse(stdout.slice(index)) as T;
+    } catch {
+      // Human prelude can contain bracketed warning prefixes such as `[WARN]`.
+      // Keep scanning until a real JSON payload parses.
+    }
   }
+  return null;
 }
 
 /**
