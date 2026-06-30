@@ -136,6 +136,21 @@ export async function probeCredential(
   });
 }
 
+/** Parse CLI JSON output that may include human-readable prelude text. */
+export function parseJsonOutput<T>(stdout: string): T | null {
+  for (let index = 0; index < stdout.length; index += 1) {
+    const char = stdout[index];
+    if (char !== "{" && char !== "[") continue;
+    try {
+      return JSON.parse(stdout.slice(index)) as T;
+    } catch {
+      // Human prelude can contain bracketed warning prefixes such as `[WARN]`.
+      // Keep scanning until a real JSON payload parses.
+    }
+  }
+  return null;
+}
+
 /**
  * Run a CLI and parse its JSON output. omp prints extension warnings before the
  * JSON payload, so parsing starts at the first `{` or `[`. Returns null on a
@@ -148,11 +163,5 @@ export async function runJson<T>(
 ): Promise<T | null> {
   const { stdout, code } = await runCli(bin, args, opts);
   if (code !== 0) return null;
-  const start = stdout.search(/[{[]/);
-  if (start < 0) return null;
-  try {
-    return JSON.parse(stdout.slice(start)) as T;
-  } catch {
-    return null;
-  }
+  return parseJsonOutput<T>(stdout);
 }

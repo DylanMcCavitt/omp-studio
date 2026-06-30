@@ -21,6 +21,7 @@ import type {
   ListSessionsOptions,
   McpServerInfo,
   ModelInfo,
+  OmpStatsSnapshot,
   ProviderInfo,
   SessionSearchHit,
   SessionSearchOptions,
@@ -49,6 +50,7 @@ import type {
 export const CH = {
   // read-only data services
   dashboard: "data:dashboard",
+  ompStats: "data:ompStats",
   listSessions: "data:sessions:list",
   readSession: "data:sessions:read",
   listMcp: "data:mcp:list",
@@ -384,6 +386,7 @@ export type StudioSettings = StudioSettingsV2;
 
 export interface OmpApi {
   getDashboard(): Promise<DashboardData>;
+  getOmpStats(): Promise<OmpStatsSnapshot | null>;
   listSessions(opts?: ListSessionsOptions): Promise<SessionSummary[]>;
   readSession(path: string): Promise<SessionTranscript>;
   searchSessions(

@@ -43,7 +43,16 @@ const RAIL_DESTINATIONS: readonly {
   assertRendered: (panel: Locator) => Promise<void>;
   afterOpen?: (page: Page) => Promise<void>;
 }[] = [
-  { label: "Dashboard", assertRendered: heading("Dashboard") },
+  {
+    label: "Dashboard",
+    assertRendered: async (panel) => {
+      await heading("Dashboard")(panel);
+      await expect(
+        panel.getByRole("heading", { name: "OMP stats" }),
+      ).toBeVisible();
+      await expect(panel.getByText("OMP stats unavailable")).toBeVisible();
+    },
+  },
   { label: "Skills", assertRendered: heading("Skills & Commands") },
   { label: "MCP", assertRendered: heading("MCP Servers") },
   { label: "Agents", assertRendered: heading("Agents") },

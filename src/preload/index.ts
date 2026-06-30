@@ -61,6 +61,7 @@ const onBrowserState = channelSubscription<BrowserViewState>(
 
 const api: OmpApi = {
   getDashboard: () => ipcRenderer.invoke(CH.dashboard),
+  getOmpStats: () => ipcRenderer.invoke(CH.ompStats),
   listSessions: (opts?: ListSessionsOptions) =>
     ipcRenderer.invoke(CH.listSessions, opts),
   readSession: (path: string) => ipcRenderer.invoke(CH.readSession, path),

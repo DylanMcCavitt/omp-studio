@@ -1,8 +1,20 @@
+import type {
+  OmpStatsAggregate,
+  OmpStatsBreakdown,
+  OmpStatsSnapshot,
+  ProjectSessions,
+} from "@shared/domain";
 import {
+  Activity,
+  BarChart3,
   Bot,
   Boxes,
   ChevronRight,
+  CircleDollarSign,
+  Clock3,
+  Database,
   FolderGit2,
+  Gauge,
   Github,
   Inbox,
   MessagesSquare,
@@ -11,6 +23,7 @@ import {
   RefreshCw,
   Sparkles,
   SquareKanban,
+  TrendingUp,
 } from "lucide-react";
 import { useEffect } from "react";
 import {
@@ -34,6 +47,11 @@ export default function Dashboard() {
   const { data, loading, error, reload } = useAsync(() =>
     window.omp.getDashboard(),
   );
+  const stats = useAsync(() => window.omp.getOmpStats(), []);
+  const reloadAll = () => {
+    reload();
+    stats.reload();
+  };
 
   return (
     <div className="scrollbar h-full overflow-y-auto">
@@ -52,8 +70,11 @@ export default function Dashboard() {
               <Plus size={16} />
               Start a chat
             </Button>
-            <IconButton label="Reload dashboard" onClick={reload}>
-              <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            <IconButton label="Reload dashboard" onClick={reloadAll}>
+              <RefreshCw
+                size={16}
+                className={loading || stats.loading ? "animate-spin" : ""}
+              />
             </IconButton>
           </div>
         </header>
@@ -107,6 +128,14 @@ export default function Dashboard() {
                 icon={<Github size={16} />}
               />
             </section>
+
+            <OmpStatsPanel
+              stats={stats.data}
+              loading={stats.loading}
+              error={stats.error}
+              projects={data.sessions.byProject}
+              onRefresh={stats.reload}
+            />
 
             <div className="flex flex-col gap-4">
               <Panel
@@ -235,6 +264,291 @@ export default function Dashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+function readNumber(
+  value: Record<string, unknown> | undefined,
+  keys: string[],
+): number | undefined {
+  if (!value) return undefined;
+  for (const key of keys) {
+    const n = value[key];
+    if (typeof n === "number" && Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function formatOptionalNumber(value: number | undefined): string {
+  return value === undefined ? "—" : formatNumber(value);
+}
+
+function formatPercent(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return "—";
+  const pct = Math.abs(value) <= 1 ? value * 100 : value;
+  return `${pct.toFixed(pct >= 10 ? 1 : 2)}%`;
+}
+
+function formatCost(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return "—";
+  return value >= 1 ? `$${value.toFixed(2)}` : `$${value.toFixed(4)}`;
+}
+
+function formatMillis(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return "—";
+  return value >= 1000
+    ? `${(value / 1000).toFixed(1)}s`
+    : `${Math.round(value)}ms`;
+}
+
+function totalTokens(
+  overall: OmpStatsAggregate | undefined,
+): number | undefined {
+  if (!overall) return undefined;
+  const keys = [
+    "totalInputTokens",
+    "totalOutputTokens",
+    "totalCacheReadTokens",
+    "totalCacheWriteTokens",
+  ];
+  let total = 0;
+  let found = false;
+  for (const key of keys) {
+    const n = readNumber(overall, [key]);
+    if (n !== undefined) {
+      total += n;
+      found = true;
+    }
+  }
+  return found ? total : undefined;
+}
+
+function breakdownMetric(row: OmpStatsBreakdown): number | undefined {
+  return readNumber(row, ["totalCost", "cost", "totalRequests", "requests"]);
+}
+
+function compactLabel(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function modelLabel(row: OmpStatsBreakdown): string {
+  const model = compactLabel(row.model);
+  const provider = compactLabel(row.provider);
+  if (model && provider) return `${provider}/${model}`;
+  return model ?? provider ?? compactLabel(row.name) ?? "Unknown model";
+}
+
+function folderLabel(
+  row: OmpStatsBreakdown,
+  projects: ProjectSessions[],
+): string {
+  const folder =
+    compactLabel(row.folder) ?? compactLabel(row.name) ?? "Unknown folder";
+  const exact = projects.find(
+    (project) => project.project === folder || project.cwd === folder,
+  );
+  if (exact) return exact.project;
+
+  const basenameMatches = projects.filter(
+    (project) => project.cwd.split(/[\\/]/).filter(Boolean).at(-1) === folder,
+  );
+  return basenameMatches.length === 1
+    ? (basenameMatches[0]?.project ?? folder)
+    : folder;
+}
+
+function agentLabel(row: OmpStatsBreakdown): string {
+  return (
+    compactLabel(row.agentType) ??
+    compactLabel(row.type) ??
+    compactLabel(row.name) ??
+    "Unknown agent"
+  );
+}
+
+function sortBreakdown(
+  rows: OmpStatsBreakdown[] | undefined,
+): OmpStatsBreakdown[] {
+  return [...(rows ?? [])]
+    .sort((a, b) => (breakdownMetric(b) ?? 0) - (breakdownMetric(a) ?? 0))
+    .slice(0, 5);
+}
+
+function BreakdownList({
+  title,
+  rows,
+  label,
+}: {
+  title: string;
+  rows: OmpStatsBreakdown[] | undefined;
+  label: (row: OmpStatsBreakdown) => string;
+}) {
+  const top = sortBreakdown(rows);
+  return (
+    <div className="rounded-xl border border-border-subtle bg-bg-soft/40">
+      <div className="border-b border-border-subtle px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
+        {title}
+      </div>
+      {top.length === 0 ? (
+        <p className="px-3 py-4 text-sm text-ink-muted">No data yet.</p>
+      ) : (
+        <ul className="divide-y divide-border-subtle">
+          {top.map((row, index) => (
+            <li
+              key={`${title}:${label(row)}:${index}`}
+              className="flex items-center justify-between gap-3 px-3 py-2"
+            >
+              <span className="min-w-0 truncate text-sm text-ink">
+                {label(row)}
+              </span>
+              <span className="shrink-0 text-xs tabular-nums text-ink-muted">
+                {formatCost(readNumber(row, ["totalCost", "cost"]))}
+                {" · "}
+                {formatOptionalNumber(
+                  readNumber(row, ["totalRequests", "requests"]),
+                )}{" "}
+                req
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function OmpStatsPanel({
+  stats,
+  loading,
+  error,
+  projects,
+  onRefresh,
+}: {
+  stats: OmpStatsSnapshot | null | undefined;
+  loading: boolean;
+  error: string | undefined;
+  projects: ProjectSessions[];
+  onRefresh: () => void;
+}) {
+  const overall = stats?.overall;
+  const requests = readNumber(overall, ["totalRequests", "requests"]);
+  const failed = readNumber(overall, ["failedRequests", "failures"]);
+  const cost = readNumber(overall, ["totalCost", "cost"]);
+  const avgTtft = readNumber(overall, ["avgTtft", "ttft"]);
+  const avgDuration = readNumber(overall, ["avgDuration", "duration"]);
+  const throughput = readNumber(overall, [
+    "avgTokensPerSecond",
+    "tokensPerSecond",
+  ]);
+  const last = readNumber(overall, ["lastTimestamp"]);
+
+  return (
+    <Panel
+      title="OMP stats"
+      actions={
+        <IconButton
+          label="Refresh OMP stats"
+          onClick={onRefresh}
+          disabled={loading}
+          className="h-7 w-7"
+        >
+          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+        </IconButton>
+      }
+    >
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+        <Badge variant="muted">Global local stats</Badge>
+        <span>Estimated cost from local OMP stats.</span>
+        {last !== undefined && (
+          <span>Last activity {formatRelativeTime(last)}</span>
+        )}
+      </div>
+
+      {error && (
+        <div className="mb-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+          Failed to load OMP stats: {error}
+        </div>
+      )}
+
+      {loading && !stats ? (
+        <div className="flex justify-center p-6">
+          <Spinner />
+        </div>
+      ) : !stats ? (
+        <EmptyState
+          icon={<BarChart3 size={24} />}
+          title="OMP stats unavailable"
+          hint="The dashboard still works; stats appear when `omp stats --json` is available."
+        />
+      ) : (
+        <div className="flex flex-col gap-4">
+          <section className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <Stat
+              label="Requests"
+              value={formatOptionalNumber(requests)}
+              hint={`${formatOptionalNumber(failed)} failed · ${formatPercent(
+                readNumber(overall, ["errorRate"]),
+              )}`}
+              icon={<Activity size={16} />}
+            />
+            <Stat
+              label="Tokens"
+              value={formatOptionalNumber(totalTokens(overall))}
+              hint={`${formatPercent(
+                readNumber(overall, ["cacheRate"]),
+              )} cache hit`}
+              icon={<Database size={16} />}
+            />
+            <Stat
+              label="Est. cost"
+              value={formatCost(cost)}
+              hint="Local OMP stats"
+              icon={<CircleDollarSign size={16} />}
+            />
+            <Stat
+              label="Avg TTFT"
+              value={formatMillis(avgTtft)}
+              hint={`Duration ${formatMillis(avgDuration)}`}
+              icon={<Clock3 size={16} />}
+            />
+            <Stat
+              label="Throughput"
+              value={
+                throughput === undefined
+                  ? "—"
+                  : `${throughput.toFixed(1)} tok/s`
+              }
+              hint="Average decode speed"
+              icon={<Gauge size={16} />}
+            />
+            <Stat
+              label="Trend points"
+              value={formatNumber(stats.timeSeries?.length ?? 0)}
+              hint="Recent local history"
+              icon={<TrendingUp size={16} />}
+            />
+          </section>
+
+          <div className="grid gap-3 lg:grid-cols-3">
+            <BreakdownList
+              title="Top models"
+              rows={stats.byModel}
+              label={modelLabel}
+            />
+            <BreakdownList
+              title="Top folders"
+              rows={stats.byFolder}
+              label={(row) => folderLabel(row, projects)}
+            />
+            <BreakdownList
+              title="Agent split"
+              rows={stats.byAgentType}
+              label={agentLabel}
+            />
+          </div>
+        </div>
+      )}
+    </Panel>
   );
 }
 
