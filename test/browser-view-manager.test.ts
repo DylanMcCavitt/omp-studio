@@ -330,6 +330,30 @@ test("setWindowOpenHandler always denies; opens allowed targets externally", () 
   expect(openedExternally).toEqual(["https://example.com/pop"]);
 });
 
+test("popup and open-external drop credentialed URLs (shared external-open policy, AGE-798)", () => {
+  const { manager, created, states, openedExternally } = harness([
+    "example.com",
+  ]);
+  const { id } = manager.create({
+    url: "https://example.com",
+    bounds: BOUNDS,
+  });
+  const wc = wcOf(created[0]);
+
+  // A credential-bearing popup passes the host allowlist but must still be
+  // dropped by the credential gate — never handed to the OS browser.
+  expect(
+    wc.windowOpenHandler?.({ url: "https://user:pw@example.com/" }),
+  ).toEqual({ action: "deny" });
+  expect(openedExternally).toEqual([]);
+
+  // Same policy on the explicit open-external action.
+  wc.url = "https://user:pw@example.com/page";
+  manager.openExternal(id);
+  expect(openedExternally).toEqual([]);
+  expect(states.at(-1)?.error).toContain("not an allowed http(s) URL");
+});
+
 test("devtools and open-external are explicit manager actions", () => {
   const { manager, created, openedExternally } = harness(["example.com"]);
   const { id } = manager.create({

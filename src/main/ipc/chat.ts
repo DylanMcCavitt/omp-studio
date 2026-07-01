@@ -4,15 +4,6 @@
 // pushed to the renderer over `evt:rpc` / `evt:lifecycle` / `evt:ui-request`;
 // the renderer answers UI requests back over `chat:uiRespond`.
 
-import { realpathSync } from "node:fs";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-} from "node:path";
 import type {
   ChatCreateOptions,
   ChatCreateResult,
@@ -33,7 +24,7 @@ import type {
 import type { BrowserWindow, IpcMain } from "electron";
 import type { SessionRegistry } from "../omp/registry";
 import type { OmpRpcSession } from "../omp/rpc-session";
-import { sessionsDir } from "../paths";
+import { containedSessionFile } from "../services/session-paths";
 
 export function registerChatIpc(
   ipcMain: IpcMain,
@@ -168,8 +159,10 @@ export function registerChatIpc(
   // E1: list persisted/open descriptors, resume a hibernated chat, and close
   // (hibernate) a live chat. These sit alongside C2's ui-request handlers.
   handle(CH.chatList, () => registry.descriptors());
-  handle(CH.chatResume, async (descriptor: OpenSessionDescriptor) => {
-    const { id, session, state } = await registry.resume(descriptor);
+  handle(CH.chatResume, async (raw: OpenSessionDescriptor) => {
+    const { id, session, state } = await registry.resume(
+      sanitizeResumeDescriptor(raw),
+    );
     forward(id, session);
     return { sessionId: id, state } satisfies ChatCreateResult;
   });
@@ -184,43 +177,34 @@ export function registerChatIpc(
   });
 }
 
-// Reject a renderer-supplied sessionFile that resolves outside sessionsDir().
-// A live drill-in transcript path always lives under the sessions root (it
-// comes from get_subagents / subagent lifecycle frames), so anything escaping
-// it is a malformed or hostile request and must never reach the child reader.
-//
-// The check is on the CANONICAL (symlink-resolved) paths, not the lexical ones:
-// a symlink planted under the sessions root that points outside it would slip
-// past a plain resolve()+relative() check, so both the root and the candidate
-// are realpath'd first. Returns the contained real path; throws otherwise.
-function containedSessionFile(sessionFile: string): string {
-  const root = canonicalize(sessionsDir());
-  const real = canonicalize(sessionFile);
-  const rel = relative(root, real);
-  if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) {
-    throw new Error("sessionFile escapes the sessions directory");
+// Rebuild a renderer-supplied resume descriptor from KNOWN fields only (the
+// chat:create pattern: never spread the raw payload, so junk keys neither reach
+// the spawn config nor get persisted back into settings) and contain its
+// sessionFile under sessionsDir() BEFORE it can drive an `omp --resume` spawn.
+// A descriptor whose transcript path escapes the sessions root is hostile or
+// corrupt — rejected here, at the IPC boundary.
+function sanitizeResumeDescriptor(
+  raw: OpenSessionDescriptor,
+): OpenSessionDescriptor {
+  const descriptor: OpenSessionDescriptor = {
+    studioSessionId: raw.studioSessionId,
+    cwd: raw.cwd,
+    createdAt: raw.createdAt,
+    lastActiveAt: raw.lastActiveAt,
+    title: raw.title,
+    approvalPolicy: {
+      mode: raw.approvalPolicy.mode,
+      autoApprove: raw.approvalPolicy.autoApprove,
+    },
+    status: raw.status,
+  };
+  if (raw.model !== undefined) descriptor.model = raw.model;
+  if (raw.thinkingLevel !== undefined)
+    descriptor.thinkingLevel = raw.thinkingLevel;
+  if (raw.ompSessionId !== undefined)
+    descriptor.ompSessionId = raw.ompSessionId;
+  if (raw.sessionFile !== undefined) {
+    descriptor.sessionFile = containedSessionFile(raw.sessionFile);
   }
-  return real;
-}
-
-// Resolve a path to its real, symlink-free absolute form. When the target does
-// not exist yet, canonicalize the nearest existing ancestor and re-append the
-// remainder — so a symlinked ANCESTOR still cannot smuggle the path out of tree
-// (realpathSync resolves the ancestor link). A dangling leaf symlink falls back
-// to the lexical path, but reading through it just fails ENOENT — no data leak.
-function canonicalize(path: string): string {
-  let current = resolve(path);
-  const tail: string[] = [];
-  for (;;) {
-    try {
-      return tail.length === 0
-        ? realpathSync(current)
-        : join(realpathSync(current), ...tail);
-    } catch {
-      const parent = dirname(current);
-      if (parent === current) return resolve(path);
-      tail.unshift(basename(current));
-      current = parent;
-    }
-  }
+  return descriptor;
 }

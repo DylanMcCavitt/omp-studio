@@ -211,3 +211,76 @@ test("a renamed session keeps its alias after archiving", async () => {
   expect(aliases[archivedPath]).toBe("Renamed H");
   expect(aliases[path]).toBeUndefined();
 });
+
+// ---------------------------------------------------------------------------
+// AGE-798: every mutating action refuses a path outside the session roots —
+// the injected capability (trash/reveal/export runner) must never see it.
+// ---------------------------------------------------------------------------
+
+test("deleteSession refuses an outside-root path without touching the trash", async () => {
+  const outside = join(agentRoot, "not-sessions", "x.jsonl");
+  await mkdir(join(agentRoot, "not-sessions"), { recursive: true });
+  await writeFile(outside, "{}\n", "utf8");
+  let trashed: string | null = null;
+  await expect(
+    deleteSession(outside, async (p) => {
+      trashed = p;
+    }),
+  ).rejects.toThrow(/escapes/);
+  expect(trashed).toBeNull();
+});
+
+test("revealSession refuses an outside-root path without revealing", () => {
+  let revealed: string | null = null;
+  expect(() =>
+    revealSession("/etc/passwd.jsonl", (p) => {
+      revealed = p;
+    }),
+  ).toThrow(/escapes/);
+  expect(revealed).toBeNull();
+});
+
+test("archive/unarchive refuse outside-root paths and non-.jsonl files", async () => {
+  await expect(archiveSession("/tmp/evil.jsonl")).rejects.toThrow(/escapes/);
+  const noExt = await makeSession("proj", "2026_i.jsonl", { id: "i" });
+  await expect(archiveSession(noExt.replace(/\.jsonl$/, ""))).rejects.toThrow(
+    /\.jsonl/,
+  );
+});
+
+test("archive destination derives from the validated root-relative layout, not raw input", async () => {
+  // A path that reaches the file through a redundant-but-contained ../ hop:
+  // containment normalizes it, so the destination project dir is 'proj', never
+  // a traversal-derived name.
+  const path = await makeSession("proj", "2026_j.jsonl", { id: "j" });
+  const dotted = join(sessionsRoot, "proj", "..", "proj", "2026_j.jsonl");
+  await archiveSession(dotted);
+  const archivedPath = join(
+    agentRoot,
+    "archived-sessions",
+    "proj",
+    "2026_j.jsonl",
+  );
+  expect((await stat(archivedPath)).isFile()).toBe(true);
+  await expect(stat(path)).rejects.toThrow();
+});
+
+test("exportSessionHtml refuses an outside-root path without spawning the runner", async () => {
+  let spawned = 0;
+  await expect(
+    exportSessionHtml("/tmp/anything.jsonl", async () => {
+      spawned += 1;
+      return { stdout: "", stderr: "", code: 0 };
+    }),
+  ).rejects.toThrow(/escapes/);
+  expect(spawned).toBe(0);
+});
+
+test("renameSession refuses an outside-root path and writes no alias", async () => {
+  await expect(renameSession("/tmp/x.jsonl", "Evil")).rejects.toThrow(
+    /escapes/,
+  );
+  // No alias sidecar written for the rejected path.
+  const aliasFile = join(agentRoot, "studio-session-aliases.json");
+  await expect(readFile(aliasFile, "utf8")).rejects.toThrow();
+});

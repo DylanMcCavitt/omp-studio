@@ -20,10 +20,13 @@ import { CH } from "../src/shared/ipc";
 // dynamic import here (per the ts-no-dynamic-import test-boundary exception).
 // data.ts's other deps (config-service/github/session-store) never touch
 // electron, so the stub is fully contained.
+const openedExternally: string[] = [];
 mock.module("electron", () => ({
   dialog: { showOpenDialog: async () => ({ filePaths: [], canceled: true }) },
   shell: {
-    openExternal: async () => {},
+    openExternal: async (url: string) => {
+      openedExternally.push(url);
+    },
     trashItem: async () => {},
     showItemInFolder: () => {},
   },
@@ -124,6 +127,33 @@ test("readSession degrades to an empty transcript when the path is a directory",
   const result = (await invoke(CH.readSession, dirPath)) as SessionTranscript;
   expect(result.messages).toEqual([]);
   expect(result.summary.messageCount).toBe(0);
+});
+
+// ---- external-open gate (AGE-798) -----------------------------------------
+// CH.openExternal funnels through safeOpenExternal: only credential-free
+// http(s) URLs may reach shell.openExternal; everything else resolves silently
+// (never rejects across IPC) WITHOUT shelling out.
+
+test("openExternal passes a plain https URL to the shell", async () => {
+  openedExternally.length = 0;
+  await invoke(CH.openExternal, "https://example.com/docs");
+  expect(openedExternally).toEqual(["https://example.com/docs"]);
+});
+
+test("openExternal drops file:/custom-scheme/credentialed/malformed URLs without shelling out", async () => {
+  openedExternally.length = 0;
+  for (const url of [
+    "file:///etc/passwd",
+    "smb://host/share",
+    "javascript:alert(1)",
+    "https://user:pw@example.com/",
+    "not a url",
+  ]) {
+    await expect(
+      invoke(CH.openExternal, url) as Promise<unknown>,
+    ).resolves.toBeUndefined();
+  }
+  expect(openedExternally).toEqual([]);
 });
 
 test("searchSessions returns [] with no sessions to scan and never throws", async () => {

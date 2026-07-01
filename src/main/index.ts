@@ -1,7 +1,8 @@
 import { join } from "node:path";
 import { electronApp, is, optimizer } from "@electron-toolkit/utils";
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { BrowserViewManager } from "./browser/view-manager";
+import { safeOpenExternal } from "./external-open";
 import { registerBrowserIpc } from "./ipc/browser";
 import { registerChangesIpc } from "./ipc/changes";
 import { registerChatIpc } from "./ipc/chat";
@@ -75,8 +76,11 @@ function createWindow(): void {
     if (smoke) log.info("smoke ok");
   });
 
+  // Popups from the privileged renderer are always denied; an http(s),
+  // credential-free target opens in the OS browser instead (safeOpenExternal
+  // drops everything else).
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
+    void safeOpenExternal(url);
     return { action: "deny" };
   });
 
@@ -88,7 +92,7 @@ function createWindow(): void {
     const rendererUrl = process.env["ELECTRON_RENDERER_URL"];
     if (is.dev && rendererUrl && url.startsWith(rendererUrl)) return;
     event.preventDefault();
-    void shell.openExternal(url);
+    void safeOpenExternal(url);
   });
 
   const devUrl = process.env["ELECTRON_RENDERER_URL"];
