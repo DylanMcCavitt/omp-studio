@@ -42,6 +42,57 @@ function stubModels(models: ModelInfo[] = MODELS) {
   Object.assign(window.omp, { listModels: vi.fn(async () => models) });
 }
 
+function rect(x: number, y: number, width: number, height: number): DOMRect {
+  return {
+    bottom: y + height,
+    height,
+    left: x,
+    right: x + width,
+    top: y,
+    width,
+    x,
+    y,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function setViewport(width: number, height: number) {
+  Object.defineProperty(window, "innerWidth", {
+    configurable: true,
+    value: width,
+  });
+  Object.defineProperty(window, "innerHeight", {
+    configurable: true,
+    value: height,
+  });
+}
+
+function mockPickerRects() {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+    function getBoundingClientRect(this: HTMLElement) {
+      if (
+        this instanceof HTMLButtonElement &&
+        this.getAttribute("title") === "Claude Opus 4"
+      ) {
+        return rect(100, 560, 120, 28);
+      }
+      const isPanel = this instanceof HTMLButtonElement === false;
+      if (
+        isPanel &&
+        (this.textContent?.includes("Loading models") ||
+          this.textContent?.includes("GPT-5"))
+      ) {
+        return rect(0, 0, 288, 300);
+      }
+      return rect(0, 0, 0, 0);
+    },
+  );
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 it("shows the active model's name on the trigger", () => {
   stubModels();
   render(<ModelControl model={CURRENT} onChange={vi.fn()} />);
@@ -76,6 +127,26 @@ it("opens the list and reports the chosen model's provider + id", async () => {
 
   expect(onChange).toHaveBeenCalledTimes(1);
   expect(onChange).toHaveBeenCalledWith("openai", "gpt-5");
+});
+
+it("opens the picker in the portaled flipped position near the viewport bottom", async () => {
+  const user = userEvent.setup();
+  stubModels();
+  setViewport(800, 600);
+  mockPickerRects();
+  render(<ModelControl model={CURRENT} onChange={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: "Claude Opus 4" }));
+
+  const option = await screen.findByRole("option", { name: "GPT-5" });
+  const panel = option.closest(".fixed");
+  expect(panel).not.toBeNull();
+  await waitFor(() =>
+    expect(panel).toHaveStyle({
+      left: "100px",
+      top: "256px",
+    }),
+  );
 });
 
 it("filters the list as the query is typed", async () => {

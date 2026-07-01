@@ -53,6 +53,8 @@ export function ModelControl({
     <Popover
       align="start"
       contentClassName="w-72"
+      placement="auto"
+      portal
       trigger={({ open, toggle, triggerRef }) => (
         <button
           ref={triggerRef}
