@@ -96,10 +96,12 @@ interface ChatState {
   /** Cleanup for the single global bridge subscription (null until wired). */
   _unsub: (() => void) | null;
   /**
-   * The subagent whose live transcript is "popped into" the center column, or
-   * null when the main chat transcript is shown. Cleared on session switch.
+   * The subagent whose live transcript is "popped into" the center column,
+   * SCOPED to its parent session (AGE-801: only the pane rendering that
+   * session shows the inspector), or null when every pane shows its main
+   * transcript. Cleared on session switch.
    */
-  inspectedSubagentId: string | null;
+  inspectedSubagent: { sessionId: string; subagentId: string } | null;
   /**
    * Live drill-in transcript buffer for the open SubagentInspector, or null
    * when none is open. Ephemeral; never persisted.
@@ -115,8 +117,10 @@ interface ChatActions {
 
   /** Select which session the chat pane shows (without changing route). */
   setActiveSession(id: string | null): void;
-  /** Pop into (id) / out of (null) a subagent's full-view transcript. */
-  setInspectedSubagent(id: string | null): void;
+  /** Pop into / out of a subagent's full-view transcript (session-scoped). */
+  setInspectedSubagent(
+    inspected: { sessionId: string; subagentId: string } | null,
+  ): void;
   /** Show an existing session in the chat route. */
   openChat(id: string): void;
   /** Start a brand-new chat in the active workspace using the default model. */
@@ -273,7 +277,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   createError: undefined,
   _unsub: null,
   _subagentInspector: null,
-  inspectedSubagentId: null,
+  inspectedSubagent: null,
 
   ensureSubscribed() {
     if (get()._unsub) return;
@@ -300,15 +304,15 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   },
 
   setActiveSession(id) {
-    set({ activeSessionId: id, inspectedSubagentId: null });
+    set({ activeSessionId: id, inspectedSubagent: null });
   },
 
-  setInspectedSubagent(id) {
-    set({ inspectedSubagentId: id });
+  setInspectedSubagent(inspected) {
+    set({ inspectedSubagent: inspected });
   },
 
   openChat(id) {
-    set({ activeSessionId: id, inspectedSubagentId: null });
+    set({ activeSessionId: id, inspectedSubagent: null });
     useAppStore.getState().setRoute("chat");
   },
 

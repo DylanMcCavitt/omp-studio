@@ -93,6 +93,13 @@ export interface PromptComposerProps {
   injectText?: string | null;
   /** Called right after a non-null `injectText` is adopted, to clear it. */
   onInjectConsumed?: () => void;
+  /**
+   * Whether this composer answers GLOBAL chords (Cmd/Ctrl+Shift+P slash
+   * palette). With multiple panes mounted only the ACTIVE pane's composer
+   * may react — background panes pass false (AGE-801). Focus-driven keys
+   * (leading "/") are unaffected. Default true.
+   */
+  globalShortcuts?: boolean;
   className?: string;
 }
 
@@ -109,6 +116,7 @@ export function PromptComposer({
   maxHeight = 200,
   injectText,
   onInjectConsumed,
+  globalShortcuts = true,
   className,
 }: PromptComposerProps) {
   const [text, setText] = useState("");
@@ -163,17 +171,22 @@ export function PromptComposer({
 
   // The global shortcut manager (lib/useShortcuts) bumps this counter on
   // Cmd/Ctrl+Shift+P; toggle the overlay when it changes. Only the composer
-  // wired with an overlay (the active chat composer) reacts, so the chord is a
-  // no-op for any composer mounted without one. No window listener lives here —
-  // manager is the single source of truth for the chord.
+  // wired with an overlay AND opted into global chords (the focused/active
+  // pane's composer) reacts, so the chord is a no-op for any other composer.
+  // No window listener lives here — manager is the single source of truth.
   const slashToggle = useUiStore((s) => s.slashPaletteToggle);
   const slashToggleSeen = useRef(slashToggle);
   useEffect(() => {
-    if (!hasOverlay) return;
+    if (!hasOverlay || !globalShortcuts) {
+      // Keep the cursor current while ineligible so gaining eligibility later
+      // never replays a stale toggle.
+      slashToggleSeen.current = slashToggle;
+      return;
+    }
     if (slashToggle === slashToggleSeen.current) return;
     slashToggleSeen.current = slashToggle;
     setOverlayOpen((o) => !o);
-  }, [slashToggle, hasOverlay]);
+  }, [slashToggle, hasOverlay, globalShortcuts]);
 
   const addFiles = async (files: File[]) => {
     if (disabled || files.length === 0) return;

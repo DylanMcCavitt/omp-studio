@@ -48,7 +48,7 @@ beforeEach(() => {
         subagents: [{ id: "sub-1" }],
       },
     } as never,
-    inspectedSubagentId: null,
+    inspectedSubagent: null,
   });
   useShellStore.setState({ openPanelId: null });
 });
@@ -83,7 +83,9 @@ describe("ChatSession center view (AGE-674)", () => {
   });
 
   it("pops a subagent's transcript into the center when one is inspected", () => {
-    useChatStore.setState({ inspectedSubagentId: "sub-1" });
+    useChatStore.setState({
+      inspectedSubagent: { sessionId: SESSION_ID, subagentId: "sub-1" },
+    });
 
     render(<ChatWorkspace />);
 

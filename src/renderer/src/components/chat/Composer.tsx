@@ -36,7 +36,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
     (s) => s?.availableCommands ?? NO_COMMANDS,
   );
   const workspaces = useSettingsStore((s) => s.settings?.workspaces);
-  const pendingComposerText = useAppStore((s) => s.pendingComposerText);
+  // Global one-shot prefill ("Use in chat" from Skills etc.) targets the
+  // ACTIVE session's composer only — a pinned pane rendering another session
+  // must not adopt (or consume) it (AGE-801 multi-pane).
+  const isActivePane = useChatStore((s) => s.activeSessionId === sessionId);
+  const pendingComposerText = useAppStore((s) =>
+    isActivePane ? s.pendingComposerText : undefined,
+  );
   const clearPendingComposerText = useAppStore(
     (s) => s.clearPendingComposerText,
   );
@@ -65,6 +71,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
           disabled={disabled}
           injectText={pendingComposerText}
           onInjectConsumed={clearPendingComposerText}
+          globalShortcuts={isActivePane}
           placeholder={
             disabled
               ? "No active session"

@@ -148,6 +148,20 @@ export const usePaneStore = create<PaneState>((set, get) => ({
 
   openPane(entry, opts) {
     const { panes, layout, focusedPaneId } = get();
+    // ONE editor surface per path: a second file pane for an already-open
+    // path would double-mount CodeMirror over one FileTab buffer (divergent
+    // edits, clobbered saves). Focus the existing pane instead. AGE-777's
+    // file-opening UX must also close the main pane's strip tab for a path
+    // it opens as a pane — the strip and the pane model share FileTab state.
+    if (entry.kind === "file") {
+      const existing = Object.values(panes).find(
+        (p) => p.kind === "file" && p.path === entry.path,
+      );
+      if (existing) {
+        set({ focusedPaneId: existing.id });
+        return existing.id;
+      }
+    }
     if (Object.keys(panes).length >= MAX_PANES) return null;
     const besideId = opts?.besideId ?? focusedPaneId;
     if (!panes[besideId]) return null;

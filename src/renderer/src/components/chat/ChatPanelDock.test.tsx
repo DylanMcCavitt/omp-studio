@@ -28,7 +28,7 @@ vi.mock("@/components/chat/SubagentTree", () => ({
 }));
 
 beforeEach(() => {
-  useChatStore.setState({ activeSessionId: null, inspectedSubagentId: null });
+  useChatStore.setState({ activeSessionId: null, inspectedSubagent: null });
   useFilesStore.setState({ activeTab: CHAT_TAB });
 });
 
@@ -59,7 +59,10 @@ describe("ChatPanelDock", () => {
     render(<ChatPanelDock />);
     await userEvent.click(inspectButton());
 
-    expect(useChatStore.getState().inspectedSubagentId).toBe("sub-9");
+    expect(useChatStore.getState().inspectedSubagent).toEqual({
+      sessionId: "session-7",
+      subagentId: "sub-9",
+    });
     expect(useFilesStore.getState().activeTab).toBe(CHAT_TAB);
   });
 });

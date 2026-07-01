@@ -98,7 +98,13 @@ function ChatSession({ sessionId }: { sessionId: string }) {
   const error = useSession(sessionId, (s) => s?.error);
   const uiRequests = useSession(sessionId, (s) => s?.uiRequests ?? NO_UI);
   const isCompacting = useSession(sessionId, (s) => s?.isCompacting ?? false);
-  const inspectedId = useChatStore((s) => s.inspectedSubagentId);
+  // Session-scoped inspector (AGE-801): only the pane rendering the session
+  // that requested the drill-in swaps its transcript for the inspector.
+  const inspectedId = useChatStore((s) =>
+    s.inspectedSubagent?.sessionId === sessionId
+      ? s.inspectedSubagent.subagentId
+      : null,
+  );
   const setInspected = useChatStore((s) => s.setInspectedSubagent);
   const subagents = useSession(
     sessionId,

@@ -109,3 +109,19 @@ it("focusPane ignores unknown ids", () => {
   usePaneStore.getState().focusPane("ghost");
   expect(usePaneStore.getState().focusedPaneId).toBe(MAIN_PANE_ID);
 });
+
+it("opening a file pane for an already-open path focuses the existing pane", () => {
+  const first = usePaneStore
+    .getState()
+    .openPane({ kind: "file", path: "a.md" });
+  usePaneStore.getState().focusPane(MAIN_PANE_ID);
+  const second = usePaneStore
+    .getState()
+    .openPane({ kind: "file", path: "a.md" });
+  // Same pane returned, no new pane created, focus moved to it — one editor
+  // surface per path (a double CodeMirror mount over one FileTab buffer would
+  // diverge edits and clobber saves).
+  expect(second).toBe(first);
+  expect(Object.keys(usePaneStore.getState().panes)).toHaveLength(2);
+  expect(usePaneStore.getState().focusedPaneId).toBe(first);
+});

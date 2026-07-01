@@ -28,7 +28,7 @@ export function ChatPanelDock() {
       <SubagentTree
         dense
         onInspect={(id) => {
-          setInspected(id);
+          setInspected({ sessionId, subagentId: id });
           // The inspector renders in the chat center pane; focus it so the
           // drill-in is visible even when a file tab currently owns the center.
           useFilesStore.getState().setActiveTab(CHAT_TAB);
