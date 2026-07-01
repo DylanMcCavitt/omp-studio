@@ -69,9 +69,13 @@ interface SessionRecord {
 
 const defaultFactory: SessionFactory = (opts) => new OmpRpcSession(opts);
 
+// Persist the open-session set through the TRANSACTIONAL settings API: the
+// callback receives the freshest persisted settings inside the write mutex,
+// so a racing renderer settings:update can never be clobbered by this write
+// (and vice versa). The registry stays authoritative for openSessions only.
 const defaultStore: SessionStore = {
   save: async (openSessions) => {
-    await updateSettings({ openSessions });
+    await updateSettings((current) => ({ ...current, openSessions }));
   },
 };
 

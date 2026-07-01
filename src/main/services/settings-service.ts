@@ -732,14 +732,50 @@ export async function saveSettings(settings: StudioSettings): Promise<void> {
 }
 
 /**
- * Apply a partial patch over the current settings (known keys only, coerced;
- * unknown/invalid dropped), persist atomically, and return the new settings.
+ * A function that derives the next settings from the FRESH persisted state.
+ * Runs inside the write mutex, so the `current` it receives cannot be
+ * overwritten by another writer before its result is saved.
+ */
+export type SettingsUpdater = (
+  current: StudioSettings,
+) => StudioSettings | Promise<StudioSettings>;
+
+// Module-level promise-queue mutex: every read-modify-write chains onto the
+// tail, so two concurrent writer families (registry openSessions persists vs
+// renderer settings:update patches) can never interleave loadSettings and
+// saveSettings — the classic lost-update that dropped a just-persisted chat
+// or reverted a just-saved preference. Failures don't poison the chain (the
+// tail advances through the finally-shaped catch below).
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Serialized read-modify-write over the persisted settings.
+ *
+ * - Object form: apply a partial patch over the current settings (known keys
+ *   only, coerced; unknown/invalid dropped) — the renderer `settings:update`
+ *   shape.
+ * - Function form (transactional): receives the FRESH current settings inside
+ *   the mutex and returns the next settings — for callers that must merge
+ *   against the latest persisted state (e.g. the registry's openSessions
+ *   persistence).
+ *
+ * Both forms persist atomically and resolve with the new settings.
  */
 export async function updateSettings(
-  patch: Partial<StudioSettings>,
+  update: Partial<StudioSettings> | SettingsUpdater,
 ): Promise<StudioSettings> {
-  const current = await loadSettings();
-  const next = mergeKnown(current, patch as Record<string, unknown>);
-  await saveSettings(next);
-  return next;
+  const run = async (): Promise<StudioSettings> => {
+    const current = await loadSettings();
+    const next =
+      typeof update === "function"
+        ? await update(current)
+        : mergeKnown(current, update as Record<string, unknown>);
+    await saveSettings(next);
+    return next;
+  };
+  const chained = writeQueue.then(run);
+  // The tail must advance even when this write fails, or one rejection would
+  // wedge every later settings write.
+  writeQueue = chained.catch(() => undefined);
+  return chained;
 }

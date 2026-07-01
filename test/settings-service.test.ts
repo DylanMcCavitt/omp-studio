@@ -842,3 +842,111 @@ test("coerceWorkspaces keeps a valid palette color and drops an off-palette one"
   ]);
   expect(loaded.workspaces[0]).not.toHaveProperty("color");
 });
+
+// ---------------------------------------------------------------------------
+// AGE-800: serialized settings writes. Two concurrent writer families
+// (registry openSessions persistence vs renderer settings:update patches)
+// must never lose each other's update.
+// ---------------------------------------------------------------------------
+
+function openSession(id: string) {
+  return {
+    studioSessionId: id,
+    cwd: "/work/a",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    lastActiveAt: "2026-01-01T00:00:00.000Z",
+    title: null,
+    approvalPolicy: { mode: "always-ask" as const, autoApprove: false },
+    status: "open" as const,
+  };
+}
+
+test("a registry openSessions persist racing a renderer patch loses neither update", async () => {
+  // Model SessionRegistry's defaultStore (transactional form) racing the
+  // renderer settings:update (object-patch form). The transactional callback
+  // is HELD OPEN by the test until the patch has been queued behind it, so
+  // without a mutex the patch's loadSettings would have read pre-write state
+  // and clobbered the session on save — the exact lost-update from the issue.
+  const gate = Promise.withResolvers<void>();
+  const persist = updateSettings(async (current) => {
+    await gate.promise;
+    return { ...current, openSessions: [openSession("racing")] };
+  });
+  // Queue the renderer-style preference patch behind the in-flight persist.
+  const patch = updateSettings({ theme: "light" });
+  gate.resolve();
+  await Promise.all([persist, patch]);
+
+  const settings = await loadSettings();
+  // BOTH survive: the session write and the preference write.
+  expect(settings.openSessions.map((s) => s.studioSessionId)).toEqual([
+    "racing",
+  ]);
+  expect(settings.theme).toBe("light");
+});
+
+test("the reverse interleaving also loses neither update", async () => {
+  const gate = Promise.withResolvers<void>();
+  // Patch first (held open via the queue by a preceding slow transaction).
+  const slow = updateSettings(async (current) => {
+    await gate.promise;
+    return { ...current, theme: "dark" };
+  });
+  const persist = updateSettings((current) => ({
+    ...current,
+    openSessions: [openSession("later")],
+  }));
+  gate.resolve();
+  await Promise.all([slow, persist]);
+
+  const settings = await loadSettings();
+  expect(settings.theme).toBe("dark");
+  expect(settings.openSessions.map((s) => s.studioSessionId)).toEqual([
+    "later",
+  ]);
+});
+
+test("the transactional callback receives the FRESH persisted state", async () => {
+  await updateSettings({ theme: "light", liveSessionLimit: 7 });
+  let seen: StudioSettings | null = null;
+  await updateSettings((current) => {
+    seen = current;
+    return current;
+  });
+  expect(seen).not.toBeNull();
+  expect(seen!.theme).toBe("light");
+  expect(seen!.liveSessionLimit).toBe(7);
+});
+
+test("a throwing updater does not wedge the write queue", async () => {
+  await expect(
+    updateSettings(() => {
+      throw new Error("boom");
+    }),
+  ).rejects.toThrow("boom");
+  // Later writes still run and persist.
+  await updateSettings({ theme: "dark" });
+  expect((await loadSettings()).theme).toBe("dark");
+});
+
+test("many interleaved writers all land (no lost updates under contention)", async () => {
+  // 20 concurrent single-key transactional writers, each bumping its own key
+  // into recentProjects; every one must survive.
+  await Promise.all(
+    Array.from({ length: 20 }, (_, i) =>
+      updateSettings((current) => ({
+        ...current,
+        recentProjects: [
+          ...current.recentProjects,
+          {
+            cwd: `/p/${i}`,
+            label: `p${i}`,
+            lastUsedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      })),
+    ),
+  );
+  const settings = await loadSettings();
+  expect(settings.recentProjects).toHaveLength(20);
+});
