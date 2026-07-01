@@ -42,3 +42,32 @@ it("serializes agent cards as drag payloads for the chat composer", async () => 
   });
   expect(setData).toHaveBeenCalledWith("text/plain", "planner");
 });
+
+it("renders the two-column card content from existing agent data", async () => {
+  stubAgents([
+    {
+      name: "builder",
+      description: "Plans slices and ships focused renderer changes.",
+      source: "builtin",
+      model: "pi/test",
+      readOnly: true,
+    },
+    {
+      name: "reviewer",
+      description: "Reviews the diff.",
+      source: "user",
+    },
+  ]);
+
+  render(<Agents />);
+
+  expect(await screen.findByTestId("agents-card-grid")).toHaveClass(
+    "sm:grid-cols-2",
+  );
+  expect(screen.getByText("B")).toBeInTheDocument();
+  expect(screen.getByText("builder")).toBeInTheDocument();
+  expect(screen.getByText("pi/test")).toBeInTheDocument();
+  expect(screen.getByText(/Plans slices/)).toHaveClass("line-clamp-3");
+  expect(screen.getByText("builtin")).toBeInTheDocument();
+  expect(screen.getByText("read-only")).toBeInTheDocument();
+});

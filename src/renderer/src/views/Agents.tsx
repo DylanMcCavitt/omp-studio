@@ -1,15 +1,12 @@
 import { Bot, RefreshCw, TriangleAlert } from "lucide-react";
-import {
-  Badge,
-  Button,
-  Card,
-  EmptyState,
-  IconButton,
-  Spinner,
-} from "@/components/ui";
+import { Button, Card, EmptyState, IconButton, Spinner } from "@/components/ui";
 import { AGENT_DRAG_MIME, serializeAgentDrag } from "@/lib/agentDrag";
 import { cn } from "@/lib/cn";
 import { useAsync } from "@/lib/useAsync";
+
+function agentMonogram(name: string): string {
+  return (name.trim()[0] ?? "?").toUpperCase();
+}
 
 export default function Agents() {
   const { data, loading, error, reload } = useAsync(() =>
@@ -61,7 +58,10 @@ export default function Agents() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            data-testid="agents-card-grid"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
             {agents.map((agent) => (
               <button
                 key={`${agent.source}:${agent.name}`}
@@ -77,25 +77,39 @@ export default function Agents() {
                 }}
                 className="cursor-grab text-left active:cursor-grabbing"
               >
-                <Card className="flex h-full flex-col gap-2 p-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Bot className="h-4 w-4 shrink-0 text-accent" />
-                    <span className="break-words font-mono text-sm text-ink">
-                      {agent.name}
+                <Card className="flex h-full min-h-44 flex-col overflow-hidden p-0">
+                  <div className="flex min-w-0 items-start gap-3 p-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border-strong bg-bg-panel font-mono text-sm font-semibold text-ink">
+                      {agentMonogram(agent.name)}
                     </span>
-                    {agent.readOnly && <Badge variant="warn">read-only</Badge>}
-                    <Badge variant="muted" className="ml-auto">
-                      {agent.source}
-                    </Badge>
-                  </div>
-                  {agent.model && (
-                    <div>
-                      <Badge variant="accent">{agent.model}</Badge>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <span className="break-words font-mono text-sm font-semibold text-ink">
+                          {agent.name}
+                        </span>
+                        {agent.model && (
+                          <span className="ml-auto max-w-28 shrink-0 truncate rounded-md border border-border bg-bg-raised px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
+                            {agent.model}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-2 line-clamp-3 text-xs leading-5 text-ink-muted">
+                        {agent.description}
+                      </p>
                     </div>
-                  )}
-                  <p className="line-clamp-4 text-xs text-ink-muted">
-                    {agent.description}
-                  </p>
+                  </div>
+                  <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-dashed border-border px-4 py-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-ink-faint" />
+                      {agent.source}
+                    </span>
+                    {agent.readOnly && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full border border-ink-faint" />
+                        read-only
+                      </span>
+                    )}
+                  </div>
                 </Card>
               </button>
             ))}
