@@ -36,7 +36,7 @@ function NavPaletteOverlay({ onClose }: { onClose: () => void }) {
   const recordWorkspace = useSettingsStore((s) => s.recordWorkspace);
   const selectedProject = useAppStore((s) => s.selectedProject);
   const setSelectedProject = useAppStore((s) => s.setSelectedProject);
-  const openSessions = useChatStore((s) => s.openSessions);
+  const openSessions = useChatStore((s) => s.sessionSummaries);
   const hibernatedSessions = useChatStore((s) => s.hibernatedSessions);
   const openChat = useChatStore((s) => s.openChat);
   const resumeSession = useChatStore((s) => s.resumeSession);

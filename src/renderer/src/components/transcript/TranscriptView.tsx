@@ -15,7 +15,8 @@ import type {
   ToolCallBlock,
 } from "@shared/rpc";
 import { MessagesSquare } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { Badge, EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { toContentBlocks } from "@/store/session-reducer";
@@ -79,7 +80,11 @@ function AssistantBlock({ block }: { block: ContentBlock }) {
 }
 
 /** Render a single transcript message (user / assistant / tool result). */
-export function MessageBlock({ message }: { message: OmpMessage }) {
+export const MessageBlock = memo(function MessageBlock({
+  message,
+}: {
+  message: OmpMessage;
+}) {
   if (message.role === "user") {
     const text = blocksText(message.content);
     return (
@@ -120,7 +125,7 @@ export function MessageBlock({ message }: { message: OmpMessage }) {
       ))}
     </div>
   );
-}
+});
 
 export interface TranscriptViewProps {
   messages: OmpMessage[];
@@ -137,22 +142,22 @@ export function TranscriptView({
   emptyTitle = "No messages in this session",
   className,
 }: TranscriptViewProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [flashIndex, setFlashIndex] = useState<number | null>(null);
 
-  // After the transcript renders, scroll the focused message into view and
-  // flash it briefly so a search jump lands the reader on the exact match.
+  // Scroll the focused message into view and flash it briefly so a search jump
+  // lands the reader on the exact match even when the row is virtualized.
   useEffect(() => {
     if (focusIndex == null || focusIndex < 0) return;
-    const el = containerRef.current?.querySelector<HTMLElement>(
-      `[data-msg-index="${focusIndex}"]`,
-    );
-    if (!el) return;
-    el.scrollIntoView({ block: "center" });
+    virtuosoRef.current?.scrollToIndex({
+      index: focusIndex,
+      align: "center",
+      behavior: "auto",
+    });
     setFlashIndex(focusIndex);
     const t = setTimeout(() => setFlashIndex(null), 1600);
     return () => clearTimeout(t);
-  }, [focusIndex, messages]);
+  }, [focusIndex]);
 
   if (messages.length === 0) {
     return (
@@ -164,19 +169,26 @@ export function TranscriptView({
   }
 
   return (
-    <div ref={containerRef} className={cn("space-y-4", className)}>
-      {messages.map((message, i) => (
+    <Virtuoso
+      ref={virtuosoRef}
+      className={cn("scrollbar h-[70vh]", className)}
+      data={messages}
+      computeItemKey={(i, message) =>
+        `${message.role}:${message.timestamp ?? "na"}:${i}`
+      }
+      initialItemCount={Math.min(messages.length, 30)}
+      increaseViewportBy={{ top: 400, bottom: 800 }}
+      itemContent={(i, message) => (
         <div
-          key={i}
           data-msg-index={i}
           className={cn(
-            "scroll-mt-6 rounded-md transition-colors",
+            "scroll-mt-6 rounded-md px-1 py-2 transition-colors",
             flashIndex === i && "bg-accent-soft/60 p-2 ring-1 ring-accent",
           )}
         >
           <MessageBlock message={message} />
         </div>
-      ))}
-    </div>
+      )}
+    />
   );
 }

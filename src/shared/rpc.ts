@@ -102,6 +102,8 @@ export interface UserMessage {
   role: "user";
   content: string | ContentBlock[];
   timestamp?: number;
+  /** Renderer-only optimistic key; authoritative JSONL snapshots omit it. */
+  optimisticId?: string;
 }
 
 export interface AssistantMessage {

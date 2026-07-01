@@ -179,6 +179,40 @@ test("a subagents snapshot replaces the roster", () => {
   expect(s.subagents).toBe(subs);
 });
 
+test("a subagents snapshot prunes event buffers for stale child ids", () => {
+  const seeded = createSession("s1", {
+    subagentEvents: {
+      keep: { events: [{ type: "kept" }], progress: { id: "keep" } },
+      stale: { events: [{ type: "stale" }], progress: { id: "stale" } },
+    } as never,
+  });
+
+  const s = reduceSession(
+    seeded,
+    studioFrame.subagents([{ id: "keep", status: "running" }] as never),
+  );
+
+  expect(Object.keys(s.subagentEvents)).toEqual(["keep"]);
+  expect(s.subagentEvents.keep?.events).toEqual([{ type: "kept" }]);
+});
+
+test("subagent event buffers keep only the most recent 200 frames per child", () => {
+  let s = createSession("s1");
+  for (let i = 0; i < 205; i++) {
+    s = reduceSession(s, {
+      type: "subagent_event",
+      payload: {
+        id: "child-1",
+        event: { type: "message", seq: i },
+      },
+    } as never);
+  }
+  const events = s.subagentEvents["child-1"]?.events;
+  expect(events).toHaveLength(200);
+  expect(events?.[0]).toEqual({ type: "message", seq: 5 });
+  expect(events?.at(-1)).toEqual({ type: "message", seq: 204 });
+});
+
 test("a messages snapshot replaces the transcript (normalizing every role)", () => {
   const msgs = [
     { role: "user", content: "hi" },

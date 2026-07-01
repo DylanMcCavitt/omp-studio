@@ -30,9 +30,15 @@ import { useAsync } from "@/lib/useAsync";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { useFocusTrap } from "@/lib/useFocusTrap";
 import { type Route, useAppStore } from "@/store/app";
-import { type LiveSessionState, useChatStore } from "@/store/chat";
+import {
+  type LiveSessionState,
+  type LiveSessionSummary,
+  useChatStore,
+} from "@/store/chat";
 import { useShellStore } from "@/store/shell";
 import { useUiStore } from "@/store/ui";
+
+const EMPTY_LIVE_SESSIONS: Record<string, LiveSessionState> = {};
 
 type FlatResult =
   | {
@@ -68,6 +74,12 @@ function liveTitle(s: LiveSessionState): string {
   return `Session ${s.sessionId.slice(0, 8)}`;
 }
 
+function liveSummaryTitle(s: LiveSessionSummary): string {
+  if (s.alias && s.alias.trim() !== "") return s.alias;
+  if (s.sessionName && s.sessionName.trim() !== "") return s.sessionName;
+  return `Session ${s.sessionId.slice(0, 8)}`;
+}
+
 /**
  * The Cmd+K overlay body. Mounted only while open so its search state resets on
  * each invocation and no IPC fires when closed. Searches three sources —
@@ -81,13 +93,15 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
   const dialogRef = useFocusTrap<HTMLDivElement>();
   const listRef = useRef<HTMLDivElement>(null);
 
-  const openSessions = useChatStore((s) => s.openSessions);
+  const trimmed = query.trim();
+  const trimmedDebounced = debouncedQuery.trim();
+  const sessionSummaries = useChatStore((s) => s.sessionSummaries);
+  const openSessions = useChatStore((s) =>
+    trimmed ? s.openSessions : EMPTY_LIVE_SESSIONS,
+  );
   const openChat = useChatStore((s) => s.openChat);
   const setOpenPanel = useShellStore((s) => s.setOpenPanel);
   const focusSession = useAppStore((s) => s.focusSession);
-
-  const trimmed = query.trim();
-  const trimmedDebounced = debouncedQuery.trim();
 
   // Historical transcript hits (debounced IPC). Empty query → no scan. The
   // result is tagged with the query that produced it so stale data (useAsync
@@ -123,21 +137,22 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
   }, [trimmed]);
 
   const liveResults = useMemo<FlatResult[]>(() => {
-    const sessions = Object.values(openSessions);
     if (!trimmed) {
-      // No query: surface every open session as a quick switcher entry.
-      return sessions.map((s) => ({
+      // No query: surface every open session as a quick switcher entry without
+      // subscribing to hot transcript maps.
+      return Object.values(sessionSummaries).map((s) => ({
         kind: "live",
         key: `live:${s.sessionId}`,
         hit: {
           sessionId: s.sessionId,
-          title: liveTitle(s),
+          title: liveSummaryTitle(s),
           messageIndex: -1,
           snippet: "",
           ranges: [],
         },
       }));
     }
+    const sessions = Object.values(openSessions);
     const inputs = sessions.map((s) => ({
       sessionId: s.sessionId,
       title: liveTitle(s),
@@ -148,7 +163,7 @@ function GlobalSearchOverlay({ onClose }: { onClose: () => void }) {
       key: `live:${hit.sessionId}`,
       hit,
     }));
-  }, [openSessions, query, trimmed]);
+  }, [openSessions, query, sessionSummaries, trimmed]);
 
   const historyResults = useMemo<FlatResult[]>(() => {
     // Suppress stale/loading history so a click never jumps to a non-matching

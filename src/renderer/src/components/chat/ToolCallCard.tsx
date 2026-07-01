@@ -9,7 +9,7 @@
 import type { WorkspaceColorKey } from "@shared/ipc";
 import type { TextBlock, ToolCallBlock, ToolResultMessage } from "@shared/rpc";
 import { ChevronRight, Wrench } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { workspaceColor } from "@/lib/workspaces";
@@ -95,7 +95,7 @@ export function editDiff(
   return { added, removed, lines };
 }
 
-export function ToolCallCard({
+export const ToolCallCard = memo(function ToolCallCard({
   call,
   result,
   sessionRunning = false,
@@ -258,4 +258,4 @@ export function ToolCallCard({
       )}
     </div>
   );
-}
+});

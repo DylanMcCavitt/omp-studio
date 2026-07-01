@@ -13,6 +13,7 @@ import type {
   ToolCallBlock,
   ToolResultMessage,
 } from "@shared/rpc";
+import { memo } from "react";
 import { imageBlockSrc } from "@/lib/images";
 import { toContentBlocks } from "@/store/session-reducer";
 import { Markdown } from "./Markdown";
@@ -27,9 +28,11 @@ interface Props {
   sessionRunning?: boolean;
   /** Workspace hue threaded to running tool cards. */
   workspaceColorKey?: WorkspaceColorKey;
+  /** Stable signature of tool results referenced by this row. */
+  toolResultsVersion?: string;
 }
 
-export function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   message,
   toolResults,
   streaming,
@@ -120,5 +123,15 @@ export function MessageBubble({
         )}
       </div>
     </div>
+  );
+}, areEqual);
+
+function areEqual(prev: Props, next: Props): boolean {
+  return (
+    prev.message === next.message &&
+    prev.streaming === next.streaming &&
+    prev.sessionRunning === next.sessionRunning &&
+    prev.workspaceColorKey === next.workspaceColorKey &&
+    prev.toolResultsVersion === next.toolResultsVersion
   );
 }

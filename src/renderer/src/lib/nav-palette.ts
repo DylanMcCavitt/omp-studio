@@ -8,18 +8,14 @@ import type {
   Workspace,
   WorkspaceColorKey,
 } from "@shared/ipc";
-import { hibernatedTitle, rowTitle } from "@/components/chat/SessionList";
+import { basename, hibernatedTitle } from "@/components/chat/SessionList";
 import {
   projectLabel,
   sortWorkspaces,
   workspaceColorForCwd,
 } from "@/lib/workspaces";
-import type { HibernatedSession } from "@/store/chat";
-import {
-  type LiveSessionState,
-  type SessionStatus,
-  sessionStatus,
-} from "@/store/session-reducer";
+import type { HibernatedSession, LiveSessionSummary } from "@/store/chat";
+import { type SessionStatus, sessionStatus } from "@/store/session-reducer";
 
 /** A Workspaces-group row: hue = identity, leads with an identity Live Dot. */
 export interface WorkspaceNavItem {
@@ -63,20 +59,27 @@ export function workspaceNavItems(
   }));
 }
 
+function liveTitle(s: LiveSessionSummary): string {
+  if (s.alias && s.alias.trim() !== "") return s.alias;
+  if (s.sessionName && s.sessionName.trim() !== "") return s.sessionName;
+  if (s.cwd) return basename(s.cwd);
+  return s.sessionId;
+}
+
 /**
  * Build the Recent sessions group from the live + hibernated stores, newest
  * first. Status is derived (never stored): live+streaming = running, live+idle =
  * idle, hibernated/closed = done.
  */
 export function sessionNavItems(
-  openSessions: Record<string, LiveSessionState>,
+  openSessions: Record<string, LiveSessionSummary>,
   hibernatedSessions: Record<string, HibernatedSession>,
   workspaces: readonly Workspace[] | undefined,
 ): SessionNavItem[] {
   const live: SessionNavItem[] = Object.values(openSessions).map((s) => ({
     kind: "session",
     id: s.sessionId,
-    title: rowTitle(s),
+    title: liveTitle(s),
     status: sessionStatus({ live: true, status: s.status }),
     live: true,
     workspaceLabel: s.cwd
