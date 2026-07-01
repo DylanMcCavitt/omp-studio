@@ -26,6 +26,7 @@ import {
   Plus,
   RefreshCw,
   RotateCcw,
+  Search,
   ShieldAlert,
   SlidersHorizontal,
   SquareKanban,
@@ -41,6 +42,7 @@ import {
   Badge,
   type BadgeVariant,
   Button,
+  Collapsible,
   Combobox,
   EmptyState,
   IconButton,
@@ -935,15 +937,20 @@ function IntegrationsPanel() {
 // ---------------------------------------------------------------------------
 
 function ModelsPanel({ state }: { state: AsyncState<ModelInfo[]> }) {
+  const [query, setQuery] = useState("");
+  const queryText = query.trim().toLowerCase();
+  const searching = queryText.length > 0;
+  const modelCount = state.data?.length ?? 0;
   const grouped = useMemo(() => {
     const byProvider = new Map<string, ModelInfo[]>();
     for (const model of state.data ?? []) {
+      if (searching && modelMatchesQuery(model, queryText) === false) continue;
       const arr = byProvider.get(model.provider);
       if (arr) arr.push(model);
       else byProvider.set(model.provider, [model]);
     }
     return Array.from(byProvider, ([provider, items]) => ({ provider, items }));
-  }, [state.data]);
+  }, [state.data, queryText, searching]);
 
   return (
     <Panel
@@ -952,7 +959,7 @@ function ModelsPanel({ state }: { state: AsyncState<ModelInfo[]> }) {
           <Cpu className="h-4 w-4 text-accent" />
           Models
           {state.data && (
-            <Badge variant="muted">{formatNumber(state.data.length)}</Badge>
+            <Badge variant="muted">{formatNumber(modelCount)}</Badge>
           )}
         </span>
       }
@@ -967,56 +974,100 @@ function ModelsPanel({ state }: { state: AsyncState<ModelInfo[]> }) {
           title="Failed to load models"
           hint={state.error}
         />
-      ) : grouped.length === 0 ? (
+      ) : modelCount === 0 ? (
         <EmptyState
           icon={<Cpu className="h-6 w-6" />}
           title="No models available"
         />
       ) : (
-        <div className="space-y-4">
-          {grouped.map((group) => (
-            <div key={group.provider}>
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                  {group.provider}
-                </span>
-                <Badge variant="muted">{group.items.length}</Badge>
-              </div>
-              <div className="space-y-0.5">
-                {group.items.map((model) => (
-                  <div
-                    key={model.selector}
-                    className="flex flex-wrap items-center gap-2 py-1"
-                  >
-                    <span className="flex-1 truncate font-mono text-xs text-ink">
-                      {model.name}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 rounded-lg border border-border-subtle bg-bg-raised px-3">
+            <Search className="h-4 w-4 shrink-0 text-ink-faint" />
+            <input
+              type="search"
+              aria-label="Search models"
+              placeholder="Search models…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
+            />
+            {searching && (
+              <IconButton
+                label="Clear model search"
+                className="h-7 w-7"
+                onClick={() => setQuery("")}
+              >
+                <X className="h-4 w-4" />
+              </IconButton>
+            )}
+          </div>
+
+          {grouped.length === 0 ? (
+            <EmptyState
+              icon={<Cpu className="h-6 w-6" />}
+              title="No matching models"
+              hint="Try a model name, provider, id, or selector."
+            />
+          ) : (
+            <div className="space-y-2">
+              {grouped.map((group) => (
+                <Collapsible
+                  key={`${group.provider}:${searching ? queryText : "normal"}`}
+                  title={
+                    <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                      {group.provider}
                     </span>
-                    {model.reasoning && (
-                      <Badge variant="accent">reasoning</Badge>
-                    )}
-                    {typeof model.contextWindow === "number" && (
-                      <span className="text-xs text-ink-faint">
-                        {formatNumber(model.contextWindow)} ctx
-                      </span>
-                    )}
-                    {model.cost?.input != null && (
-                      <span className="text-xs text-ink-faint">
-                        ${model.cost.input}/M in
-                      </span>
-                    )}
-                    {model.cost?.output != null && (
-                      <span className="text-xs text-ink-faint">
-                        ${model.cost.output}/M out
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  }
+                  actions={<Badge variant="muted">{group.items.length}</Badge>}
+                  persistKey={
+                    searching ? undefined : `settings.models.${group.provider}`
+                  }
+                  defaultOpen
+                  bodyClassName="space-y-0.5 pl-5 pt-1"
+                >
+                  {group.items.map((model) => (
+                    <ModelCatalogRow key={model.selector} model={model} />
+                  ))}
+                </Collapsible>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       )}
     </Panel>
+  );
+}
+
+function modelMatchesQuery(model: ModelInfo, query: string): boolean {
+  return (
+    model.name.toLowerCase().includes(query) ||
+    model.provider.toLowerCase().includes(query) ||
+    model.id.toLowerCase().includes(query) ||
+    model.selector.toLowerCase().includes(query)
+  );
+}
+
+function ModelCatalogRow({ model }: { model: ModelInfo }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 py-1">
+      <span className="flex-1 truncate font-mono text-xs text-ink">
+        {model.name}
+      </span>
+      {model.reasoning && <Badge variant="accent">reasoning</Badge>}
+      {typeof model.contextWindow === "number" && (
+        <span className="text-xs text-ink-faint">
+          {formatNumber(model.contextWindow)} ctx
+        </span>
+      )}
+      {model.cost?.input != null && (
+        <span className="text-xs text-ink-faint">${model.cost.input}/M in</span>
+      )}
+      {model.cost?.output != null && (
+        <span className="text-xs text-ink-faint">
+          ${model.cost.output}/M out
+        </span>
+      )}
+    </div>
   );
 }
 
