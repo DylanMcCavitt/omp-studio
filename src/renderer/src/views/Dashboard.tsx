@@ -5,16 +5,11 @@ import type {
   ProjectSessions,
 } from "@shared/domain";
 import {
-  Activity,
   BarChart3,
   Bot,
   Boxes,
   ChevronRight,
-  CircleDollarSign,
-  Clock3,
-  Database,
   FolderGit2,
-  Gauge,
   Github,
   Inbox,
   MessagesSquare,
@@ -23,9 +18,8 @@ import {
   RefreshCw,
   Sparkles,
   SquareKanban,
-  TrendingUp,
 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Badge,
   Button,
@@ -52,6 +46,11 @@ export default function Dashboard() {
     reload();
     stats.reload();
   };
+
+  useEffect(() => {
+    const id = window.setInterval(reloadAll, 30_000);
+    return () => window.clearInterval(id);
+  }, [reload, stats.reload]);
 
   return (
     <div className="scrollbar h-full overflow-y-auto">
@@ -374,7 +373,7 @@ function sortBreakdown(
     .slice(0, 5);
 }
 
-function BreakdownList({
+function NativeBreakdownList({
   title,
   rows,
   label,
@@ -385,35 +384,381 @@ function BreakdownList({
 }) {
   const top = sortBreakdown(rows);
   return (
-    <div className="rounded-xl border border-border-subtle bg-bg-soft/40">
-      <div className="border-b border-border-subtle px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted">
-        {title}
+    <div className="rounded-2xl border border-border-subtle bg-bg-raised/80">
+      <div className="border-b border-border-subtle px-4 py-3">
+        <h3 className="font-semibold text-sm text-ink">{title}</h3>
       </div>
       {top.length === 0 ? (
-        <p className="px-3 py-4 text-sm text-ink-muted">No data yet.</p>
+        <p className="px-4 py-4 text-sm text-ink-muted">No data yet.</p>
       ) : (
         <ul className="divide-y divide-border-subtle">
-          {top.map((row, index) => (
+          {top.map((row, index) => {
+            const requests = readNumber(row, ["totalRequests", "requests"]);
+            const cost = readNumber(row, ["totalCost", "cost"]);
+            return (
+              <li
+                key={`${title}:${label(row)}:${index}`}
+                className="flex items-center justify-between gap-3 px-4 py-3"
+              >
+                <span className="min-w-0 truncate text-sm font-medium text-ink">
+                  {label(row)}
+                </span>
+                <span className="shrink-0 text-xs tabular-nums text-ink-muted">
+                  {formatCost(cost)}
+                  {" · "}
+                  {formatOptionalNumber(requests)} req
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function formatCompactNumber(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `${Math.round(value / 1_000_000)}M`;
+  if (abs >= 1_000) return `${Math.round(value / 1_000)}K`;
+  return formatNumber(Math.round(value));
+}
+
+function metricTokens(row: OmpStatsAggregate | undefined): number | undefined {
+  return totalTokens(row);
+}
+
+function NativeMetricCard({
+  label,
+  value,
+  primary,
+}: {
+  label: string;
+  value: string;
+  primary?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border border-border-subtle bg-bg-raised p-5 ${
+        primary ? "min-h-28" : "min-h-20"
+      }`}
+    >
+      <div
+        className={`font-semibold uppercase tracking-[0.18em] ${
+          primary ? "text-fuchsia-500" : "text-ink-muted"
+        } text-xs`}
+      >
+        {label}
+      </div>
+      <div
+        className={`mt-4 font-semibold tracking-tight text-ink ${
+          primary ? "text-3xl" : "text-2xl"
+        }`}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function agentTokenTotal(row: OmpStatsBreakdown): number {
+  return (
+    (readNumber(row, ["totalInputTokens"]) ?? 0) +
+    (readNumber(row, ["totalOutputTokens"]) ?? 0) +
+    (readNumber(row, ["totalCacheReadTokens"]) ?? 0) +
+    (readNumber(row, ["totalCacheWriteTokens"]) ?? 0)
+  );
+}
+
+function AgentUsagePanel({ rows }: { rows: OmpStatsBreakdown[] | undefined }) {
+  const agents = sortBreakdown(rows).slice(0, 3);
+  const total = agents.reduce((sum, row) => sum + agentTokenTotal(row), 0);
+  const colors = ["#ec3fb5", "#8b5cf6", "#22c55e"];
+  return (
+    <section className="rounded-2xl border border-border-subtle bg-bg-raised">
+      <div className="border-b border-border-subtle px-5 py-4">
+        <h3 className="font-semibold text-base text-ink">
+          Token Usage by Agent
+        </h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          Share of tokens across the main agent and task subagents
+        </p>
+      </div>
+      <div className="p-5">
+        <div className="flex h-4 overflow-hidden rounded-full bg-bg-soft">
+          {agents.map((row, index) => {
+            const pct = total > 0 ? (agentTokenTotal(row) / total) * 100 : 0;
+            return (
+              <div
+                key={`${agentLabel(row)}:bar`}
+                className="h-full"
+                style={{ width: `${pct}%`, backgroundColor: colors[index] }}
+              />
+            );
+          })}
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {agents.map((row, index) => {
+            const tokens = agentTokenTotal(row);
+            const pct = total > 0 ? (tokens / total) * 100 : 0;
+            return (
+              <div
+                key={`${agentLabel(row)}:legend`}
+                className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-bg-soft/40 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: colors[index] }}
+                    />
+                    <span className="truncate text-sm font-medium text-ink">
+                      {agentLabel(row)}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-ink-muted">
+                    {formatOptionalNumber(
+                      readNumber(row, ["totalRequests", "requests"]),
+                    )}{" "}
+                    req · {formatCompactNumber(tokens)} tok
+                  </div>
+                </div>
+                <div className="shrink-0 text-sm font-semibold tabular-nums text-ink">
+                  {pct.toFixed(1)}%
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ThroughputChart({ rows }: { rows: OmpStatsBreakdown[] | undefined }) {
+  const series = [...(rows ?? [])].slice(-24);
+  const maxRequests = Math.max(
+    1,
+    ...series.map((row) => readNumber(row, ["requests", "totalRequests"]) ?? 0),
+  );
+  const points = series.map((row, index) => {
+    const x = series.length <= 1 ? 0 : (index / (series.length - 1)) * 100;
+    const requests = readNumber(row, ["requests", "totalRequests"]) ?? 0;
+    const y = 100 - (requests / maxRequests) * 82 - 8;
+    return `${x},${y}`;
+  });
+  return (
+    <section className="rounded-2xl border border-border-subtle bg-bg-raised">
+      <div className="border-b border-border-subtle px-5 py-4">
+        <h3 className="font-semibold text-base text-ink">System Throughput</h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          Request volume and errors over time
+        </p>
+      </div>
+      <div className="p-5">
+        {series.length === 0 ? (
+          <p className="py-8 text-center text-sm text-ink-muted">
+            No trend data yet.
+          </p>
+        ) : (
+          <svg
+            viewBox="0 0 100 100"
+            role="img"
+            aria-label="Request volume over time"
+            className="h-48 w-full overflow-visible"
+            preserveAspectRatio="none"
+          >
+            <defs>
+              <linearGradient
+                id="stats-throughput-fill"
+                x1="0"
+                x2="0"
+                y1="0"
+                y2="1"
+              >
+                <stop offset="0%" stopColor="#ec3fb5" stopOpacity="0.22" />
+                <stop offset="100%" stopColor="#ec3fb5" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <polygon
+              points={`0,100 ${points.join(" ")} 100,100`}
+              fill="url(#stats-throughput-fill)"
+            />
+            <polyline
+              points={points.join(" ")}
+              fill="none"
+              stroke="#ec3fb5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2.6"
+            />
+            {series.map((row, index) => {
+              const errors = readNumber(row, ["errors", "failedRequests"]) ?? 0;
+              if (errors <= 0) return null;
+              const x =
+                series.length <= 1 ? 0 : (index / (series.length - 1)) * 100;
+              return (
+                <line
+                  key={`${readNumber(row, ["timestamp"]) ?? index}:errors`}
+                  x1={x}
+                  x2={x}
+                  y1={90}
+                  y2={100}
+                  stroke="#ef4444"
+                  strokeLinecap="round"
+                  strokeWidth="2"
+                />
+              );
+            })}
+          </svg>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const STATS_RANGES = [
+  { label: "1h", ms: 60 * 60 * 1000 },
+  { label: "24h", ms: 24 * 60 * 60 * 1000 },
+  { label: "7d", ms: 7 * 24 * 60 * 60 * 1000 },
+  { label: "30d", ms: 30 * 24 * 60 * 60 * 1000 },
+  { label: "90d", ms: 90 * 24 * 60 * 60 * 1000 },
+  { label: "All", ms: null },
+] as const;
+
+type StatsRange = (typeof STATS_RANGES)[number]["label"];
+
+function rowTimestamp(row: OmpStatsBreakdown): number | undefined {
+  return readNumber(row, ["timestamp"]);
+}
+
+function filterRowsByRange<T extends OmpStatsBreakdown>(
+  rows: T[] | undefined,
+  range: StatsRange,
+): T[] {
+  const series = rows ?? [];
+  const selected = STATS_RANGES.find((item) => item.label === range);
+  if (!selected?.ms || series.length === 0) return series;
+  const latest = Math.max(
+    ...series.map((row) => rowTimestamp(row) ?? 0).filter((n) => n > 0),
+  );
+  if (!Number.isFinite(latest) || latest <= 0) return series;
+  const cutoff = latest - selected.ms;
+  return series.filter((row) => (rowTimestamp(row) ?? latest) >= cutoff);
+}
+
+function sumValues(values: Array<number | undefined>): number {
+  return values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+}
+
+function rollupSeries(
+  rows: OmpStatsBreakdown[],
+  fallback: OmpStatsAggregate | undefined,
+): OmpStatsAggregate | undefined {
+  if (rows.length === 0) return fallback;
+  const requests = rows.map((row) =>
+    readNumber(row, ["requests", "totalRequests"]),
+  );
+  const failures = rows.map((row) =>
+    readNumber(row, ["errors", "failedRequests"]),
+  );
+  const costs = rows.map((row) => readNumber(row, ["cost", "totalCost"]));
+  const totalRequests = sumValues(requests);
+  const failedRequests = sumValues(failures);
+  const totalCost = sumValues(costs);
+  const hasRequests = requests.some((value) => value !== undefined);
+  const hasFailures = failures.some((value) => value !== undefined);
+  const hasCosts = costs.some((value) => value !== undefined);
+  return {
+    ...fallback,
+    ...(hasRequests ? { totalRequests } : {}),
+    ...(hasFailures
+      ? {
+          failedRequests,
+          errorRate: totalRequests > 0 ? failedRequests / totalRequests : 0,
+        }
+      : {}),
+    ...(hasCosts ? { totalCost } : {}),
+  };
+}
+
+function aggregateModels(rows: OmpStatsBreakdown[] | undefined) {
+  const byKey = new Map<string, OmpStatsBreakdown>();
+  for (const row of rows ?? []) {
+    const key = modelLabel(row);
+    const current = byKey.get(key) ?? {
+      provider: row.provider,
+      model: row.model,
+      totalRequests: 0,
+      totalCost: 0,
+    };
+    current.totalRequests =
+      (readNumber(current, ["totalRequests", "requests"]) ?? 0) +
+      (readNumber(row, ["totalRequests", "requests"]) ?? 0);
+    current.totalCost =
+      (readNumber(current, ["totalCost", "cost"]) ?? 0) +
+      (readNumber(row, ["totalCost", "cost"]) ?? 0);
+    byKey.set(key, current);
+  }
+  return [...byKey.values()];
+}
+
+function RecentModelActivity({
+  rows,
+}: {
+  rows: OmpStatsBreakdown[] | undefined;
+}) {
+  const recent = [...(rows ?? [])]
+    .sort((a, b) => (rowTimestamp(b) ?? 0) - (rowTimestamp(a) ?? 0))
+    .slice(0, 6);
+
+  return (
+    <section className="rounded-2xl border border-border-subtle bg-bg-raised">
+      <div className="border-b border-border-subtle px-5 py-4">
+        <h3 className="font-semibold text-base text-ink">
+          Recent model activity
+        </h3>
+        <p className="mt-1 text-sm text-ink-muted">
+          Latest model buckets from the local stats snapshot
+        </p>
+      </div>
+      {recent.length === 0 ? (
+        <p className="px-5 py-6 text-sm text-ink-muted">
+          No model activity yet.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border-subtle">
+          {recent.map((row, index) => (
             <li
-              key={`${title}:${label(row)}:${index}`}
-              className="flex items-center justify-between gap-3 px-3 py-2"
+              key={`${modelLabel(row)}:${rowTimestamp(row) ?? index}`}
+              className="grid gap-2 px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-center"
             >
-              <span className="min-w-0 truncate text-sm text-ink">
-                {label(row)}
-              </span>
-              <span className="shrink-0 text-xs tabular-nums text-ink-muted">
-                {formatCost(readNumber(row, ["totalCost", "cost"]))}
-                {" · "}
-                {formatOptionalNumber(
-                  readNumber(row, ["totalRequests", "requests"]),
-                )}{" "}
-                req
-              </span>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium text-ink">
+                  {modelLabel(row)}
+                </div>
+                <div className="mt-1 text-xs text-ink-muted">
+                  {formatOptionalNumber(
+                    readNumber(row, ["requests", "totalRequests"]),
+                  )}{" "}
+                  req
+                  {rowTimestamp(row)
+                    ? ` · ${formatRelativeTime(rowTimestamp(row) ?? 0)}`
+                    : ""}
+                </div>
+              </div>
+              <div className="text-xs tabular-nums text-ink-muted">
+                TTFT {formatMillis(readNumber(row, ["avgTtft"]))} ·{" "}
+                {formatOptionalNumber(readNumber(row, ["avgTokensPerSecond"]))}{" "}
+                tok/s
+              </div>
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -430,42 +775,68 @@ function OmpStatsPanel({
   projects: ProjectSessions[];
   onRefresh: () => void;
 }) {
-  const overall = stats?.overall;
+  const [range, setRange] = useState<StatsRange>("24h");
+  const timeSeries = filterRowsByRange(stats?.timeSeries, range);
+  const costSeries = filterRowsByRange(stats?.costSeries, range);
+  const modelPerformanceSeries = filterRowsByRange(
+    stats?.modelPerformanceSeries ?? stats?.modelSeries,
+    range,
+  );
+  const overall = rollupSeries(timeSeries, stats?.overall);
   const requests = readNumber(overall, ["totalRequests", "requests"]);
   const failed = readNumber(overall, ["failedRequests", "failures"]);
   const cost = readNumber(overall, ["totalCost", "cost"]);
-  const avgTtft = readNumber(overall, ["avgTtft", "ttft"]);
-  const avgDuration = readNumber(overall, ["avgDuration", "duration"]);
-  const throughput = readNumber(overall, [
+  const avgTtft = readNumber(stats?.overall, ["avgTtft", "ttft"]);
+  const avgDuration = readNumber(stats?.overall, ["avgDuration", "duration"]);
+  const throughput = readNumber(stats?.overall, [
     "avgTokensPerSecond",
     "tokensPerSecond",
   ]);
-  const last = readNumber(overall, ["lastTimestamp"]);
+  const inputTokens = readNumber(stats?.overall, ["totalInputTokens"]);
+  const outputTokens = readNumber(stats?.overall, ["totalOutputTokens"]);
+  const premium = readNumber(stats?.overall, ["totalPremiumRequests"]);
+  const last = readNumber(stats?.overall, ["lastTimestamp"]);
 
   return (
     <Panel
-      title="OMP stats"
+      title="Overview"
+      bodyClassName="bg-bg/40"
       actions={
-        <IconButton
-          label="Refresh OMP stats"
+        <Button
+          size="sm"
           onClick={onRefresh}
           disabled={loading}
-          className="h-7 w-7"
+          className="border-fuchsia-500 bg-fuchsia-500 text-white hover:bg-fuchsia-600"
         >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-        </IconButton>
+          {loading ? "Refreshing…" : "Refresh stats"}
+        </Button>
       }
     >
-      <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
-        <Badge variant="muted">Global local stats</Badge>
-        <span>Estimated cost from local OMP stats.</span>
-        {last !== undefined && (
-          <span>Last activity {formatRelativeTime(last)}</span>
-        )}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-ink-muted">
+          {last !== undefined
+            ? `Updated ${formatRelativeTime(last)} · auto-refreshes every 30s`
+            : "Local OMP usage statistics"}
+        </div>
+        <div className="inline-flex overflow-hidden rounded-lg border border-border-subtle bg-bg-soft text-xs text-ink-muted">
+          {STATS_RANGES.map(({ label }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setRange(label)}
+              className={`px-3 py-1.5 transition-colors hover:bg-bg-hover hover:text-ink ${
+                label === range ? "bg-bg-raised text-ink shadow-sm" : ""
+              }`}
+              aria-pressed={label === range}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && (
-        <div className="mb-3 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
+        <div className="mb-4 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
           Failed to load OMP stats: {error}
         </div>
       )}
@@ -482,69 +853,79 @@ function OmpStatsPanel({
         />
       ) : (
         <div className="flex flex-col gap-4">
-          <section className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <Stat
+          <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <NativeMetricCard
+              label="Total cost"
+              value={formatCost(cost)}
+              primary
+            />
+            <NativeMetricCard
               label="Requests"
               value={formatOptionalNumber(requests)}
-              hint={`${formatOptionalNumber(failed)} failed · ${formatPercent(
-                readNumber(overall, ["errorRate"]),
-              )}`}
-              icon={<Activity size={16} />}
+              primary
             />
-            <Stat
-              label="Tokens"
-              value={formatOptionalNumber(totalTokens(overall))}
-              hint={`${formatPercent(
-                readNumber(overall, ["cacheRate"]),
-              )} cache hit`}
-              icon={<Database size={16} />}
+            <NativeMetricCard
+              label="Cache rate"
+              value={formatPercent(readNumber(stats?.overall, ["cacheRate"]))}
+              primary
             />
-            <Stat
-              label="Est. cost"
-              value={formatCost(cost)}
-              hint="Local OMP stats"
-              icon={<CircleDollarSign size={16} />}
-            />
-            <Stat
-              label="Avg TTFT"
-              value={formatMillis(avgTtft)}
-              hint={`Duration ${formatMillis(avgDuration)}`}
-              icon={<Clock3 size={16} />}
-            />
-            <Stat
-              label="Throughput"
-              value={
-                throughput === undefined
-                  ? "—"
-                  : `${throughput.toFixed(1)} tok/s`
-              }
-              hint="Average decode speed"
-              icon={<Gauge size={16} />}
-            />
-            <Stat
-              label="Trend points"
-              value={formatNumber(stats.timeSeries?.length ?? 0)}
-              hint="Recent local history"
-              icon={<TrendingUp size={16} />}
+            <NativeMetricCard
+              label="Error rate"
+              value={formatPercent(readNumber(overall, ["errorRate"]))}
+              primary
             />
           </section>
 
-          <div className="grid gap-3 lg:grid-cols-3">
-            <BreakdownList
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <NativeMetricCard
+              label="Input tokens"
+              value={formatCompactNumber(inputTokens)}
+            />
+            <NativeMetricCard
+              label="Output tokens"
+              value={formatCompactNumber(outputTokens)}
+            />
+            <NativeMetricCard
+              label="Premium requests"
+              value={formatOptionalNumber(premium)}
+            />
+            <NativeMetricCard
+              label="Tokens/s"
+              value={throughput === undefined ? "—" : throughput.toFixed(1)}
+            />
+            <NativeMetricCard
+              label="Avg latency"
+              value={formatMillis(avgDuration)}
+            />
+            <NativeMetricCard label="Avg TTFT" value={formatMillis(avgTtft)} />
+          </section>
+
+          <AgentUsagePanel rows={stats.byAgentType} />
+          <ThroughputChart rows={timeSeries} />
+          <RecentModelActivity rows={modelPerformanceSeries} />
+
+          <div className="grid gap-3 xl:grid-cols-3">
+            <NativeBreakdownList
               title="Top models"
               rows={stats.byModel}
               label={modelLabel}
             />
-            <BreakdownList
+            <NativeBreakdownList
               title="Top folders"
               rows={stats.byFolder}
               label={(row) => folderLabel(row, projects)}
             />
-            <BreakdownList
-              title="Agent split"
-              rows={stats.byAgentType}
-              label={agentLabel}
+            <NativeBreakdownList
+              title="Cost by model"
+              rows={aggregateModels(costSeries)}
+              label={modelLabel}
             />
+          </div>
+
+          <div className="rounded-2xl border border-border-subtle bg-bg-raised px-4 py-3 text-xs text-ink-muted">
+            Showing {range} request/cost data · {formatOptionalNumber(failed)}{" "}
+            failed requests · {formatCompactNumber(metricTokens(stats.overall))}{" "}
+            all-time tokens · {formatNumber(timeSeries.length)} trend points
           </div>
         </div>
       )}

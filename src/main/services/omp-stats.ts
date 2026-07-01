@@ -70,6 +70,7 @@ export async function getOmpStats(): Promise<OmpStatsSnapshot | null> {
     ["stats", "--json"],
     {
       maxBytes: MAX_STATS_BYTES,
+      spoolOutput: true,
       timeoutMs: STATS_TIMEOUT_MS,
     },
   );
