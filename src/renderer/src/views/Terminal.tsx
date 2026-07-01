@@ -144,6 +144,13 @@ export default function Terminal() {
     );
   }, [externalLaunchers, externalProfile]);
 
+  const externalLabel = preferredExternal?.label ?? "external terminal";
+  const externalButtonTitle = preferredExternal?.available
+    ? `Open ${preferredExternal.label} as a separate app`
+    : preferredExternal
+      ? `${preferredExternal.label} is not available; external terminals open as separate apps.`
+      : "No matching external terminal is available; external terminals open as separate apps.";
+
   const openExternalTerminal = async () => {
     if (!cwd || openingExternal) return;
     setOpeningExternal(true);
@@ -169,7 +176,7 @@ export default function Terminal() {
           <h1 className="text-lg font-semibold text-ink">Terminal</h1>
           <p className="truncate text-sm text-ink-muted">
             {enabled && cwd
-              ? `Shell in ${projectLabel(cwd)} · ${cwd}`
+              ? `Built-in xterm shell in ${projectLabel(cwd)} · ${cwd}`
               : "A real shell at your user privilege — not a sandbox"}
           </p>
         </div>
@@ -236,17 +243,11 @@ export default function Terminal() {
               openingExternal ||
               !preferredExternal?.available
             }
-            title={
-              preferredExternal?.available
-                ? `Open ${preferredExternal.label}`
-                : "No matching external terminal is available"
-            }
+            title={externalButtonTitle}
             onClick={() => void openExternalTerminal()}
           >
             <ExternalLink className="h-4 w-4" />
-            {openingExternal
-              ? "Opening…"
-              : `Open ${preferredExternal?.label ?? "external"}`}
+            {openingExternal ? "Opening…" : `Open ${externalLabel}`}
           </Button>
           <Button
             size="sm"
@@ -322,8 +323,8 @@ export default function Terminal() {
             title={creating ? "Starting terminal…" : "No terminal tabs"}
             hint={
               defaultTarget === "external"
-                ? "Open your preferred external terminal, or create a built-in tab for this workspace."
-                : "Create a terminal tab for the selected workspace."
+                ? `Open ${externalLabel} as a separate app, or create a built-in xterm tab for this workspace.`
+                : "Create a built-in xterm tab for the selected workspace."
             }
           />
         ) : (

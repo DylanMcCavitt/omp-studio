@@ -208,6 +208,15 @@ it("opens the selected external terminal without spawning a built-in tab", async
   const openExternal = await screen.findByRole("button", {
     name: /open ghostty/i,
   });
+  expect(openExternal).toHaveAttribute(
+    "title",
+    "Open Ghostty as a separate app",
+  );
+  expect(
+    await screen.findByText(
+      "Open Ghostty as a separate app, or create a built-in xterm tab for this workspace.",
+    ),
+  ).toBeInTheDocument();
   expect(screen.getByText("No terminal tabs")).toBeInTheDocument();
   expect(terminal.create).not.toHaveBeenCalled();
 
@@ -220,6 +229,10 @@ it("opens the selected external terminal without spawning a built-in tab", async
   expect(await screen.findByRole("status")).toHaveTextContent(
     "Opened Ghostty for app.",
   );
+  expect(terminal.openExternal).toHaveBeenCalledTimes(1);
+  expect(terminal.create).not.toHaveBeenCalled();
+  expect(screen.queryByRole("tab")).toBeNull();
+  expect(screen.queryByTestId("xterm-surface")).toBeNull();
 });
 
 it("disables the external affordance when the selected profile is unavailable", async () => {
@@ -241,9 +254,14 @@ it("disables the external affordance when the selected profile is unavailable", 
 
   render(<Terminal />);
 
-  expect(
-    await screen.findByRole("button", { name: /open ghostty/i }),
-  ).toBeDisabled();
+  const openGhostty = await screen.findByRole("button", {
+    name: /open ghostty/i,
+  });
+  expect(openGhostty).toBeDisabled();
+  expect(openGhostty).toHaveAttribute(
+    "title",
+    "Ghostty is not available; external terminals open as separate apps.",
+  );
 });
 
 it("switches tabs without killing ptys; close tab explicitly kills one", async () => {

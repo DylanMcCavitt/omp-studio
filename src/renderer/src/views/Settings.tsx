@@ -425,7 +425,7 @@ function TerminalPanel({
       <div className="grid gap-3 md:grid-cols-2">
         <Field
           label="Default terminal target"
-          hint="Used by terminal affordances that can choose between Studio tabs and an external app."
+          hint="Built-in opens Studio's xterm shell; External opens Ghostty/Kitty/etc. as separate apps."
         >
           <select
             aria-label="Default terminal target"
@@ -447,7 +447,7 @@ function TerminalPanel({
 
         <Field
           label="External terminal profile"
-          hint="Preference only; launcher detection/availability is handled by the external terminal workflow."
+          hint="Preference only; OMP Studio launches the selected app externally and does not embed or control its renderer."
         >
           <select
             aria-label="External terminal profile"

@@ -64,6 +64,16 @@ it("renders terminal default target and external profile settings", async () => 
   expect(screen.getByLabelText("Maximum built-in terminal tabs")).toHaveValue(
     4,
   );
+  expect(
+    screen.getByText(
+      "Built-in opens Studio's xterm shell; External opens Ghostty/Kitty/etc. as separate apps.",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Preference only; OMP Studio launches the selected app externally and does not embed or control its renderer.",
+    ),
+  ).toBeInTheDocument();
 });
 
 it("persists terminal target/profile without enabling the shell", async () => {
