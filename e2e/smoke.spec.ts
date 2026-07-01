@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -22,9 +23,9 @@ import {
 // It launches the BUILT app (out/main/index.js) and verifies that the v3 shell
 // boots, the right rail opens every destination panel without crashing, and the
 // workspace-scoped Files surface can open a real temp file in CodeMirror. It
-// never starts a chat and forces omp/gh to be unresolvable (see beforeAll), so
-// NO omp/gh child is spawned, no paid model turn runs, and the result is
-// identical whether or not omp/gh are installed.
+// uses a fake omp binary that only answers `omp stats --json`, forces gh to be
+// unresolvable (see beforeAll), starts no chat, spawns no real omp/gh child, and
+// runs no paid model turn.
 //
 // Prerequisite: `npm run build` (so out/main/index.js exists). Run the whole
 // flow with `npm run build && npm run test:e2e`. On headless Linux CI, wrap with
@@ -48,9 +49,15 @@ const RAIL_DESTINATIONS: readonly {
     assertRendered: async (panel) => {
       await heading("Dashboard")(panel);
       await expect(
-        panel.getByRole("heading", { name: "OMP stats" }),
+        panel.getByRole("heading", { name: "Overview" }),
       ).toBeVisible();
-      await expect(panel.getByText("OMP stats unavailable")).toBeVisible();
+      await expect(
+        panel.getByText("Total cost", { exact: true }),
+      ).toBeVisible();
+      await expect(panel.getByText("Requests", { exact: true })).toBeVisible();
+      await expect(panel.getByText("Token Usage by Agent")).toBeVisible();
+      await expect(panel.getByText("System Throughput")).toBeVisible();
+      await expect(panel.getByText("Top models")).toBeVisible();
     },
   },
   { label: "Skills", assertRendered: heading("Skills & Commands") },
@@ -112,10 +119,12 @@ const pageErrors: Error[] = [];
 const rendererCrashes: string[] = [];
 
 test.beforeAll(async () => {
-  // Hermetic, non-live posture. Four levers make the run deterministic and
+  // Hermetic, non-live posture. Five levers make the run deterministic and
   // side-effect-free regardless of the host:
-  //   - omp/gh point at a nonexistent binary, so data services hit graceful
-  //     degradation and spawn NO omp/gh children;
+  //   - omp points at a fake script that only returns a small stats JSON payload,
+  //     so the Dashboard proves the native stats UI without touching real logs;
+  //   - gh points at a nonexistent binary, so GitHub IPC degrades gracefully and
+  //     spawns no real gh child;
   //   - PI_CODING_AGENT_DIR points at an empty temp dir, so session/MCP/skills
   //     discovery reads an empty tree;
   //   - --user-data-dir points Electron's userData at a temp dir seeded with a
@@ -168,13 +177,91 @@ test.beforeAll(async () => {
     "utf8",
   );
 
+  const fakeOmp = join(tempAgentDir, "omp");
+  const fakeStats = {
+    overall: {
+      totalRequests: 123,
+      failedRequests: 4,
+      errorRate: 4 / 123,
+      totalInputTokens: 1000,
+      totalOutputTokens: 250,
+      totalCacheReadTokens: 5000,
+      totalCacheWriteTokens: 0,
+      cacheRate: 5000 / 6250,
+      totalCost: 12.34,
+      totalPremiumRequests: 0,
+      avgDuration: 9000,
+      avgTtft: 3200,
+      avgTokensPerSecond: 42.5,
+      lastTimestamp: Date.now(),
+    },
+    byModel: [
+      {
+        provider: "openai-codex",
+        model: "gpt-5.5",
+        totalRequests: 123,
+        totalCost: 12.34,
+      },
+    ],
+    byFolder: [
+      {
+        folder: tempWorkspaceDir,
+        totalRequests: 123,
+        totalCost: 12.34,
+      },
+    ],
+    byAgentType: [
+      {
+        agentType: "main",
+        totalRequests: 80,
+        totalInputTokens: 800,
+        totalOutputTokens: 150,
+        totalCacheReadTokens: 3000,
+        totalCacheWriteTokens: 0,
+      },
+      {
+        agentType: "subagent",
+        totalRequests: 43,
+        totalInputTokens: 200,
+        totalOutputTokens: 100,
+        totalCacheReadTokens: 2000,
+        totalCacheWriteTokens: 0,
+      },
+    ],
+    timeSeries: [
+      { timestamp: Date.now() - 60_000, requests: 40, errors: 1 },
+      { timestamp: Date.now(), requests: 83, errors: 3 },
+    ],
+    costSeries: [
+      {
+        provider: "openai-codex",
+        model: "gpt-5.5",
+        totalRequests: 123,
+        totalCost: 12.34,
+      },
+    ],
+    generatedAt: new Date().toISOString(),
+  };
+  writeFileSync(
+    fakeOmp,
+    `#!/usr/bin/env node
+if (process.argv[2] === "stats" && process.argv.includes("--json")) {
+  process.stdout.write(${JSON.stringify(`${JSON.stringify(fakeStats)}\n`)});
+  process.exit(0);
+}
+process.exit(1);
+`,
+    "utf8",
+  );
+  chmodSync(fakeOmp, 0o755);
+
   const unresolvable = join(tempAgentDir, "no-such-binary");
   const env = {
     ...process.env,
     // Load the built renderer file, not a leaked dev-server URL.
     ELECTRON_RENDERER_URL: "",
     OMP_STUDIO_SMOKE: "1",
-    OMP_BINARY: unresolvable,
+    OMP_BINARY: fakeOmp,
     GH_BINARY: unresolvable,
     PI_CODING_AGENT_DIR: tempAgentDir,
   };

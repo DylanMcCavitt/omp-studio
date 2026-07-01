@@ -1,4 +1,18 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import {
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams,
+  spawn,
+} from "node:child_process";
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { augmentedEnv } from "../paths";
 
 export interface CliResult {
@@ -12,9 +26,77 @@ export interface CliOptions {
   timeoutMs?: number;
   /** Kill the child and resolve `code: -1` once stdout exceeds this many bytes. */
   maxBytes?: number;
+  /**
+   * Spool stdout/stderr through temp files instead of Node streams. This avoids
+   * Electron losing trailing output from fast Bun binaries after the first pipe
+   * chunk while still using spawn args directly (no shell interpolation).
+   */
+  spoolOutput?: boolean;
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
+
+function runCliSpooling(
+  bin: string,
+  args: string[],
+  opts: CliOptions,
+  timeoutMs: number,
+): Promise<CliResult> {
+  return new Promise<CliResult>((resolve) => {
+    const dir = mkdtempSync(join(tmpdir(), "omp-studio-cli-"));
+    const stdoutPath = join(dir, "stdout");
+    const stderrPath = join(dir, "stderr");
+    const stdoutFd = openSync(stdoutPath, "w");
+    const stderrFd = openSync(stderrPath, "w");
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (result: CliResult): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+      rmSync(dir, { recursive: true, force: true });
+      resolve(result);
+    };
+
+    let child: ChildProcess;
+    try {
+      child = spawn(bin, args, {
+        cwd: opts.cwd,
+        env: augmentedEnv(),
+        stdio: ["ignore", stdoutFd, stderrFd],
+      });
+    } catch {
+      finish({ stdout: "", stderr: "", code: -1 });
+      return;
+    }
+
+    timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      finish({ stdout: "", stderr: "", code: -1 });
+    }, timeoutMs);
+
+    child.on("error", () => {
+      finish({ stdout: "", stderr: "", code: -1 });
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      const stdoutSize = statSync(stdoutPath).size;
+      if (opts.maxBytes !== undefined && stdoutSize > opts.maxBytes) {
+        finish({ stdout: "", stderr: "", code: -1 });
+        return;
+      }
+
+      finish({
+        stdout: readFileSync(stdoutPath, "utf8"),
+        stderr: readFileSync(stderrPath, "utf8"),
+        code: code ?? -1,
+      });
+    });
+  });
+}
 
 /**
  * Spawn a CLI process and collect its output. Never throws: a spawn failure or
@@ -26,12 +108,22 @@ export async function runCli(
   opts: CliOptions = {},
 ): Promise<CliResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (opts.spoolOutput) return runCliSpooling(bin, args, opts, timeoutMs);
   return new Promise<CliResult>((resolve) => {
     let stdout = "";
     let stderr = "";
     let settled = false;
     let capped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let childClosed = false;
+    let stdoutEnded = false;
+    let stderrEnded = false;
+    let exitCode = -1;
+
+    const finishWhenDrained = (): void => {
+      if (!childClosed || !stdoutEnded || !stderrEnded) return;
+      finish({ stdout, stderr, code: exitCode });
+    };
 
     const finish = (result: CliResult): void => {
       if (settled) return;
@@ -62,14 +154,24 @@ export async function runCli(
         finish({ stdout, stderr, code: -1 });
       }
     });
+    child.stdout.on("end", () => {
+      stdoutEnded = true;
+      finishWhenDrained();
+    });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
+    });
+    child.stderr.on("end", () => {
+      stderrEnded = true;
+      finishWhenDrained();
     });
     child.on("error", () => {
       finish({ stdout, stderr, code: -1 });
     });
     child.on("close", (code) => {
-      finish({ stdout, stderr, code: code ?? -1 });
+      childClosed = true;
+      exitCode = code ?? -1;
+      finishWhenDrained();
     });
   });
 }
@@ -136,19 +238,61 @@ export async function probeCredential(
   });
 }
 
-/** Parse CLI JSON output that may include human-readable prelude text. */
+/** Parse CLI JSON output that may include human-readable prelude/trailing text. */
 export function parseJsonOutput<T>(stdout: string): T | null {
   for (let index = 0; index < stdout.length; index += 1) {
     const char = stdout[index];
     if (char !== "{" && char !== "[") continue;
+
+    const end = findJsonPayloadEnd(stdout, index);
+    if (end === -1) continue;
+
     try {
-      return JSON.parse(stdout.slice(index)) as T;
+      return JSON.parse(stdout.slice(index, end + 1)) as T;
     } catch {
       // Human prelude can contain bracketed warning prefixes such as `[WARN]`.
       // Keep scanning until a real JSON payload parses.
     }
   }
   return null;
+}
+
+function findJsonPayloadEnd(stdout: string, start: number): number {
+  const opener = stdout[start];
+  const closer = opener === "{" ? "}" : "]";
+  const stack = [closer];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start + 1; index < stdout.length; index += 1) {
+    const char = stdout[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === "{") {
+      stack.push("}");
+    } else if (char === "[") {
+      stack.push("]");
+    } else if (char === stack[stack.length - 1]) {
+      stack.pop();
+      if (stack.length === 0) return index;
+    } else if (char === "}" || char === "]") {
+      return -1;
+    }
+  }
+
+  return -1;
 }
 
 /**
