@@ -65,24 +65,29 @@ function createWindow(): void {
   // Renderer crash recovery: a gone renderer (OOM, GPU fault, crashed V8) is
   // recoverable — the window is still alive and main-owned state (registry,
   // settings, views) is intact, so reload instead of stranding the user on a
-  // blank window. Bounded: repeated crashes in a short window mean the crash
-  // is on the boot path (reload would just loop), so stop and only log. A
-  // clean/deliberate teardown is not a crash and never triggers a reload.
-  // Unrecoverable MAIN-process failures are untouched by this path.
+  // blank window. Bounded TWICE: a burst filter (>3 crashes in 30s means the
+  // crash is on the boot path — reloading would just loop) AND a lifetime cap
+  // per window (a deterministic crash slightly slower than the burst window
+  // must not reload forever). A clean/deliberate teardown is not a crash and
+  // never triggers a reload. Unrecoverable MAIN-process failures are
+  // untouched by this path; past the caps the user can still reload manually.
+  const MAX_AUTO_RELOADS = 5;
   let rendererCrashTimes: number[] = [];
+  let autoReloads = 0;
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     log.error("renderer process gone", { reason: details.reason });
     if (details.reason === "clean-exit" || details.reason === "killed") return;
     const now = Date.now();
     rendererCrashTimes = rendererCrashTimes.filter((t) => now - t < 30_000);
     rendererCrashTimes.push(now);
-    if (rendererCrashTimes.length > 3) {
+    if (rendererCrashTimes.length > 3 || autoReloads >= MAX_AUTO_RELOADS) {
       log.error("renderer crash loop; not reloading again");
       return;
     }
     const contents = mainWindow?.webContents;
     if (!contents || contents.isDestroyed()) return;
-    log.info("reloading renderer after crash");
+    autoReloads += 1;
+    log.info("reloading renderer after crash", { attempt: autoReloads });
     contents.reload();
   });
   mainWindow.webContents.on("console-message", (_event, level, message) => {

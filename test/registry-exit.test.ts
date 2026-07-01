@@ -76,7 +76,11 @@ class HangingSession extends EventEmitter {
     return this.ready.promise;
   }
   getState(): Promise<RpcState> {
-    return Promise.resolve(makeState());
+    return Promise.resolve(makeState({ sessionId: "omp-hang" }));
+  }
+  /** Test driver: let the parked spawn finish becoming ready. */
+  becomeReady(): void {
+    this.ready.resolve();
   }
   dispose(): void {
     if (this.disposed) return;
@@ -209,4 +213,47 @@ test("disposeAll reaches a session still in the spawn-to-ready window", async ()
   // zombie record.
   await expect(pendingCreate).rejects.toThrow(/session disposed/);
   expect(registry.list()).toHaveLength(0);
+});
+
+test("a dispose landing mid-resume wins: the finished resume never resurrects the chat", async () => {
+  // First create uses a FakeSession (instant-ready); the resume spawn hangs
+  // until the test releases it.
+  let spawnCount = 0;
+  const hanging: HangingSession[] = [];
+  const { registry } = harness(() => {
+    spawnCount += 1;
+    if (spawnCount === 1) {
+      return new FakeSession(
+        makeState({ sessionId: "omp-first" }),
+      ) as unknown as OmpRpcSession;
+    }
+    const s = new HangingSession();
+    hanging.push(s);
+    return s as unknown as OmpRpcSession;
+  });
+
+  const created = await registry.create({ cwd: "/work/a" });
+  await registry.hibernate(created.id);
+  const descriptor = registry
+    .descriptors()
+    .find((d) => d.studioSessionId === created.id);
+  if (!descriptor) throw new Error("descriptor missing");
+
+  // Resume parks in the spawn-to-ready window…
+  const pendingResume = registry.resume(descriptor);
+  await Promise.resolve();
+  expect(hanging).toHaveLength(1);
+
+  // …and the user closes the chat while it is still resuming. The teardown
+  // must win.
+  await registry.dispose(created.id);
+  expect(registry.list().find((s) => s.id === created.id)).toBeUndefined();
+
+  // The spawn finishes AFTER the dispose: the resume must reject, dispose the
+  // fresh child, and leave the registry without the closed chat.
+  hanging[0]?.becomeReady();
+  await expect(pendingResume).rejects.toThrow(/closed while resuming/);
+  expect(hanging[0]?.disposed).toBe(true);
+  expect(registry.list().find((s) => s.id === created.id)).toBeUndefined();
+  expect(registry.get(created.id)).toBeUndefined();
 });
