@@ -10,10 +10,15 @@
 // result leaves them in place so a failed send can be retried.
 
 import type { ImageContent } from "@shared/rpc";
-import { ImagePlus, Paperclip } from "lucide-react";
+import { Bot, ImagePlus, Paperclip } from "lucide-react";
 import type { ClipboardEvent, DragEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui";
+import {
+  AGENT_DRAG_MIME,
+  agentSteeringText,
+  parseAgentDrag,
+} from "@/lib/agentDrag";
 import { cn } from "@/lib/cn";
 import { type ImageAttachment, MAX_IMAGES, readImageFiles } from "@/lib/images";
 import { useUiStore } from "@/store/ui";
@@ -46,6 +51,8 @@ export interface PromptComposerOverlayContext {
   /** Current composer text. */
   text: string;
 }
+
+type DragKind = "agent" | "images";
 
 export interface PromptComposerProps {
   /** Send the prompt. Resolve `true` to clear the composer, `false` to keep it. */
@@ -108,7 +115,7 @@ export function PromptComposer({
   const [attachments, setAttachments] = useState<ImageAttachment[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [dragging, setDragging] = useState(false);
+  const [dragging, setDragging] = useState<DragKind | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const hasOverlay = renderOverlay !== undefined;
 
@@ -224,35 +231,53 @@ export function PromptComposer({
     }
   };
 
-  const hasDraggedFiles = (e: DragEvent) =>
-    e.dataTransfer?.types?.includes("Files") ?? false;
+  const dragKind = (e: DragEvent): DragKind | null => {
+    const types = e.dataTransfer?.types;
+    if (!types) return null;
+    if (types.includes(AGENT_DRAG_MIME)) return "agent";
+    if (types.includes("Files")) return "images";
+    return null;
+  };
 
   const onDragEnter = (e: DragEvent) => {
-    if (disabled || !hasDraggedFiles(e)) return;
+    const kind = dragKind(e);
+    if (disabled || !kind) return;
     dragDepth.current += 1;
-    setDragging(true);
+    setDragging(kind);
   };
 
   const onDragOver = (e: DragEvent) => {
-    if (disabled || !hasDraggedFiles(e)) return;
+    const kind = dragKind(e);
+    if (disabled || !kind) return;
     // preventDefault marks this as a valid drop target.
     e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
   };
 
   const onDragLeave = (e: DragEvent) => {
-    if (disabled || !hasDraggedFiles(e)) return;
+    if (disabled || !dragKind(e)) return;
     dragDepth.current -= 1;
     if (dragDepth.current <= 0) {
       dragDepth.current = 0;
-      setDragging(false);
+      setDragging(null);
     }
   };
 
   const onDrop = (e: DragEvent) => {
     if (disabled) return;
+    const kind = dragKind(e);
+    if (!kind) return;
     e.preventDefault();
     dragDepth.current = 0;
-    setDragging(false);
+    setDragging(null);
+    if (kind === "agent") {
+      const payload = parseAgentDrag(e.dataTransfer.getData(AGENT_DRAG_MIME));
+      if (payload) {
+        applyText(agentSteeringText(payload));
+        setErrors([]);
+      }
+      return;
+    }
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) void addFiles(Array.from(files));
   };
@@ -348,8 +373,17 @@ export function PromptComposer({
 
       {dragging && (
         <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-accent bg-bg/85 text-sm font-medium text-accent">
-          <ImagePlus className="h-5 w-5" />
-          Drop images to attach
+          {dragging === "agent" ? (
+            <>
+              <Bot className="h-5 w-5" />
+              Drop agent to add steering text
+            </>
+          ) : (
+            <>
+              <ImagePlus className="h-5 w-5" />
+              Drop images to attach
+            </>
+          )}
         </div>
       )}
     </div>

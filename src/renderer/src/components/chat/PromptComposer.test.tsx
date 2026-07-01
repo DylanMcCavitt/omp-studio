@@ -6,8 +6,13 @@
 // values, never styling.
 
 import type { ImageContent } from "@shared/rpc";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {
+  AGENT_DRAG_MIME,
+  agentSteeringText,
+  serializeAgentDrag,
+} from "@/lib/agentDrag";
 import { MAX_IMAGE_BYTES, MAX_IMAGES } from "@/lib/images";
 import { PromptComposer } from "./PromptComposer";
 
@@ -190,4 +195,47 @@ it("submits attachments alongside text", async () => {
   expect(text).toBe("look");
   expect(images).toHaveLength(1);
   expect(images[0]).toMatchObject({ type: "image", mimeType: "image/png" });
+});
+
+it("still attaches image files from a file drop", async () => {
+  renderComposer(vi.fn().mockResolvedValue(true));
+
+  fireEvent.drop(screen.getByPlaceholderText("Message"), {
+    dataTransfer: {
+      types: ["Files"],
+      files: [imageFile("drop.png")],
+    },
+  });
+
+  expect(
+    await screen.findByRole("img", { name: "drop.png" }),
+  ).toBeInTheDocument();
+});
+
+it("inserts editable steering text from an agent drag payload without submitting", async () => {
+  const user = userEvent.setup();
+  const onSubmit = vi.fn().mockResolvedValue(true);
+  renderComposer(onSubmit);
+  const agent = {
+    name: "planner",
+    description: "Plans the slice",
+    source: "project" as const,
+    spawns: "reviewer,tester",
+  };
+  const text = agentSteeringText(agent);
+
+  fireEvent.drop(screen.getByPlaceholderText("Message"), {
+    dataTransfer: {
+      types: [AGENT_DRAG_MIME],
+      getData: (type: string) =>
+        type === AGENT_DRAG_MIME ? serializeAgentDrag(agent) : "",
+      files: [],
+    },
+  });
+
+  expect(screen.getByPlaceholderText("Message")).toHaveValue(text);
+  expect(onSubmit).not.toHaveBeenCalled();
+
+  await user.click(screen.getByRole("button", { name: "Send" }));
+  expect(onSubmit).toHaveBeenCalledWith(text, []);
 });
