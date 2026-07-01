@@ -136,7 +136,9 @@ function makeWindow(): {
 } {
   const sends: Array<{ channel: string; payload: unknown }> = [];
   const win = {
+    isDestroyed: () => false,
     webContents: {
+      isDestroyed: () => false,
       send(channel: string, payload: unknown) {
         sends.push({ channel, payload });
       },

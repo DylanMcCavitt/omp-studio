@@ -14,6 +14,7 @@ import type { BrowserWindow, IpcMain } from "electron";
 import type { ExternalTerminalLaunchers } from "../terminal/external-launchers";
 import type { PtySession } from "../terminal/pty-session";
 import type { TerminalRegistry } from "../terminal/registry";
+import { sendToWindow } from "./send";
 
 export function registerTerminalIpc(
   ipcMain: IpcMain,
@@ -40,13 +41,13 @@ export function registerTerminalIpc(
   // drops the session from its map on "exit"; this only forwards the events.
   const forward = (session: PtySession): void => {
     session.on("data", (data: string) =>
-      getWindow()?.webContents.send(CH.evtTerminalData, {
+      sendToWindow(getWindow, CH.evtTerminalData, {
         id: session.id,
         data,
       }),
     );
     session.on("exit", (code: number | null) =>
-      getWindow()?.webContents.send(CH.evtTerminalExit, {
+      sendToWindow(getWindow, CH.evtTerminalExit, {
         id: session.id,
         code,
       }),

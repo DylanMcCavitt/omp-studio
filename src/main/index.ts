@@ -62,10 +62,28 @@ function createWindow(): void {
     mainWindow = null;
   });
 
-  // Production diagnostics: surface renderer crashes and error-level console
-  // output to the main-process log (also used as a boot smoke-test signal).
+  // Renderer crash recovery: a gone renderer (OOM, GPU fault, crashed V8) is
+  // recoverable — the window is still alive and main-owned state (registry,
+  // settings, views) is intact, so reload instead of stranding the user on a
+  // blank window. Bounded: repeated crashes in a short window mean the crash
+  // is on the boot path (reload would just loop), so stop and only log. A
+  // clean/deliberate teardown is not a crash and never triggers a reload.
+  // Unrecoverable MAIN-process failures are untouched by this path.
+  let rendererCrashTimes: number[] = [];
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     log.error("renderer process gone", { reason: details.reason });
+    if (details.reason === "clean-exit" || details.reason === "killed") return;
+    const now = Date.now();
+    rendererCrashTimes = rendererCrashTimes.filter((t) => now - t < 30_000);
+    rendererCrashTimes.push(now);
+    if (rendererCrashTimes.length > 3) {
+      log.error("renderer crash loop; not reloading again");
+      return;
+    }
+    const contents = mainWindow?.webContents;
+    if (!contents || contents.isDestroyed()) return;
+    log.info("reloading renderer after crash");
+    contents.reload();
   });
   mainWindow.webContents.on("console-message", (_event, level, message) => {
     if (level >= 2) log.error(`renderer: ${message}`);

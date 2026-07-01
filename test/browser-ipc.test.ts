@@ -75,7 +75,9 @@ test("browser IPC forwards explicit diagnostics actions through the manager", ()
   } as unknown as BrowserViewManager;
   const sends: Array<[string, unknown]> = [];
   const win = {
+    isDestroyed: () => false,
     webContents: {
+      isDestroyed: () => false,
       send: (channel: string, payload: unknown) =>
         sends.push([channel, payload]),
     },

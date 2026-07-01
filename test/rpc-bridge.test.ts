@@ -782,3 +782,145 @@ test("getAvailableCommands degrades to an empty list on an unknown command", asy
     session.dispose();
   }
 }, 15000);
+
+// ---------------------------------------------------------------------------
+// AGE-797: spawn-to-ready deadline, per-command deadlines, and the
+// SIGTERM->SIGKILL dispose escalation. These use the REAL production timers
+// with injected short values (test seams on the constructor) — deterministic
+// fake timers cannot drive a real child process's lifecycle.
+// ---------------------------------------------------------------------------
+
+// A child that speaks nothing: never emits `ready`, never answers, ignores
+// nothing — it just sleeps. Exercises the ready deadline.
+const muteOmp = join(fakeDir, "mute-omp.mjs");
+writeFileSync(
+  muteOmp,
+  `#!/usr/bin/env node
+setInterval(() => {}, 1000);
+`,
+);
+chmodSync(muteOmp, 0o755);
+
+// A child that emits ready, then ignores every command AND ignores SIGTERM —
+// exercises the command deadline and the SIGKILL escalation.
+const stubbornOmp = join(fakeDir, "stubborn-omp.mjs");
+writeFileSync(
+  stubbornOmp,
+  `#!/usr/bin/env node
+process.on("SIGTERM", () => {});
+process.stdin.on("data", () => {});
+process.stdin.on("end", () => {});
+process.stdout.write(JSON.stringify({ type: "ready" }) + "\\n");
+setInterval(() => {}, 1000);
+`,
+);
+chmodSync(stubbornOmp, 0o755);
+
+function requestId(writes: string[], command: string): string {
+  for (const frame of outgoing(writes)) {
+    if (frame.type === command && typeof frame.id === "string") {
+      return frame.id;
+    }
+  }
+  throw new Error(`no outgoing ${command} frame captured`);
+}
+
+test("whenReady rejects and the child is killed when ready never arrives", async () => {
+  const session = new OmpRpcSession({
+    cwd,
+    binary: muteOmp,
+    readyTimeoutMs: 250,
+  });
+  const child = (
+    session as unknown as {
+      child: { on(e: string, cb: () => void): void };
+    }
+  ).child;
+  const exited = Promise.withResolvers<void>();
+  child.on("exit", () => exited.resolve());
+
+  await expect(session.whenReady()).rejects.toThrow(/did not become ready/);
+  // The deadline killed the child — it must actually exit, not linger.
+  await exited.promise;
+  session.dispose();
+}, 15000);
+
+test("request/response commands reject on the per-command deadline", async () => {
+  const session = new OmpRpcSession({
+    cwd,
+    binary: stubbornOmp,
+    commandTimeoutMs: 250,
+    killGraceMs: 100,
+  });
+  try {
+    await session.whenReady();
+    await expect(session.getState()).rejects.toThrow(
+      /get_state timed out after 250ms/,
+    );
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+test("prompt is exempt from the command deadline and resolves after it", async () => {
+  const { session, writes } = fakeSession2(stubbornOmp, 250);
+  try {
+    await session.whenReady();
+    const prompt = session.prompt("hello");
+    const state = session.getState();
+    // The deadline fires for get_state (bounded)…
+    await expect(state).rejects.toThrow(/timed out/);
+    // …but prompt (turn-length, UNBOUNDED) is still pending: settle it now by
+    // emitting its correlated response through a second bridge to the same
+    // fake and confirm it resolves rather than having been timed out.
+    expect(writes.length).toBeGreaterThan(0);
+    const id = requestId(writes, "prompt");
+    // stubborn-omp ignores stdin, so answer through the session's own dispatch
+    // seam: inject the frame as if the child wrote it.
+    (session as unknown as { dispatch(line: string): void }).dispatch(
+      JSON.stringify({ type: "response", id, success: true }),
+    );
+    await expect(prompt).resolves.toBeUndefined();
+  } finally {
+    session.dispose();
+  }
+}, 15000);
+
+// Spawn against an arbitrary binary while still capturing stdin writes.
+function fakeSession2(
+  binary: string,
+  commandTimeoutMs: number,
+): { session: OmpRpcSession; writes: string[] } {
+  const session = new OmpRpcSession({ cwd, binary, commandTimeoutMs });
+  const writes: string[] = [];
+  const stdin = childStdin(session);
+  const original = stdin.write.bind(stdin);
+  stdin.write = (chunk: unknown, ...rest: unknown[]): boolean => {
+    writes.push(typeof chunk === "string" ? chunk : String(chunk));
+    return original(chunk, ...rest);
+  };
+  return { session, writes };
+}
+
+test("dispose escalates SIGTERM to SIGKILL for a child that ignores SIGTERM", async () => {
+  const session = new OmpRpcSession({
+    cwd,
+    binary: stubbornOmp,
+    killGraceMs: 150,
+  });
+  await session.whenReady();
+  const child = (
+    session as unknown as {
+      child: {
+        on(e: string, cb: (code: number | null, signal: string) => void): void;
+      };
+    }
+  ).child;
+  const gone = Promise.withResolvers<string | null>();
+  child.on("exit", (_code, signal) => gone.resolve(signal));
+
+  session.dispose();
+
+  // stubborn-omp swallows the SIGTERM; only the escalation ends it.
+  expect(await gone.promise).toBe("SIGKILL");
+}, 15000);

@@ -40,12 +40,38 @@ interface PendingRequest {
   reject: (reason: Error) => void;
   /** Command type, used to correlate id-less unknown-command failures. */
   command: string;
+  /** Response deadline; absent for UNBOUNDED_COMMANDS. */
+  timer?: NodeJS.Timeout;
 }
 
 interface OutgoingCommand {
   type: string;
   [key: string]: unknown;
 }
+
+// Spawn-to-ready deadline. A child that never emits `ready` (hung binary,
+// wedged startup, broken install) must reject create/resume — killing the
+// child — instead of hanging the renderer's chat:create IPC forever.
+const DEFAULT_READY_TIMEOUT_MS = 30_000;
+
+// Per-command deadline for request/response commands (get_state,
+// get_messages, …). Local JSONL stdio answers in milliseconds; 15s tolerates
+// a busy child without ever letting a lost response hang a caller forever.
+// Turn-length commands (see UNBOUNDED_COMMANDS) are exempt.
+const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
+
+// dispose(): grace between SIGTERM and the SIGKILL escalation.
+const DEFAULT_KILL_GRACE_MS = 2_000;
+
+// Commands whose response legitimately arrives at the END of an agent turn
+// (or a compaction). They must never carry the request/response deadline —
+// a long turn is normal operation, not a hang.
+const UNBOUNDED_COMMANDS = new Set<string>([
+  "prompt",
+  "steer",
+  "follow_up",
+  "compact",
+]);
 
 // Fail-closed backstop when an extension UI request omits its own timeout.
 const DEFAULT_UI_REQUEST_TIMEOUT_MS = 300_000; // 5 minutes
@@ -72,8 +98,8 @@ export class OmpRpcSession extends EventEmitter {
   private readonly pendingUi = new Map<string, PendingUiRequest>();
   private readonly initialThinkingLevel?: ThinkingLevel;
   private readonly readyPromise: Promise<void>;
-  private readyResolve!: () => void;
-  private readyReject!: (reason: Error) => void;
+  private readonly readyResolve: () => void;
+  private readonly readyReject: (reason: Error) => void;
   private buffer = "";
   private sequence = 0;
   private isReady = false;
@@ -81,6 +107,9 @@ export class OmpRpcSession extends EventEmitter {
   private disposed = false;
   // Mid-compaction flag, tracked from auto_compaction_start/end event frames.
   private compacting = false;
+  private readonly commandTimeoutMs: number;
+  private readonly killGraceMs: number;
+  private readyTimer: NodeJS.Timeout | null = null;
 
   constructor(opts: {
     cwd: string;
@@ -91,9 +120,15 @@ export class OmpRpcSession extends EventEmitter {
     autoApprove?: boolean;
     /** JSONL transcript path (preferred) or omp session id to resume. */
     resume?: string;
+    /** Test seams; production always uses the defaults. */
+    readyTimeoutMs?: number;
+    commandTimeoutMs?: number;
+    killGraceMs?: number;
   }) {
     super();
     this.initialThinkingLevel = opts.thinkingLevel;
+    this.commandTimeoutMs = opts.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+    this.killGraceMs = opts.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
 
     const args = ["--mode", "rpc-ui", "--cwd", opts.cwd];
     if (opts.model) args.push("--model", opts.model);
@@ -107,10 +142,31 @@ export class OmpRpcSession extends EventEmitter {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    this.readyPromise = new Promise<void>((resolve, reject) => {
-      this.readyResolve = resolve;
-      this.readyReject = reject;
-    });
+    const ready = Promise.withResolvers<void>();
+    this.readyPromise = ready.promise;
+    this.readyResolve = ready.resolve;
+    this.readyReject = ready.reject;
+    // A rejection with no awaiting caller (e.g. dispose before anyone called
+    // whenReady) must not surface as an unhandled rejection; real callers
+    // still observe it through whenReady().
+    this.readyPromise.catch(() => undefined);
+    // Spawn-to-ready deadline: a child that never emits `ready` is killed and
+    // the ready promise rejects, so create/resume (and the renderer IPC await
+    // behind them) fail fast instead of hanging forever. Cleared by markReady
+    // and by settleTermination; unref'd so it never keeps the process alive.
+    const readyTimeoutMs = opts.readyTimeoutMs ?? DEFAULT_READY_TIMEOUT_MS;
+    this.readyTimer = setTimeout(() => {
+      if (this.isReady || this.terminated) return;
+      log.warn("spawn-to-ready deadline elapsed; killing child", {
+        timeoutMs: readyTimeoutMs,
+      });
+      this.settleTermination(
+        "error",
+        `omp did not become ready within ${readyTimeoutMs}ms`,
+      );
+      this.killHard();
+    }, readyTimeoutMs);
+    this.readyTimer.unref();
 
     this.wireChild();
   }
@@ -121,11 +177,24 @@ export class OmpRpcSession extends EventEmitter {
     return this.readyPromise;
   }
 
+  // Intentional teardown. ORDERING IS LOAD-BEARING: removeAllListeners()
+  // runs BEFORE the child is killed, so the "exit" the kill produces never
+  // reaches consumers — the registry's crash/self-exit listener (which marks
+  // a record hibernated and persists) must NOT fire for a deliberate
+  // dispose/hibernate/replace. Do not reorder.
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.terminated = true;
     this.removeAllListeners();
+    this.clearReadyTimer();
+    // A dispose during the spawn-to-ready window (quit during startup) must
+    // unwind the awaiting create/resume — settleTermination() is gated on
+    // `terminated` (set above), so the ready promise is settled here.
+    if (!this.isReady) {
+      this.isReady = true;
+      this.readyReject(new Error("session disposed"));
+    }
     this.rejectAllPending(new Error("session disposed"));
     this.clearPendingUi();
     const stdin = this.child.stdin;
@@ -140,6 +209,16 @@ export class OmpRpcSession extends EventEmitter {
       this.child.kill();
     } catch {
       // child already gone.
+    }
+    // SIGTERM escalation: a child that ignores the polite kill is SIGKILLed
+    // after a short grace, so before-quit can never leave an omp child alive.
+    // Gate on exitCode only — `killed` flips true when a signal is DELIVERED,
+    // not when the child exits, so it can never veto the escalation. unref'd —
+    // the escalation must not keep a quitting app's loop alive; killHard()
+    // no-ops if the child exited during the grace.
+    if (this.child.exitCode === null) {
+      const killer = setTimeout(() => this.killHard(), this.killGraceMs);
+      killer.unref();
     }
   }
 
@@ -292,7 +371,29 @@ export class OmpRpcSession extends EventEmitter {
     }
     const id = "req_" + this.sequence++;
     return new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject, command: command.type });
+      const pending: PendingRequest = {
+        resolve,
+        reject,
+        command: command.type,
+      };
+      // Request/response commands carry a deadline so a lost response can
+      // never hang a caller forever. Turn-length commands (prompt/steer/
+      // follow_up/compact) resolve at agent-turn end and are exempt — a long
+      // turn is normal operation. unref'd: a pending deadline must not keep
+      // a quitting process alive.
+      if (!UNBOUNDED_COMMANDS.has(command.type)) {
+        pending.timer = setTimeout(() => {
+          if (this.pending.get(id) !== pending) return;
+          this.pending.delete(id);
+          reject(
+            new Error(
+              `${command.type} timed out after ${this.commandTimeoutMs}ms`,
+            ),
+          );
+        }, this.commandTimeoutMs);
+        pending.timer.unref();
+      }
+      this.pending.set(id, pending);
       this.writeFrame({ ...command, id });
     });
   }
@@ -366,6 +467,7 @@ export class OmpRpcSession extends EventEmitter {
   private markReady(): void {
     if (this.isReady) return;
     this.isReady = true;
+    this.clearReadyTimer();
     this.readyResolve();
     this.emit("lifecycle", "ready");
     void this.send({
@@ -386,6 +488,7 @@ export class OmpRpcSession extends EventEmitter {
       const pending = this.pending.get(id);
       if (!pending) return;
       this.pending.delete(id);
+      clearTimeout(pending.timer);
       this.settle(pending, frame);
       return;
     }
@@ -397,6 +500,7 @@ export class OmpRpcSession extends EventEmitter {
     for (const [pendingId, pending] of this.pending) {
       if (pending.command === frame.command) {
         this.pending.delete(pendingId);
+        clearTimeout(pending.timer);
         this.settle(pending, frame);
         return;
       }
@@ -477,6 +581,7 @@ export class OmpRpcSession extends EventEmitter {
   private settleTermination(status: "exited" | "error", detail?: string): void {
     if (this.terminated) return;
     this.terminated = true;
+    this.clearReadyTimer();
     if (!this.isReady) {
       this.isReady = true;
       this.readyReject(new Error(detail ?? `session ${status}`));
@@ -487,8 +592,28 @@ export class OmpRpcSession extends EventEmitter {
   }
 
   private rejectAllPending(error: Error): void {
-    for (const pending of this.pending.values()) pending.reject(error);
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
     this.pending.clear();
+  }
+
+  private clearReadyTimer(): void {
+    if (this.readyTimer !== null) {
+      clearTimeout(this.readyTimer);
+      this.readyTimer = null;
+    }
+  }
+
+  // SIGKILL — the unignorable kill, used by the ready deadline and the
+  // dispose() escalation. Never throws.
+  private killHard(): void {
+    try {
+      if (this.child.exitCode === null) this.child.kill("SIGKILL");
+    } catch {
+      // child already gone.
+    }
   }
 }
 

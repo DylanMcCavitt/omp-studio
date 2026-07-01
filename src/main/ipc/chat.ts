@@ -34,6 +34,7 @@ import type { BrowserWindow, IpcMain } from "electron";
 import type { SessionRegistry } from "../omp/registry";
 import type { OmpRpcSession } from "../omp/rpc-session";
 import { sessionsDir } from "../paths";
+import { sendToWindow } from "./send";
 
 export function registerChatIpc(
   ipcMain: IpcMain,
@@ -62,10 +63,12 @@ export function registerChatIpc(
 
   // Push a session's frame / lifecycle / extension-UI-request streams to the
   // renderer. Shared by create and resume so a resumed child streams exactly
-  // like a freshly created one.
+  // like a freshly created one. All sends go through sendToWindow: these fire
+  // from child stdio and can outlive the window (close/reload) — a destroyed
+  // WebContents must drop the event, not throw.
   const forward = (id: string, session: OmpRpcSession) => {
     session.on("frame", (frame: RpcFrame) =>
-      getWindow()?.webContents.send(CH.evtRpc, {
+      sendToWindow(getWindow, CH.evtRpc, {
         sessionId: id,
         frame,
       } satisfies ChatRpcEvent),
@@ -73,7 +76,7 @@ export function registerChatIpc(
     session.on(
       "lifecycle",
       (status: ChatLifecycleEvent["status"], detail?: string) =>
-        getWindow()?.webContents.send(CH.evtLifecycle, {
+        sendToWindow(getWindow, CH.evtLifecycle, {
           sessionId: id,
           status,
           detail,
@@ -85,7 +88,7 @@ export function registerChatIpc(
     session.on(
       "ui-request",
       (payload: { request: ExtensionUiRequest; responseRequired: boolean }) =>
-        getWindow()?.webContents.send(CH.evtUiRequest, {
+        sendToWindow(getWindow, CH.evtUiRequest, {
           sessionId: id,
           request: payload.request,
           responseRequired: payload.responseRequired,

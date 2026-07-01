@@ -8,6 +8,7 @@
 import { CH } from "@shared/ipc";
 import type { BrowserWindow, IpcMain } from "electron";
 import type { BrowserViewManager, ViewBounds } from "../browser/view-manager";
+import { sendToWindow } from "./send";
 
 export function registerBrowserIpc(
   ipcMain: IpcMain,
@@ -15,7 +16,7 @@ export function registerBrowserIpc(
   getWindow: () => BrowserWindow | null,
 ): void {
   manager.onState((state) =>
-    getWindow()?.webContents.send(CH.evtBrowserState, state),
+    sendToWindow(getWindow, CH.evtBrowserState, state),
   );
 
   ipcMain.handle(
