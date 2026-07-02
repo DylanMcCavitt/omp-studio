@@ -312,12 +312,7 @@ function coercePositiveNumberMap(
   if (!isRecord(value)) return undefined;
   const out: Record<string, number> = {};
   for (const [k, v] of Object.entries(value)) {
-    if (
-      typeof v === "number" &&
-      Number.isFinite(v) &&
-      v > 0 &&
-      isSafeId(k)
-    ) {
+    if (typeof v === "number" && Number.isFinite(v) && v > 0 && isSafeId(k)) {
       out[k] = v;
     }
   }

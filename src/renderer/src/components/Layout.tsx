@@ -1,8 +1,8 @@
 import type { LayoutSettings } from "@shared/ipc";
 import { Moon, Sun } from "lucide-react";
 import {
-  type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
   useEffect,
   useMemo,
@@ -212,14 +212,18 @@ function useMeasuredWidth(ref: RefObject<HTMLElement>): number {
   useEffect(() => {
     const measure = () => {
       setWidth(
-        Math.round(ref.current?.getBoundingClientRect().width ?? window.innerWidth),
+        Math.round(
+          ref.current?.getBoundingClientRect().width ?? window.innerWidth,
+        ),
       );
     };
     measure();
 
     const ResizeObserverCtor =
       typeof ResizeObserver === "undefined" ? undefined : ResizeObserver;
-    const observer = ResizeObserverCtor ? new ResizeObserverCtor(measure) : null;
+    const observer = ResizeObserverCtor
+      ? new ResizeObserverCtor(measure)
+      : null;
     if (ref.current && observer) observer.observe(ref.current);
     window.addEventListener("resize", measure);
     return () => {
@@ -301,11 +305,11 @@ function RightPanelOverlay({
       className="absolute inset-y-0 right-12 z-30 flex min-h-0 overflow-hidden border-l border-border bg-bg shadow-2xl"
       style={{ width }}
     >
+      {/* Pointer-only drag affordance (same convention as pane drag grips); Esc/rail toggle remain the keyboard path. */}
       <div
-        aria-label="Resize tool panel"
-        aria-orientation="vertical"
+        aria-hidden="true"
+        data-testid="overlay-resize-handle"
         className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none bg-transparent hover:bg-accent/20"
-        role="separator"
         onPointerDown={onResizeStart}
       />
       <RailPanelHost openPanelId={openPanelId} />

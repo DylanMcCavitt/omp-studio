@@ -85,7 +85,10 @@ it("setLayout merges patches across different keys in one flush", () => {
 });
 
 it("setLayout persists right panel pixel widths by route", () => {
-  const update = seed({ ...BASE, layout: { rightPanelWidthsPx: { skills: 460 } } });
+  const update = seed({
+    ...BASE,
+    layout: { rightPanelWidthsPx: { skills: 460 } },
+  });
   useSettingsStore.getState().setLayout({
     rightPanelWidthsPx: { skills: 500, browser: 720 },
   });

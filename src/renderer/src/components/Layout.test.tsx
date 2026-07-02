@@ -194,11 +194,13 @@ it("renders a rail panel as a fixed-width overlay and persists left-edge drag wi
   useShellStore.setState({ openPanelId: "skills" });
 
   const { container } = render(<Layout>main</Layout>);
-  const handle = screen.getByRole("separator", { name: "Resize tool panel" });
+  const handle = screen.getByTestId("overlay-resize-handle");
   const sheet = handle.parentElement;
   expect(sheet).toHaveStyle({ width: "460px" });
   expect(sheet?.className).toContain("absolute");
-  expect(container.querySelectorAll('[data-testid="resize-handle"]')).toHaveLength(1);
+  expect(
+    container.querySelectorAll('[data-testid="resize-handle"]'),
+  ).toHaveLength(1);
   const pointerDown = new Event("pointerdown", { bubbles: true });
   Object.defineProperties(pointerDown, {
     pointerId: { value: 1 },
