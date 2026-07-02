@@ -6,12 +6,59 @@ import {
   layoutPaneIds,
   MAIN_PANE_ID,
   MAX_PANES,
+  type PaneLayout,
   usePaneStore,
 } from "@/store/panes";
 
 beforeEach(() => {
   usePaneStore.getState().reset();
 });
+
+type BarePaneLayout =
+  | { kind: "leaf"; paneId: string }
+  | {
+      kind: "split";
+      direction: "row" | "column";
+      children: BarePaneLayout[];
+    };
+
+function topology(node: PaneLayout): BarePaneLayout {
+  if (node.kind === "leaf") return node;
+  return {
+    kind: "split",
+    direction: node.direction,
+    children: node.children.map(topology),
+  };
+}
+
+function rootSplit(): Extract<PaneLayout, { kind: "split" }> {
+  const layout = usePaneStore.getState().layout;
+  expect(layout.kind).toBe("split");
+  return layout as Extract<PaneLayout, { kind: "split" }>;
+}
+
+function makeRoomFor(targetId: string): void {
+  const layout = usePaneStore.getState().layout;
+  if (layout.kind !== "split") return;
+  const targetIndex = layout.children.findIndex(
+    (child) => child.kind === "leaf" && child.paneId === targetId,
+  );
+  if (targetIndex === -1) return;
+  const otherWeight = 80 / (layout.children.length - 1);
+  usePaneStore.getState().setSplitWeights(
+    layout.splitId,
+    layout.children.map((_, i) => (i === targetIndex ? 20 : otherWeight)),
+  );
+}
+
+function openBalancedChatPane(): string {
+  makeRoomFor(MAIN_PANE_ID);
+  const id = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: MAIN_PANE_ID });
+  expect(id).not.toBeNull();
+  return id as string;
+}
 
 it("defaults to one chat pane that follows the active session", () => {
   const { panes, layout, focusedPaneId } = usePaneStore.getState();
@@ -66,7 +113,7 @@ it("a column split nests inside the row split", () => {
 
 it("enforces the MAX_PANES cap", () => {
   for (let i = 1; i < MAX_PANES; i += 1) {
-    expect(usePaneStore.getState().openPane({ kind: "chat" })).not.toBeNull();
+    openBalancedChatPane();
   }
   expect(Object.keys(usePaneStore.getState().panes)).toHaveLength(MAX_PANES);
   expect(usePaneStore.getState().openPane({ kind: "chat" })).toBeNull();
@@ -165,11 +212,14 @@ it("reopening the same subagent focuses its existing pane instead of duplicating
 
 it("the MAX_PANES cap applies to subagent panes", () => {
   for (let i = 1; i < MAX_PANES; i += 1) {
-    expect(
-      usePaneStore
-        .getState()
-        .openPane({ kind: "subagent", sessionId: "s1", subagentId: `a${i}` }),
-    ).not.toBeNull();
+    makeRoomFor(MAIN_PANE_ID);
+    const id = usePaneStore
+      .getState()
+      .openPane(
+        { kind: "subagent", sessionId: "s1", subagentId: `a${i}` },
+        { besideId: MAIN_PANE_ID },
+      );
+    expect(id).not.toBeNull();
   }
   expect(
     usePaneStore
@@ -205,7 +255,7 @@ it("movePane docks left/right into a row and top/bottom into a column", () => {
   const b = usePaneStore.getState().openPane({ kind: "chat" });
   // right: [main, b] → drop b on main's LEFT edge → [b, main].
   usePaneStore.getState().movePane(b!, MAIN_PANE_ID, "left");
-  expect(usePaneStore.getState().layout).toEqual({
+  expect(topology(usePaneStore.getState().layout)).toEqual({
     kind: "split",
     direction: "row",
     children: [
@@ -215,7 +265,7 @@ it("movePane docks left/right into a row and top/bottom into a column", () => {
   });
   // bottom: dock b under main → the row collapses into a column pair.
   usePaneStore.getState().movePane(b!, MAIN_PANE_ID, "bottom");
-  expect(usePaneStore.getState().layout).toEqual({
+  expect(topology(usePaneStore.getState().layout)).toEqual({
     kind: "split",
     direction: "column",
     children: [
@@ -236,7 +286,7 @@ it("movePane collapses the vacated split and never loses a pane", () => {
   // row[main, column[b, c]] → move c onto main's right edge.
   usePaneStore.getState().movePane(c!, MAIN_PANE_ID, "right");
   // The emptied column collapses back to b's leaf; all three panes remain.
-  expect(usePaneStore.getState().layout).toEqual({
+  expect(topology(usePaneStore.getState().layout)).toEqual({
     kind: "split",
     direction: "row",
     children: [
@@ -262,6 +312,7 @@ it("eight panes rearrange into a 2x4 grid by docking onto bottom edges", () => {
   // Open seven extra panes in one row: [main, p1..p7].
   const ids: string[] = [MAIN_PANE_ID];
   for (let i = 1; i < MAX_PANES; i += 1) {
+    makeRoomFor(ids[i - 1] as string);
     const id = usePaneStore
       .getState()
       .openPane({ kind: "chat" }, { besideId: ids[i - 1], direction: "row" });
@@ -280,7 +331,7 @@ it("eight panes rearrange into a 2x4 grid by docking onto bottom edges", () => {
     expect(layout.direction).toBe("row");
     expect(layout.children).toHaveLength(4);
     for (let i = 0; i < 4; i += 1) {
-      expect(layout.children[i]).toEqual({
+      expect(topology(layout.children[i] as PaneLayout)).toEqual({
         kind: "split",
         direction: "column",
         children: [
@@ -305,4 +356,133 @@ it("openPane position:before inserts ahead of the target", () => {
     b,
     MAIN_PANE_ID,
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// AGE-813: durable split ids + session-local split weights.
+// ---------------------------------------------------------------------------
+
+it("split insertion divides only the target allocation", () => {
+  const a = usePaneStore.getState().openPane({ kind: "chat" });
+  let split = rootSplit();
+  usePaneStore.getState().setSplitWeights(split.splitId, [20, 80]);
+
+  const b = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: a!, direction: "row" });
+
+  expect(b).not.toBeNull();
+  split = rootSplit();
+  expect(split.weights).toEqual([20, 40, 40]);
+  expect(layoutPaneIds(split)).toEqual([MAIN_PANE_ID, a, b]);
+});
+
+it("closePane redistributes the removed child weight proportionally", () => {
+  const a = usePaneStore.getState().openPane({ kind: "chat" });
+  const b = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: MAIN_PANE_ID, direction: "row" });
+  const split = rootSplit();
+  usePaneStore.getState().setSplitWeights(split.splitId, [20, 30, 50]);
+
+  usePaneStore.getState().closePane(b!);
+
+  expect(rootSplit().weights[0]).toBeCloseTo((20 / 70) * 100);
+  expect(rootSplit().weights[1]).toBeCloseTo((50 / 70) * 100);
+  expect(layoutPaneIds(usePaneStore.getState().layout)).toEqual([
+    MAIN_PANE_ID,
+    a,
+  ]);
+});
+
+it("movePane carries the moved leaf weight when reinserted as a sibling", () => {
+  const a = usePaneStore.getState().openPane({ kind: "chat" });
+  const b = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: MAIN_PANE_ID, direction: "row" });
+  const split = rootSplit();
+  usePaneStore.getState().setSplitWeights(split.splitId, [20, 30, 50]);
+
+  usePaneStore.getState().movePane(b!, a!, "right");
+
+  expect(rootSplit().weights[2]).toBeCloseTo(30);
+  expect(layoutPaneIds(usePaneStore.getState().layout)).toEqual([
+    MAIN_PANE_ID,
+    a,
+    b,
+  ]);
+});
+
+it("one-child split collapse carries the child's parent weight up", () => {
+  const a = usePaneStore.getState().openPane({ kind: "chat" });
+  const b = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: a!, direction: "column" });
+  const root = rootSplit();
+  expect(root.children[1]?.kind).toBe("split");
+  usePaneStore.getState().setSplitWeights(root.splitId, [40, 60]);
+  const nested = root.children[1] as Extract<PaneLayout, { kind: "split" }>;
+  usePaneStore.getState().setSplitWeights(nested.splitId, [25, 75]);
+
+  usePaneStore.getState().closePane(a!);
+
+  const nextRoot = rootSplit();
+  expect(nextRoot.weights).toEqual([40, 60]);
+  expect(layoutPaneIds(nextRoot)).toEqual([MAIN_PANE_ID, b]);
+});
+
+it("setSplitWeights normalizes bad input defensively", () => {
+  usePaneStore.getState().openPane({ kind: "chat" });
+  const split = rootSplit();
+
+  usePaneStore.getState().setSplitWeights(split.splitId, [2, 3]);
+  expect(rootSplit().weights).toEqual([40, 60]);
+
+  usePaneStore.getState().setSplitWeights(split.splitId, [Number.NaN, 0]);
+  expect(rootSplit().weights).toEqual([50, 50]);
+});
+
+it("openPane equalizes the containing split before blocking at the minimum", () => {
+  const a = usePaneStore.getState().openPane({ kind: "chat" });
+  const split = rootSplit();
+  usePaneStore.getState().setSplitWeights(split.splitId, [82, 18]);
+
+  const c = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: a!, direction: "row" });
+
+  expect(c).not.toBeNull();
+  const weights = rootSplit().weights;
+  expect(weights).toHaveLength(3);
+  for (const w of weights ?? []) {
+    expect(w).toBeCloseTo(100 / 3, 5);
+  }
+});
+
+it("effective-minimum guard blocks opens even equalizing cannot fit", () => {
+  const a = usePaneStore.getState().openPane({ kind: "chat" });
+  const b = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: a!, direction: "column" });
+  const root = rootSplit();
+  usePaneStore.getState().setSplitWeights(root.splitId, [80, 20]);
+  const nested = rootSplit().children[1] as Extract<
+    PaneLayout,
+    { kind: "split" }
+  >;
+  usePaneStore.getState().setSplitWeights(nested.splitId, [50, 50]);
+  const before = usePaneStore.getState().layout;
+
+  // Halving b gives 5% effective; equalizing the column of three gives 6.67%.
+  const blocked = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: b!, direction: "column" });
+
+  expect(blocked).toBeNull();
+  expect(usePaneStore.getState().layout).toEqual(before);
+
+  usePaneStore.getState().setSplitWeights(nested.splitId, [95, 5]);
+  expect(
+    (rootSplit().children[1] as Extract<PaneLayout, { kind: "split" }>).weights,
+  ).toEqual([50, 50]);
 });

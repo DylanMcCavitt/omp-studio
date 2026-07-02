@@ -28,8 +28,18 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { type DragEvent, Fragment, type ReactNode, useState } from "react";
-import { PanelGroup, Panel as ResizablePanel } from "react-resizable-panels";
+import {
+  type DragEvent,
+  Fragment,
+  type ReactNode,
+  useRef,
+  useState,
+} from "react";
+import {
+  type ImperativePanelGroupHandle,
+  PanelGroup,
+  Panel as ResizablePanel,
+} from "react-resizable-panels";
 import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 import { SubagentInspector } from "@/components/chat/SubagentInspector";
 import { subagentLabel } from "@/components/chat/SubagentTree";
@@ -83,31 +93,44 @@ export function CenterTabs() {
 // Render a split-tree node: leaves become PaneViews; splits become resizable
 // PanelGroups (AGE-777) with a drag handle between each pair of children.
 function PaneTree({ node }: { node: PaneLayout }) {
+  const setSplitWeights = usePaneStore((s) => s.setSplitWeights);
+  const resetSplitWeights = usePaneStore((s) => s.resetSplitWeights);
+  // Nested pane groups are uncontrolled (defaultSize is mount-only), so a
+  // store-side weight reset must also be applied imperatively to the live
+  // group — mirroring the outer shell's groupRef.setLayout reset path.
+  const groupRef = useRef<ImperativePanelGroupHandle>(null);
   if (node.kind === "leaf") {
     return <PaneView paneId={node.paneId} />;
   }
   const horizontal = node.direction === "row";
+  const resetWeights = () => {
+    groupRef.current?.setLayout(
+      node.children.map(() => 100 / node.children.length),
+    );
+    resetSplitWeights(node.splitId);
+  };
   return (
     <PanelGroup
+      ref={groupRef}
       direction={horizontal ? "horizontal" : "vertical"}
+      onLayout={(weights) => setSplitWeights(node.splitId, weights)}
       className="h-full min-h-0 min-w-0"
     >
       {node.children.map((child, i) => {
-        // The tree is rebuilt on structural change; index identity is stable
-        // between rebuilds and leaf children carry their own paneId keys.
-        const key = child.kind === "leaf" ? child.paneId : `split-${i}`;
+        const key = child.kind === "leaf" ? child.paneId : child.splitId;
         return (
           <Fragment key={key}>
             {i > 0 && (
               <ResizeHandle
                 direction={horizontal ? "horizontal" : "vertical"}
                 ariaLabel="Resize panes"
+                onReset={resetWeights}
               />
             )}
             <ResizablePanel
               id={key}
               order={i}
-              defaultSize={100 / node.children.length}
+              defaultSize={node.weights[i] ?? 100 / node.children.length}
               minSize={10}
               className="min-h-0 min-w-0"
             >
