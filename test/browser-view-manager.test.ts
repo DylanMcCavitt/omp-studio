@@ -2,8 +2,11 @@ import { expect, test } from "bun:test";
 import type { BrowserViewState } from "@shared/domain";
 import {
   BrowserViewManager,
+  clampBounds,
+  denyAllPermissions,
   isUrlAllowed,
   type ManagedView,
+  type PartitionSession,
   type ViewBounds,
 } from "../src/main/browser/view-manager";
 
@@ -330,6 +333,30 @@ test("setWindowOpenHandler always denies; opens allowed targets externally", () 
   expect(openedExternally).toEqual(["https://example.com/pop"]);
 });
 
+test("popup and open-external drop credentialed URLs (shared external-open policy, AGE-798)", () => {
+  const { manager, created, states, openedExternally } = harness([
+    "example.com",
+  ]);
+  const { id } = manager.create({
+    url: "https://example.com",
+    bounds: BOUNDS,
+  });
+  const wc = wcOf(created[0]);
+
+  // A credential-bearing popup passes the host allowlist but must still be
+  // dropped by the credential gate — never handed to the OS browser.
+  expect(
+    wc.windowOpenHandler?.({ url: "https://user:pw@example.com/" }),
+  ).toEqual({ action: "deny" });
+  expect(openedExternally).toEqual([]);
+
+  // Same policy on the explicit open-external action.
+  wc.url = "https://user:pw@example.com/page";
+  manager.openExternal(id);
+  expect(openedExternally).toEqual([]);
+  expect(states.at(-1)?.error).toContain("not an allowed http(s) URL");
+});
+
 test("devtools and open-external are explicit manager actions", () => {
   const { manager, created, openedExternally } = harness(["example.com"]);
   const { id } = manager.create({
@@ -475,4 +502,144 @@ test("unknown ids are silent no-ops (degrade, never throw)", () => {
     manager.setBounds("nope", BOUNDS);
     manager.destroy("nope");
   }).not.toThrow();
+});
+
+// ---------------------------------------------------------------------------
+// AGE-802: create-time hardening — initial URL validated BEFORE any view is
+// built, live-view cap, bounds clamping, and deny-all permissions.
+// ---------------------------------------------------------------------------
+
+test("create validates the initial URL before building any view", () => {
+  const { manager, created } = harness();
+  for (const url of [
+    "file:///etc/passwd",
+    "about:blank",
+    "javascript:alert(1)",
+    "not a url",
+  ]) {
+    expect(() => manager.create({ url, bounds: BOUNDS })).toThrow(
+      /allows only http\(s\) URLs/,
+    );
+  }
+  // The factory never ran — a rejected create allocates NOTHING.
+  expect(created).toHaveLength(0);
+});
+
+test("create allows the renderer's blank-tab flow (empty url, nothing loaded)", () => {
+  const { manager, created } = harness();
+  manager.create({ url: "", bounds: BOUNDS });
+  expect(created).toHaveLength(1);
+  expect(wcOf(created[0]).loadCalls).toEqual([]);
+});
+
+test("create enforces the host allowlist on the initial URL", () => {
+  const { manager, created } = harness(["example.com"]);
+  expect(() =>
+    manager.create({ url: "https://evil.com", bounds: BOUNDS }),
+  ).toThrow(/example\.com/);
+  expect(created).toHaveLength(0);
+});
+
+test("create caps the number of live views; destroy frees a slot", () => {
+  const { manager, created } = harness();
+  const states = Array.from({ length: 8 }, (_, i) =>
+    manager.create({ url: `https://example.com/${i}`, bounds: BOUNDS }),
+  );
+  expect(created).toHaveLength(8);
+  expect(() =>
+    manager.create({ url: "https://example.com/9", bounds: BOUNDS }),
+  ).toThrow(/view limit reached/);
+  expect(created).toHaveLength(8);
+
+  manager.destroy(states[0]!.id);
+  expect(() =>
+    manager.create({ url: "https://example.com/9", bounds: BOUNDS }),
+  ).not.toThrow();
+});
+
+test("clampBounds floors fractional values, zeroes non-finite ones, and clamps to the box", () => {
+  const box = { x: 0, y: 0, width: 1000, height: 700 };
+  expect(
+    clampBounds({ x: 10.9, y: 20.2, width: 300.7, height: 400.1 }, box),
+  ).toEqual({ x: 10, y: 20, width: 300, height: 400 });
+  expect(
+    clampBounds(
+      { x: Number.NaN, y: Number.POSITIVE_INFINITY, width: -5, height: 1e9 },
+      box,
+    ),
+  ).toEqual({ x: 0, y: 0, width: 0, height: 700 });
+  // Origin + size never escape the box: width/height shrink to what fits.
+  expect(clampBounds({ x: 900, y: 650, width: 500, height: 500 }, box)).toEqual(
+    { x: 900, y: 650, width: 100, height: 50 },
+  );
+});
+
+test("clampBounds collapses malformed containers to a zero rect instead of throwing", () => {
+  const box = { x: 0, y: 0, width: 1000, height: 700 };
+  const zero = { x: 0, y: 0, width: 0, height: 0 };
+  expect(clampBounds(null, box)).toEqual(zero);
+  expect(clampBounds(undefined, box)).toEqual(zero);
+  expect(clampBounds("wat", box)).toEqual(zero);
+  expect(clampBounds({ x: "5", width: [] }, box)).toEqual(zero);
+});
+
+test("create with a malformed bounds container still creates (zero rect), never leaks a view slot", () => {
+  const { manager, created } = harness();
+  const state = manager.create({
+    url: "https://example.com",
+    bounds: null as unknown as ViewBounds,
+  });
+  expect(created).toHaveLength(1);
+  expect(created[0]?.bounds).toEqual({ x: 0, y: 0, width: 0, height: 0 });
+  // The record is live and addressable — not a leaked orphan.
+  manager.destroy(state.id);
+});
+
+test("create and setBounds clamp hostile geometry before the view sees it", () => {
+  const { manager, created } = harness();
+  const { id } = manager.create({
+    url: "https://example.com",
+    bounds: { x: -50, y: Number.NaN, width: 1e9, height: 2.7 },
+  });
+  // No window is attached in the harness, so the fallback box bounds the size.
+  expect(created[0]?.bounds).toEqual({ x: 0, y: 0, width: 16_384, height: 2 });
+
+  // Non-finite geometry collapses to 0 (never "as large as possible").
+  manager.setBounds(id, {
+    x: 5.5,
+    y: -1,
+    width: Number.POSITIVE_INFINITY,
+    height: 100,
+  });
+  expect(created[0]?.bounds).toEqual({ x: 5, y: 0, width: 0, height: 100 });
+});
+
+test("denyAllPermissions answers every request false and every check false", () => {
+  let requestHandler:
+    | ((
+        wc: unknown,
+        permission: string,
+        callback: (granted: boolean) => void,
+      ) => void)
+    | null = null;
+  let checkHandler: (() => boolean) | null = null;
+  const session: PartitionSession = {
+    setPermissionRequestHandler(h) {
+      requestHandler = h;
+    },
+    setPermissionCheckHandler(h) {
+      checkHandler = h;
+    },
+  };
+
+  denyAllPermissions(session);
+
+  expect(requestHandler).not.toBeNull();
+  expect(checkHandler).not.toBeNull();
+  const granted: boolean[] = [];
+  for (const permission of ["media", "geolocation", "notifications"]) {
+    requestHandler?.({}, permission, (g) => granted.push(g));
+  }
+  expect(granted).toEqual([false, false, false]);
+  expect(checkHandler?.()).toBe(false);
 });

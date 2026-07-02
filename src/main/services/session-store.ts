@@ -22,6 +22,7 @@ import type {
 import type { OmpMessage } from "@shared/rpc";
 import { agentDir, ompBinary, sessionsDir } from "../paths";
 import { runCli } from "./cli";
+import { archivedDir, resolveSessionPath } from "./session-paths";
 
 /** Signature of the shared CLI runner; injectable so tests can stub spawning. */
 type CliRunner = typeof runCli;
@@ -148,14 +149,9 @@ async function summarizeFile(
 // Archive + alias storage (studio-side, outside omp's JSONL)
 // ---------------------------------------------------------------------------
 
-/**
- * Archived sessions live OUTSIDE `sessionsDir()` (a sibling under `agentDir()`)
- * so the default listing never treats the archive root as a project. Both roots
- * share a filesystem, so archiving is a plain rename.
- */
-function archivedDir(): string {
-  return join(agentDir(), "archived-sessions");
-}
+// Archived sessions live OUTSIDE `sessionsDir()` (a sibling under `agentDir()`);
+// the root definition lives in session-paths.ts next to the containment helper
+// that validates candidates against it.
 
 /**
  * Studio-side display aliases keyed by absolute JSONL path. Renaming a
@@ -272,8 +268,19 @@ export async function listSessions(
 export async function readSession(path: string): Promise<SessionTranscript> {
   let content: string;
   let stats: Stats;
+  let resolved: string;
+  let archived: boolean;
   try {
-    [content, stats] = await Promise.all([readFile(path, "utf8"), stat(path)]);
+    // Containment failure degrades like an unreadable file (below): this read
+    // surface must NEVER reject across IPC, and a hostile path yields the same
+    // inert empty transcript as a missing one. No fs call touches the raw path.
+    const contained = resolveSessionPath(path);
+    resolved = contained.path;
+    archived = contained.root === "archived";
+    [content, stats] = await Promise.all([
+      readFile(resolved, "utf8"),
+      stat(resolved),
+    ]);
   } catch {
     const now = new Date().toISOString();
     const summary: SessionSummary = {
@@ -293,15 +300,15 @@ export async function readSession(path: string): Promise<SessionTranscript> {
 
   const parsed = parseSession(content, true);
   const summary = toSummary(
-    path,
-    basename(dirname(path)),
-    basename(path),
+    resolved,
+    basename(dirname(resolved)),
+    basename(resolved),
     parsed,
     stats,
-    path.startsWith(archivedDir()),
+    archived,
   );
   const aliases = await readAliases();
-  const alias = aliases[path];
+  const alias = aliases[resolved];
   if (alias !== undefined) summary.title = alias;
   return { summary, messages: parsed.messages };
 }
@@ -597,56 +604,61 @@ export async function searchSessions(
 
 /**
  * Persist a studio-side display alias for a historical session. An empty title
- * clears any existing alias. The JSONL header is never rewritten.
+ * clears any existing alias. The JSONL header is never rewritten. The alias is
+ * keyed by the CONTAINED path (identical to the strings listSessions builds).
  */
 export async function renameSession(
   path: string,
   title: string,
 ): Promise<void> {
+  const resolved = resolveSessionPath(path).path;
   const aliases = await readAliases();
   const trimmed = title.trim();
   if (trimmed) {
-    aliases[path] = trimmed;
+    aliases[resolved] = trimmed;
   } else {
-    delete aliases[path];
+    delete aliases[resolved];
   }
   await writeAliases(aliases);
 }
 
 /**
  * Move a session file to the OS trash (recoverable). NEVER unlinks. The trash
- * capability is injected by the IPC layer (electron `shell.trashItem`).
+ * capability is injected by the IPC layer (electron `shell.trashItem`). Only a
+ * contained session path may reach the trash capability.
  */
 export async function deleteSession(
   path: string,
   trash: TrashItem,
 ): Promise<void> {
-  await trash(path);
+  await trash(resolveSessionPath(path).path);
 }
 
 /**
  * Reveal a session file in the host file manager. The reveal capability is
- * injected by the IPC layer (electron `shell.showItemInFolder`).
+ * injected by the IPC layer (electron `shell.showItemInFolder`). Only a
+ * contained session path may reach the reveal capability.
  */
 export function revealSession(path: string, reveal: RevealItem): void {
-  reveal(path);
+  reveal(resolveSessionPath(path).path);
 }
 
 /**
- * Move a session's JSONL between roots, preserving its `<project>/<file>`
- * layout. Any display alias follows the file to its new path.
+ * Move a session's JSONL between roots, preserving its root-relative
+ * `<project>/<file>` layout. The destination derives from the VALIDATED
+ * root-relative path — never from raw renderer input. Any display alias
+ * follows the file to its new path.
  */
 async function moveSession(path: string, toRoot: string): Promise<string> {
-  const project = basename(dirname(path));
-  const file = basename(path);
-  const destDir = join(toRoot, project);
-  await mkdir(destDir, { recursive: true });
-  const dest = join(destDir, file);
-  await rename(path, dest);
+  const source = resolveSessionPath(path);
+  const dest = join(toRoot, source.rel);
+  await mkdir(dirname(dest), { recursive: true });
+  await rename(source.path, dest);
   const aliases = await readAliases();
-  if (aliases[path] !== undefined) {
-    aliases[dest] = aliases[path];
-    delete aliases[path];
+  const alias = aliases[source.path];
+  if (alias !== undefined) {
+    aliases[dest] = alias;
+    delete aliases[source.path];
     await writeAliases(aliases);
   }
   return dest;
@@ -674,9 +686,10 @@ export async function exportSessionHtml(
   path: string,
   run: CliRunner = runCli,
 ): Promise<string> {
+  const resolved = resolveSessionPath(path).path;
   const outDir = join(agentDir(), "studio-exports");
   await mkdir(outDir, { recursive: true });
-  const result = await run(ompBinary(), ["--export", path], {
+  const result = await run(ompBinary(), ["--export", resolved], {
     cwd: outDir,
     timeoutMs: EXPORT_TIMEOUT_MS,
   });

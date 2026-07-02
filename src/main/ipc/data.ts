@@ -7,6 +7,7 @@ import type {
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
 import { dialog, shell } from "electron";
+import { safeOpenExternal } from "../external-open";
 import {
   listAgents,
   listMcpServers,
@@ -138,13 +139,11 @@ export function registerDataIpc(
     }
   });
 
-  ipcMain.handle(CH.openExternal, async (_event, url: string) => {
-    try {
-      await shell.openExternal(url);
-    } catch {
-      // Opening a malformed/blocked URL must not reject across IPC.
-    }
-  });
+  // Blocked/malformed URLs are dropped inside safeOpenExternal (http(s)-only,
+  // no credentials) and must not reject across IPC.
+  ipcMain.handle(CH.openExternal, (_event, url: string) =>
+    safeOpenExternal(url),
+  );
 
   ipcMain.handle(CH.ghCurrentRepo, (_event, cwd?: string) => currentRepo(cwd));
   ipcMain.handle(CH.ghListRepos, () => listRepos());

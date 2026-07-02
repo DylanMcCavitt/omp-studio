@@ -47,6 +47,11 @@ export class PtySession extends EventEmitter {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private exited = false;
   private disposed = false;
+  // node-pty's onData/onExit return IDisposable subscriptions. They are
+  // retained so dispose() can detach them from the NATIVE handle —
+  // removeAllListeners() only drops this emitter's own listeners and would
+  // leave the pty->session callbacks alive on the addon side.
+  private readonly subscriptions: Array<{ dispose(): void }> = [];
 
   constructor(opts: {
     id: string;
@@ -64,8 +69,8 @@ export class PtySession extends EventEmitter {
     this.rows = opts.rows;
     this.pty = opts.pty;
     this.createdAt = new Date().toISOString();
-    this.pty.onData((data) => this.handleData(data));
-    this.pty.onExit((e) => this.handleExit(e));
+    this.retain(this.pty.onData((data) => this.handleData(data)));
+    this.retain(this.pty.onExit((e) => this.handleExit(e)));
   }
 
   /** Renderer-facing descriptor (terminal:create / terminal:list). */
@@ -122,7 +127,27 @@ export class PtySession extends EventEmitter {
     } catch {
       // Already dead — nothing to clean up beyond dropping listeners.
     }
+    for (const sub of this.subscriptions.splice(0)) {
+      try {
+        sub.dispose();
+      } catch {
+        // A dead native handle may throw on detach; teardown must not.
+      }
+    }
     this.removeAllListeners();
+  }
+
+  // Keep a pty event subscription iff the injected handle returned a real
+  // IDisposable (node-pty does; minimal test fakes may return undefined).
+  private retain(subscription: unknown): void {
+    if (
+      typeof subscription === "object" &&
+      subscription !== null &&
+      "dispose" in subscription &&
+      typeof (subscription as { dispose: unknown }).dispose === "function"
+    ) {
+      this.subscriptions.push(subscription as { dispose(): void });
+    }
   }
 
   private handleData(data: string): void {

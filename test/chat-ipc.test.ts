@@ -16,7 +16,11 @@ import type { BrowserWindow, IpcMain } from "electron";
 import { registerChatIpc } from "../src/main/ipc/chat";
 import { SessionRegistry } from "../src/main/omp/registry";
 import { OmpRpcSession } from "../src/main/omp/rpc-session";
-import type { ChatCreateOptions, ChatUiRequestEvent } from "../src/shared/ipc";
+import type {
+  ChatCreateOptions,
+  ChatUiRequestEvent,
+  OpenSessionDescriptor,
+} from "../src/shared/ipc";
 import { CH } from "../src/shared/ipc";
 import type {
   AvailableSlashCommand,
@@ -107,14 +111,23 @@ class FakeSession extends EventEmitter {
 function makeRegistry(): {
   registry: SessionRegistry;
   createCalls: ChatCreateOptions[];
+  resumeCalls: OpenSessionDescriptor[];
   sessions: Map<string, FakeSession>;
 } {
   const createCalls: ChatCreateOptions[] = [];
+  const resumeCalls: OpenSessionDescriptor[] = [];
   const sessions = new Map<string, FakeSession>();
   const registry = {
     async create(opts: ChatCreateOptions) {
       createCalls.push(opts);
       const id = "sess-1";
+      const session = new FakeSession();
+      sessions.set(id, session);
+      return { id, session, state: {} as RpcState };
+    },
+    async resume(descriptor: OpenSessionDescriptor) {
+      resumeCalls.push(descriptor);
+      const id = descriptor.studioSessionId;
       const session = new FakeSession();
       sessions.set(id, session);
       return { id, session, state: {} as RpcState };
@@ -126,6 +139,7 @@ function makeRegistry(): {
   return {
     registry: registry as unknown as SessionRegistry,
     createCalls,
+    resumeCalls,
     sessions,
   };
 }
@@ -524,3 +538,118 @@ test("OmpRpcSession defaults to always-ask spawn flags with no --auto-approve", 
     session.dispose();
   }
 }, 15000);
+
+// ---------------------------------------------------------------------------
+// AGE-798: chat:resume descriptor hardening. The renderer-supplied descriptor
+// is rebuilt from known fields only, and its sessionFile is contained under
+// sessionsDir() BEFORE it can drive an `omp --resume` spawn.
+// ---------------------------------------------------------------------------
+
+function resumeDescriptor(
+  over: Partial<OpenSessionDescriptor> & Record<string, unknown> = {},
+): OpenSessionDescriptor {
+  return {
+    studioSessionId: "resume-1",
+    cwd: "/work/a",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    lastActiveAt: "2026-01-01T00:00:00.000Z",
+    title: null,
+    approvalPolicy: { mode: "always-ask", autoApprove: false },
+    status: "hibernated",
+    ...over,
+  } as OpenSessionDescriptor;
+}
+
+test("chat:resume rejects a descriptor whose sessionFile escapes sessionsDir()", async () => {
+  const { ipcMain, invoke } = makeIpcMain();
+  const { registry, resumeCalls } = makeRegistry();
+  const { win } = makeWindow();
+  registerChatIpc(ipcMain, registry, () => win);
+
+  for (const sessionFile of [
+    "/etc/passwd",
+    join(sessionsRoot, "..", "evil.jsonl"),
+  ]) {
+    await expect(
+      invoke(
+        CH.chatResume,
+        resumeDescriptor({ sessionFile }),
+      ) as Promise<unknown>,
+    ).rejects.toThrow(/escapes the sessions directory/);
+  }
+  // A rejected descriptor never reaches the registry (no spawn attempt).
+  expect(resumeCalls).toHaveLength(0);
+});
+
+test("chat:resume forwards only known descriptor fields with a contained sessionFile", async () => {
+  const { ipcMain, invoke } = makeIpcMain();
+  const { registry, resumeCalls } = makeRegistry();
+  const { win } = makeWindow();
+  registerChatIpc(ipcMain, registry, () => win);
+
+  const file = join(sessionsRoot, "proj", "resume.jsonl");
+  await invoke(
+    CH.chatResume,
+    resumeDescriptor({
+      sessionFile: file,
+      model: "anthropic/claude-opus-4-8",
+      // Hostile extras that must not survive sanitization:
+      binary: "/tmp/evil-omp",
+      extraFlag: "--yolo",
+    }),
+  );
+
+  expect(resumeCalls).toHaveLength(1);
+  const forwarded = resumeCalls[0] as OpenSessionDescriptor &
+    Record<string, unknown>;
+  expect(forwarded.sessionFile).toBe(file);
+  expect(forwarded.model).toBe("anthropic/claude-opus-4-8");
+  expect(forwarded["binary"]).toBeUndefined();
+  expect(forwarded["extraFlag"]).toBeUndefined();
+  expect(Object.keys(forwarded).sort()).toEqual([
+    "approvalPolicy",
+    "createdAt",
+    "cwd",
+    "lastActiveAt",
+    "model",
+    "sessionFile",
+    "status",
+    "studioSessionId",
+    "title",
+  ]);
+});
+
+test("chat:resume accepts a descriptor without a sessionFile (omp-id resume)", async () => {
+  const { ipcMain, invoke } = makeIpcMain();
+  const { registry, resumeCalls } = makeRegistry();
+  const { win } = makeWindow();
+  registerChatIpc(ipcMain, registry, () => win);
+
+  await invoke(CH.chatResume, resumeDescriptor({ ompSessionId: "omp-abc123" }));
+  expect(resumeCalls).toHaveLength(1);
+  expect(resumeCalls[0]?.ompSessionId).toBe("omp-abc123");
+  expect(resumeCalls[0]?.sessionFile).toBeUndefined();
+});
+
+test("chat:resume rejects a path-shaped ompSessionId (no --resume smuggling through the id arm)", async () => {
+  const { ipcMain, invoke } = makeIpcMain();
+  const { registry, resumeCalls } = makeRegistry();
+  const { win } = makeWindow();
+  registerChatIpc(ipcMain, registry, () => win);
+
+  for (const ompSessionId of [
+    "/etc/passwd",
+    "../../../etc/passwd",
+    "..\\..\\secrets",
+    ".hidden",
+    "",
+  ]) {
+    await expect(
+      invoke(
+        CH.chatResume,
+        resumeDescriptor({ ompSessionId }),
+      ) as Promise<unknown>,
+    ).rejects.toThrow(/not a valid omp session id/);
+  }
+  expect(resumeCalls).toHaveLength(0);
+});

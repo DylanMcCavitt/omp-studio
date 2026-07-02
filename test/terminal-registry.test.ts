@@ -33,6 +33,7 @@ class FakePty implements IPtyLike {
   killed = false;
   readonly written: string[] = [];
   readonly resizes: Array<[number, number]> = [];
+  readonly disposed: string[] = [];
   private dataCb: ((data: string) => void) | null = null;
   private exitCb: ((e: { exitCode: number; signal?: number }) => void) | null =
     null;
@@ -42,13 +43,23 @@ class FakePty implements IPtyLike {
   }
   onData(listener: (data: string) => void): unknown {
     this.dataCb = listener;
-    return { dispose() {} };
+    return {
+      dispose: () => {
+        this.disposed.push("data");
+        this.dataCb = null;
+      },
+    };
   }
   onExit(
     listener: (e: { exitCode: number; signal?: number }) => void,
   ): unknown {
     this.exitCb = listener;
-    return { dispose() {} };
+    return {
+      dispose: () => {
+        this.disposed.push("exit");
+        this.exitCb = null;
+      },
+    };
   }
   write(data: string): void {
     this.written.push(data);
@@ -307,4 +318,73 @@ test("dispose kills the pty and emits no further data or exit", () => {
   expect(pty.killed).toBe(true);
   expect(chunks).toEqual([]); // disposed → buffer dropped, no emit
   expect(exited).toBe(false); // disposed → no exit emit
+});
+
+// ---------------------------------------------------------------------------
+// AGE-802: gated terminal:write path + native disposable cleanup.
+// ---------------------------------------------------------------------------
+
+test("registry.write routes validated input to the pty", async () => {
+  const { registry, ptys } = makeRegistry();
+  const session = await registry.create({ cwd: tmpRoot, cols: 80, rows: 24 });
+  await registry.write(session.id, "ls -la\n");
+  expect(ptys[0]?.written).toEqual(["ls -la\n"]);
+});
+
+test("registry.write re-checks the capability gate on every write", async () => {
+  // Caps are read FRESH per call: enabled at create time, then toggled off.
+  let enabled = true;
+  const spawnPty: PtyFactory = () => new FakePty();
+  const registry = new TerminalRegistry({
+    spawnPty,
+    readCaps: async () => ({ enabled, maxConcurrent: 4 }),
+  });
+  const session = await registry.create({ cwd: tmpRoot, cols: 80, rows: 24 });
+
+  enabled = false;
+  await expect(registry.write(session.id, "rm -rf /\n")).rejects.toThrow(
+    /disabled/,
+  );
+  // The pty received NOTHING once the capability was off.
+  const pty = registry.get(session.id);
+  expect(pty).toBeDefined();
+  session.dispose();
+});
+
+test("registry.write rejects non-string id/data and oversized payloads without touching a pty", async () => {
+  const { registry, ptys } = makeRegistry();
+  const session = await registry.create({ cwd: tmpRoot, cols: 80, rows: 24 });
+
+  await expect(registry.write(42, "x")).rejects.toThrow(/string id/);
+  await expect(registry.write(session.id, { evil: 1 })).rejects.toThrow(
+    /string/,
+  );
+  await expect(
+    registry.write(session.id, "x".repeat(1_048_577)),
+  ).rejects.toThrow(/maximum size/);
+  // The cap is BYTES, not UTF-16 code units: a 3-byte-per-char payload whose
+  // .length is under the cap must still be rejected.
+  await expect(
+    registry.write(session.id, "\u0800".repeat(400_000)),
+  ).rejects.toThrow(/maximum size/);
+  expect(ptys[0]?.written).toEqual([]);
+});
+
+test("registry.write is a silent no-op for an unknown id (write/exit race)", async () => {
+  const { registry } = makeRegistry();
+  await expect(registry.write("ghost", "ls\n")).resolves.toBeUndefined();
+});
+
+test("dispose detaches the native onData/onExit subscriptions", () => {
+  const pty = new FakePty();
+  const session = newSession(pty);
+  expect(pty.disposed).toEqual([]);
+
+  session.dispose();
+
+  // Both node-pty disposables were disposed — not just EventEmitter listeners.
+  expect(pty.disposed.sort()).toEqual(["data", "exit"]);
+  // A post-dispose native callback (addon race) finds no live subscription.
+  pty.pushData("late");
+  pty.pushExit(0);
 });
