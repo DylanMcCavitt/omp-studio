@@ -162,11 +162,16 @@ function NodeTicker({ progress }: { progress: AgentProgress }) {
   return (
     <div className="space-y-0.5 text-xs text-ink-faint">
       {progress.lastIntent && (
-        <div className="truncate italic">{progress.lastIntent}</div>
+        <div className="truncate italic" title={progress.lastIntent}>
+          {progress.lastIntent}
+        </div>
       )}
       <div className="flex flex-wrap gap-x-2 gap-y-0.5">
         {progress.currentTool && (
-          <span className="font-mono text-ink-muted">
+          <span
+            className="min-w-0 max-w-full truncate font-mono text-ink-muted"
+            title={progress.currentTool}
+          >
             {progress.currentTool}
           </span>
         )}
@@ -241,7 +246,10 @@ function NodeView({
   if (children.length === 0 && !progress) {
     return (
       <div className="flex items-center gap-2 py-1 pl-[1.375rem]">
-        <span className="min-w-0 flex-1 truncate text-sm text-ink">
+        <span
+          className="min-w-0 flex-1 truncate text-sm text-ink"
+          title={subagentLabel(sub)}
+        >
           {subagentLabel(sub)}
         </span>
         <div className="flex shrink-0 items-center gap-1.5">{actions}</div>

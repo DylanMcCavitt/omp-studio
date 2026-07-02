@@ -49,8 +49,8 @@ export function Panel({
   const open = collapsible ? !collapsed : true;
   const bodyId = useId();
   const titleCls = dense
-    ? "truncate text-xs font-semibold text-ink-muted"
-    : "truncate text-sm font-semibold text-ink";
+    ? "min-w-0 truncate text-xs font-semibold text-ink-muted"
+    : "min-w-0 truncate text-sm font-semibold text-ink";
 
   return (
     <section

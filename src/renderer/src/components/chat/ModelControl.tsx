@@ -169,7 +169,7 @@ function ModelList({
           placeholder="Search models…"
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          className="w-full bg-transparent py-2.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
         />
       </div>
 

@@ -72,6 +72,11 @@ export function Combobox({
 }: ComboboxProps) {
   const selected = options.find((o) => o.value === value);
   const listboxId = useId();
+  const triggerTitle = selected
+    ? selected.label
+    : typeof placeholder === "string"
+      ? placeholder
+      : undefined;
 
   return (
     <Popover
@@ -97,7 +102,13 @@ export function Combobox({
             className,
           )}
         >
-          <span className={cn("truncate", !selected && "text-ink-faint")}>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate",
+              !selected && "text-ink-faint",
+            )}
+            title={triggerTitle}
+          >
             {selected ? selected.label : placeholder}
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-faint" />
@@ -193,7 +204,7 @@ function ComboboxList({
           placeholder={searchPlaceholder}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
-          className="w-full bg-transparent py-2.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
         />
       </div>
 

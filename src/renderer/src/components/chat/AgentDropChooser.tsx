@@ -58,9 +58,11 @@ function ChooserOption({
       className="flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-bg-hover focus-visible:bg-bg-hover focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
     >
       <span className="mt-0.5 shrink-0 text-accent">{icon}</span>
-      <span className="min-w-0">
-        <span className="block text-sm font-medium text-ink">{title}</span>
-        <span className="block text-xs text-ink-muted">
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-ink">
+          {title}
+        </span>
+        <span className="block line-clamp-2 text-xs text-ink-muted">
           {disabled && disabledReason ? disabledReason : description}
         </span>
       </span>
@@ -138,7 +140,10 @@ export function AgentDropChooser({
         className="absolute inset-x-0 bottom-full z-40 mb-2 overflow-hidden rounded-xl border border-border-strong bg-bg-panel shadow-panel"
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+          <span
+            className="min-w-0 flex-1 truncate text-sm font-medium text-ink"
+            title={`${payload.name} (${payload.source})`}
+          >
             Drop <span className="font-mono">{payload.name}</span>
             <span className="ml-1.5 text-xs font-normal text-ink-muted">
               {payload.source} agent
@@ -154,7 +159,7 @@ export function AgentDropChooser({
           <div className="mb-1 text-[11px] uppercase tracking-wide text-ink-faint">
             Prompt preview
           </div>
-          <pre className="scrollbar max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-raised px-2.5 py-1.5 font-mono text-xs text-ink-muted">
+          <pre className="scrollbar max-h-24 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-raised px-2.5 py-1.5 font-mono text-xs text-ink-muted [overflow-wrap:anywhere]">
             {text}
           </pre>
         </div>

@@ -174,7 +174,10 @@ export default function Terminal() {
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold text-ink">Terminal</h1>
-          <p className="truncate text-sm text-ink-muted">
+          <p
+            className="truncate text-sm text-ink-muted"
+            title={enabled && cwd ? cwd : undefined}
+          >
             {enabled && cwd
               ? `Built-in xterm shell in ${projectLabel(cwd)} · ${cwd}`
               : "A real shell at your user privilege — not a sandbox"}
@@ -206,10 +209,15 @@ export default function Terminal() {
                     role="tab"
                     aria-selected={selected}
                     onClick={() => setActiveId(entry.id)}
-                    className="flex min-w-0 items-center gap-2 px-2.5 py-1 text-left hover:text-ink"
+                    className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1 text-left hover:text-ink"
                     title={entry.cwd}
                   >
-                    <span className="truncate">{label}</span>
+                    <span
+                      className="min-w-0 flex-1 truncate font-mono text-[10px] opacity-70"
+                      title={entry.cwd}
+                    >
+                      {label}
+                    </span>
                     <span className="font-mono text-[10px] opacity-70">
                       {projectLabel(entry.cwd)}
                     </span>
@@ -264,7 +272,9 @@ export default function Terminal() {
           role="alert"
           className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/30 bg-danger/5 px-4 py-2 text-sm text-danger"
         >
-          <span>Terminal failed to start: {createError}</span>
+          <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
+            Terminal failed to start: {createError}
+          </span>
           <Button
             size="sm"
             variant="subtle"
@@ -279,7 +289,9 @@ export default function Terminal() {
           role="alert"
           className="flex shrink-0 items-center justify-between gap-3 border-b border-danger/30 bg-danger/5 px-4 py-2 text-sm text-danger"
         >
-          <span>External terminal failed to open: {externalError}</span>
+          <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere]">
+            External terminal failed to open: {externalError}
+          </span>
           <Button
             size="sm"
             variant="subtle"

@@ -92,7 +92,7 @@ export default function Dashboard() {
 
         {data && (
           <>
-            <section className="grid grid-cols-2 gap-3 auto-rows-fr">
+            <section className="grid grid-cols-1 gap-3 auto-rows-fr sm:grid-cols-[repeat(2,minmax(0,1fr))]">
               <Stat
                 label="Sessions"
                 value={formatNumber(data.sessions.total)}
@@ -441,7 +441,7 @@ function NativeMetricCard({
 }) {
   return (
     <div
-      className={`rounded-2xl border border-border-subtle bg-bg-raised p-5 ${
+      className={`min-w-0 rounded-2xl border border-border-subtle bg-bg-raised p-5 ${
         primary ? "min-h-28" : "min-h-20"
       }`}
     >
@@ -453,9 +453,10 @@ function NativeMetricCard({
         {label}
       </div>
       <div
-        className={`mt-4 font-semibold tracking-tight text-ink ${
+        className={`mt-4 truncate font-semibold tracking-tight text-ink ${
           primary ? "text-3xl" : "text-2xl"
         }`}
+        title={value}
       >
         {value}
       </div>
@@ -499,7 +500,7 @@ function AgentUsagePanel({ rows }: { rows: OmpStatsBreakdown[] | undefined }) {
             );
           })}
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-4 grid gap-3 sm:grid-cols-[repeat(2,minmax(0,1fr))]">
           {agents.map((row, index) => {
             const tokens = agentTokenTotal(row);
             const pct = total > 0 ? (tokens / total) * 100 : 0;
@@ -509,12 +510,15 @@ function AgentUsagePanel({ rows }: { rows: OmpStatsBreakdown[] | undefined }) {
                 className="flex items-center justify-between gap-3 rounded-xl border border-border-subtle bg-bg-soft/40 px-3 py-2"
               >
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <span
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: colors[index] }}
                     />
-                    <span className="truncate text-sm font-medium text-ink">
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-ink"
+                      title={agentLabel(row)}
+                    >
                       {agentLabel(row)}
                     </span>
                   </div>
@@ -733,10 +737,13 @@ function RecentModelActivity({
           {recent.map((row, index) => (
             <li
               key={`${modelLabel(row)}:${rowTimestamp(row) ?? index}`}
-              className="grid gap-2 px-5 py-3 sm:grid-cols-[1fr_auto] sm:items-center"
+              className="grid gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-ink">
+                <div
+                  className="truncate text-sm font-medium text-ink"
+                  title={modelLabel(row)}
+                >
                   {modelLabel(row)}
                 </div>
                 <div className="mt-1 text-xs text-ink-muted">
@@ -904,7 +911,7 @@ function OmpStatsPanel({
           <ThroughputChart rows={timeSeries} />
           <RecentModelActivity rows={modelPerformanceSeries} />
 
-          <div className="grid gap-3 xl:grid-cols-3">
+          <div className="grid gap-3 xl:grid-cols-[repeat(3,minmax(0,1fr))]">
             <NativeBreakdownList
               title="Top models"
               rows={stats.byModel}

@@ -55,7 +55,10 @@ export function TodoPanel({
         <div className="space-y-3">
           {phases.map((phase) => (
             <div key={phase.id}>
-              <div className="mb-1 text-[0.7rem] font-medium uppercase tracking-wide text-ink-faint">
+              <div
+                className="mb-1 min-w-0 truncate text-[0.7rem] font-medium uppercase tracking-wide text-ink-faint"
+                title={phase.name}
+              >
                 {phase.name}
               </div>
               <ul className="space-y-1">
@@ -64,7 +67,7 @@ export function TodoPanel({
                     <TodoIcon status={task.status} />
                     <span
                       className={cn(
-                        "text-ink-muted",
+                        "min-w-0 flex-1 break-words text-ink-muted [overflow-wrap:anywhere]",
                         (task.status === "completed" ||
                           task.status === "dropped") &&
                           "text-ink-faint line-through",
