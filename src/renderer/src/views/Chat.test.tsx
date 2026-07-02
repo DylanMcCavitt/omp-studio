@@ -9,6 +9,7 @@
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { useChatStore } from "@/store/chat";
+import { MAIN_PANE_ID, usePaneStore } from "@/store/panes";
 import { useShellStore } from "@/store/shell";
 import ChatWorkspace from "./Chat";
 
@@ -51,6 +52,7 @@ beforeEach(() => {
     inspectedSubagent: null,
   });
   useShellStore.setState({ openPanelId: null });
+  usePaneStore.getState().reset();
 });
 
 /** The old middle rail's resize divider — must no longer exist anywhere. */
@@ -104,5 +106,26 @@ describe("ChatSession center view (AGE-674)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Focused" }));
     expect(screen.queryByText("No tool steps yet.")).not.toBeInTheDocument();
+  });
+
+  it("opens this chat in a second pane pinned to the session (AGE-777)", () => {
+    render(<ChatWorkspace />);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open this chat in a split pane" }),
+    );
+
+    const { panes, focusedPaneId } = usePaneStore.getState();
+    const ids = Object.keys(panes);
+    expect(ids).toHaveLength(2);
+    const extra = ids.find((id) => id !== MAIN_PANE_ID);
+    // The NEW pane is pinned to this session; the default pane keeps following
+    // the active session, so switching chats later leaves this one visible.
+    expect(panes[extra!]).toEqual({
+      id: extra,
+      kind: "chat",
+      sessionId: SESSION_ID,
+    });
+    expect(focusedPaneId).toBe(extra);
   });
 });

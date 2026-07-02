@@ -11,6 +11,7 @@
 import { SessionStatsPanel } from "@/components/chat/SessionStatsPanel";
 import { SubagentTree } from "@/components/chat/SubagentTree";
 import { TodoPanel } from "@/components/chat/TodoPanel";
+import { openPaneWithFeedback } from "@/components/shell/pane-actions";
 import { useChatStore } from "@/store/chat";
 import { CHAT_TAB, useFilesStore } from "@/store/files";
 
@@ -33,6 +34,11 @@ export function ChatPanelDock() {
           // drill-in is visible even when a file tab currently owns the center.
           useFilesStore.getState().setActiveTab(CHAT_TAB);
         }}
+        // AGE-777 — the split affordance: open the subagent's inspector in a
+        // new pane beside the current chat instead of replacing the transcript.
+        onOpenInPane={(id) =>
+          openPaneWithFeedback({ kind: "subagent", sessionId, subagentId: id })
+        }
       />
     </div>
   );

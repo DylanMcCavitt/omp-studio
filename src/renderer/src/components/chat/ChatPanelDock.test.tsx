@@ -9,6 +9,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useChatStore } from "@/store/chat";
 import { CHAT_TAB, useFilesStore } from "@/store/files";
+import { usePaneStore } from "@/store/panes";
 import { ChatPanelDock } from "./ChatPanelDock";
 
 vi.mock("@/components/chat/SessionStatsPanel", () => ({
@@ -20,16 +21,28 @@ vi.mock("@/components/chat/TodoPanel", () => ({
   TodoPanel: () => <div data-testid="plan-widget" />,
 }));
 vi.mock("@/components/chat/SubagentTree", () => ({
-  SubagentTree: ({ onInspect }: { onInspect: (id: string) => void }) => (
-    <button type="button" onClick={() => onInspect("sub-9")}>
-      inspect subagent
-    </button>
+  SubagentTree: ({
+    onInspect,
+    onOpenInPane,
+  }: {
+    onInspect: (id: string) => void;
+    onOpenInPane?: (id: string) => void;
+  }) => (
+    <>
+      <button type="button" onClick={() => onInspect("sub-9")}>
+        inspect subagent
+      </button>
+      <button type="button" onClick={() => onOpenInPane?.("sub-9")}>
+        open subagent in pane
+      </button>
+    </>
   ),
 }));
 
 beforeEach(() => {
   useChatStore.setState({ activeSessionId: null, inspectedSubagent: null });
   useFilesStore.setState({ activeTab: CHAT_TAB });
+  usePaneStore.getState().reset();
 });
 
 const inspectButton = () =>
@@ -65,4 +78,23 @@ describe("ChatPanelDock", () => {
     });
     expect(useFilesStore.getState().activeTab).toBe(CHAT_TAB);
   });
+});
+
+it("opens a subagent's inspector in a split pane beside the chat (AGE-777)", async () => {
+  useChatStore.setState({ activeSessionId: "session-7" });
+
+  render(<ChatPanelDock />);
+  await userEvent.click(
+    screen.getByRole("button", { name: "open subagent in pane" }),
+  );
+
+  const panes = Object.values(usePaneStore.getState().panes);
+  expect(panes).toHaveLength(2);
+  expect(panes.find((p) => p.kind === "subagent")).toMatchObject({
+    sessionId: "session-7",
+    subagentId: "sub-9",
+  });
+  // The drill-in state is untouched — the pane opens beside the chat instead
+  // of replacing the center transcript.
+  expect(useChatStore.getState().inspectedSubagent).toBeNull();
 });
