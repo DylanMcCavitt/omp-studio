@@ -385,14 +385,15 @@ test("the chat transcript and composer fill a wide panel up to the 72rem ceiling
 });
 
 // AGE-674 — the Usage/Plan/Subagents panels moved out of the middle chat rail
-// into a bounded dock at the bottom of the left sidebar (`ChatPanelDock`). Like
-// AGE-666's transcript fill, the dock only mounts with a live session this
-// hermetic harness can't reach, so the new placement is proven at two layers: a
-// source guard that the middle rail is gone and the sidebar dock is wired, and a
-// runtime probe that the dock's bounding classes cap its height (≤45% of the
-// sidebar) and scroll internally instead of spilling — the "no overflow/dead
-// space" invariant.
-const DOCK_BOUND = "max-h-[45%] overflow-y-auto";
+// into a bounded dock at the bottom of the left sidebar (`ChatPanelDock`).
+// AGE-807 collapses the dock to a counter strip whose expanded widget stack is
+// viewport-bounded (≤45vh) and scrolls internally. Like AGE-666's transcript
+// fill, the dock only mounts with a live session this hermetic harness can't
+// reach, so the placement is proven at two layers: a source guard that the
+// middle rail is gone and the sidebar dock is wired, and a runtime probe that
+// the expanded stack's bounding classes cap its height and scroll inside —
+// the "no overflow/dead space" invariant.
+const DOCK_BOUND = "max-h-[45vh] overflow-y-auto";
 
 test("the chat panels live in a bounded sidebar dock, not a middle rail", async () => {
   await setContentSize(1680, HEIGHT);
@@ -418,11 +419,12 @@ test("the chat panels live in a bounded sidebar dock, not a middle rail", async 
   expect(dockSrc).toContain("SessionStatsPanel");
   expect(dockSrc).toContain("TodoPanel");
   expect(dockSrc).toContain("SubagentTree");
-  expect(dockSrc).toContain("max-h-[45%]");
+  expect(dockSrc).toContain("max-h-[45vh]");
   expect(dockSrc).toContain("overflow-y-auto");
 
-  // Runtime guard: the dock's bounding classes cap an over-tall stack at 45% of
-  // a fixed-height sidebar and scroll inside — never pushing the column taller.
+  // Runtime guard: the expanded stack's bounding classes cap an over-tall
+  // stack at 45% of the viewport height and scroll inside — never pushing the
+  // sidebar column taller.
   const probe = await page.evaluate(
     ({ boundCls }) => {
       const parentHeight = 1000;
@@ -438,14 +440,14 @@ test("the chat panels live in a bounded sidebar dock, not a middle rail", async 
       const height = dock.getBoundingClientRect().height;
       const scrolls = dock.scrollHeight > dock.clientHeight + 1;
       outer.remove();
-      return { parentHeight, height, scrolls };
+      return { viewportHeight: window.innerHeight, height, scrolls };
     },
     { boundCls: DOCK_BOUND },
   );
 
-  // Capped at 45% of the 1000px sidebar (≈450px), not the full 5000px content.
+  // Capped at 45vh of the window, not the full 5000px content.
   expect(
-    Math.abs(probe.height - 0.45 * probe.parentHeight),
+    Math.abs(probe.height - 0.45 * probe.viewportHeight),
   ).toBeLessThanOrEqual(2);
   expect(probe.scrolls).toBe(true);
 
