@@ -8,7 +8,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
-import { createSession } from "@/store/session-reducer";
 import { useSettingsStore } from "@/store/settings";
 import { useUiStore } from "@/store/ui";
 import { NavPalette } from "./NavPalette";
@@ -50,13 +49,17 @@ function seed() {
     setSelectedProject,
   } as never);
   useChatStore.setState({
-    openSessions: {
-      s1: createSession("s1", {
+    // The palette is a summary-only consumer: it must not require the hot
+    // transcript-bearing openSessions map to render live recents.
+    openSessions: {},
+    sessionSummaries: {
+      s1: {
+        sessionId: "s1",
         sessionName: "Refactor parser",
         cwd: "/p/beta",
         status: "streaming",
         lastActivityAt: 200,
-      }),
+      },
     },
     hibernatedSessions: {},
     openChat,
@@ -69,7 +72,7 @@ beforeEach(() => {
   seed();
 });
 
-it("lists Workspaces and Recent sessions when open", () => {
+it("lists Workspaces and summary-only Recent sessions when open", () => {
   render(<NavPalette />);
   expect(screen.getByText("Workspaces")).toBeInTheDocument();
   expect(screen.getByText("Recent sessions")).toBeInTheDocument();
@@ -118,6 +121,7 @@ it("opens the selected session in the center on Enter", async () => {
 it("resumes a hibernated session when selected", async () => {
   useChatStore.setState({
     openSessions: {},
+    sessionSummaries: {},
     hibernatedSessions: {
       h1: {
         descriptor: {

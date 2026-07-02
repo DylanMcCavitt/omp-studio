@@ -13,6 +13,8 @@ import { useChatStore } from "@/store/chat";
 import { useUiStore } from "@/store/ui";
 import { GlobalSearch } from "./GlobalSearch";
 
+vi.mock("@/lib/nav-registry", () => ({ RAIL_ENTRIES: [] }));
+
 // A query that matches no nav route and no open session, so the result set is
 // driven entirely by the (mocked) transcript scan.
 const QUERY = "zqxwv";
@@ -23,8 +25,32 @@ function stubBridge(overrides: Partial<OmpApi>) {
 
 beforeEach(() => {
   useUiStore.setState({ searchOpen: true });
-  useChatStore.setState({ openSessions: {} });
+  useChatStore.setState({ openSessions: {}, sessionSummaries: {} });
   useAppStore.setState({ selectedProject: null });
+});
+
+it("shows summary-only live sessions before typing without transcript objects", async () => {
+  const searchSessions = vi.fn().mockResolvedValue([]);
+  stubBridge({ searchSessions });
+  useChatStore.setState({
+    openSessions: {},
+    sessionSummaries: {
+      s1: {
+        sessionId: "s1",
+        sessionName: "Release checklist",
+        cwd: "/work/release",
+        status: "streaming",
+        lastActivityAt: 200,
+      },
+    },
+  });
+
+  render(<GlobalSearch />);
+  expect(await screen.findByText("Live sessions")).toBeInTheDocument();
+  expect(
+    await screen.findByRole("option", { name: /Release checklist\s+live/i }),
+  ).toBeInTheDocument();
+  expect(searchSessions).not.toHaveBeenCalled();
 });
 
 it("shows a searching indicator while the transcript scan is in flight", async () => {

@@ -2,6 +2,7 @@
 // highlighting. Links are intercepted and opened in the OS browser via the
 // `window.omp.openExternal` bridge (never navigate the renderer away).
 
+import { memo } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
@@ -72,7 +73,7 @@ const components: Components = {
   ),
 };
 
-export function Markdown({
+export const Markdown = memo(function Markdown({
   children,
   className,
 }: {
@@ -90,4 +91,4 @@ export function Markdown({
       </ReactMarkdown>
     </div>
   );
-}
+});

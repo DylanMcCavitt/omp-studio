@@ -577,7 +577,12 @@ export function reduceSession(
 
     case CONTROL.subagents: {
       const subagents = (frame as { subagents?: SubagentInfo[] }).subagents;
-      return Array.isArray(subagents) ? { ...state, subagents } : state;
+      if (!Array.isArray(subagents)) return state;
+      const liveIds = new Set(subagents.map((subagent) => subagent.id));
+      const subagentEvents = Object.fromEntries(
+        Object.entries(state.subagentEvents).filter(([id]) => liveIds.has(id)),
+      );
+      return { ...state, subagents, subagentEvents };
     }
 
     case CONTROL.userMessage: {

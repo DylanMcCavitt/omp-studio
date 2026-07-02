@@ -31,6 +31,8 @@ interface Handlers {
   getState: (id: string) => Promise<RpcState>;
   getSubagents: (id: string) => Promise<unknown[]>;
   getSessionStats: (id: string) => Promise<Record<string, unknown>>;
+  prompt: (id: string, text: string, opts?: unknown) => Promise<void>;
+  steer: (id: string, text: string) => Promise<void>;
 }
 
 function makeState(over: Partial<RpcState> = {}): RpcState {
@@ -107,6 +109,8 @@ function defaultHandlers(): Handlers {
     getState: async () => makeState(),
     getSubagents: async () => [],
     getSessionStats: async () => ({}),
+    prompt: async () => {},
+    steer: async () => {},
   };
 }
 
@@ -123,6 +127,9 @@ function defaultHandlers(): Handlers {
       getState: (id: string) => h.getState(id),
       getSubagents: (id: string) => h.getSubagents(id),
       getSessionStats: (id: string) => h.getSessionStats(id),
+      prompt: (id: string, text: string, opts?: unknown) =>
+        h.prompt(id, text, opts),
+      steer: (id: string, text: string) => h.steer(id, text),
       onEvent: () => () => {},
       onLifecycle: () => () => {},
       onUiRequest: () => () => {},
@@ -135,6 +142,20 @@ async function flush(): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 }
 
+function optimisticIdOf(message: OmpMessage): string | undefined {
+  if (
+    message &&
+    typeof message === "object" &&
+    "optimisticId" in message &&
+    typeof message.optimisticId === "string"
+  ) {
+    return message.optimisticId;
+  }
+  return undefined;
+}
+
+type OptimisticMessage = OmpMessage & { optimisticId: string };
+
 beforeEach(() => {
   h = defaultHandlers();
   calls = { readSession: [], resume: [], dispose: [] };
@@ -142,6 +163,7 @@ beforeEach(() => {
   if (unsub) unsub();
   useChatStore.setState({
     openSessions: {},
+    sessionSummaries: {},
     hibernatedSessions: {},
     activeSessionId: null,
     creating: false,
@@ -392,4 +414,82 @@ test("removeHibernated drops the row and disposes the descriptor permanently", a
 
   expect(useChatStore.getState().hibernatedSessions.A).toBeUndefined();
   expect(calls.dispose).toEqual(["A"]);
+});
+
+// --- optimistic prompt / steer rollback ------------------------------------
+
+test("send rolls back only the failed optimistic user message", async () => {
+  const kept: OptimisticMessage = {
+    role: "user",
+    content: [{ type: "text", text: "retry this" }],
+    timestamp: 1,
+    optimisticId: "pending:kept",
+  };
+  useChatStore.setState({
+    activeSessionId: "s1",
+    openSessions: {
+      s1: createSession("s1", { messages: [kept], status: "idle" }),
+    },
+  });
+  const deferred = Promise.withResolvers<void>();
+  h.prompt = () => deferred.promise;
+
+  const pending = useChatStore.getState().send("retry this", undefined, "s1");
+  const during = useChatStore.getState().openSessions.s1?.messages ?? [];
+  const failedId = optimisticIdOf(during[1]!);
+
+  expect(during).toHaveLength(2);
+  expect(failedId).toMatch(/^pending:\d+$/);
+  expect(during[1]?.content).toEqual([{ type: "text", text: "retry this" }]);
+
+  deferred.reject(new Error("prompt ipc failed"));
+  await expect(pending).resolves.toBe(false);
+
+  const after = useChatStore.getState().openSessions.s1?.messages ?? [];
+  expect(after).toHaveLength(1);
+  expect(optimisticIdOf(after[0]!)).toBe("pending:kept");
+  expect(after[0]?.content).toEqual([{ type: "text", text: "retry this" }]);
+  expect(after.some((m) => optimisticIdOf(m) === failedId)).toBe(false);
+  expect(useChatStore.getState().openSessions.s1?.status).toBe("error");
+  expect(useChatStore.getState().openSessions.s1?.error).toBe(
+    "prompt ipc failed",
+  );
+});
+
+test("steer rolls back only the failed optimistic user message", async () => {
+  const kept: OptimisticMessage = {
+    role: "user",
+    content: [{ type: "text", text: "turn left" }],
+    timestamp: 1,
+    optimisticId: "pending:kept",
+  };
+  useChatStore.setState({
+    activeSessionId: "s1",
+    openSessions: {
+      s1: createSession("s1", { messages: [kept], status: "streaming" }),
+    },
+  });
+  const deferred = Promise.withResolvers<void>();
+  h.steer = () => deferred.promise;
+
+  const pending = useChatStore.getState().steer("turn left", undefined, "s1");
+  const during = useChatStore.getState().openSessions.s1?.messages ?? [];
+  const failedId = optimisticIdOf(during[1]!);
+
+  expect(during).toHaveLength(2);
+  expect(failedId).toMatch(/^pending:\d+$/);
+  expect(during[1]?.content).toEqual([{ type: "text", text: "turn left" }]);
+
+  deferred.reject(new Error("steer ipc failed"));
+  await expect(pending).resolves.toBe(false);
+
+  const after = useChatStore.getState().openSessions.s1?.messages ?? [];
+  expect(after).toHaveLength(1);
+  expect(optimisticIdOf(after[0]!)).toBe("pending:kept");
+  expect(after[0]?.content).toEqual([{ type: "text", text: "turn left" }]);
+  expect(after.some((m) => optimisticIdOf(m) === failedId)).toBe(false);
+  expect(useChatStore.getState().openSessions.s1?.status).toBe("streaming");
+  expect(useChatStore.getState().openSessions.s1?.error).toBe(
+    "steer ipc failed",
+  );
 });

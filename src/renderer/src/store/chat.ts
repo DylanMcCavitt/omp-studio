@@ -56,6 +56,16 @@ export interface HibernatedSession {
   error?: string;
 }
 
+/** Hot-path-safe live session fields for palettes/search chrome. */
+export interface LiveSessionSummary {
+  sessionId: string;
+  status: LiveSessionState["status"];
+  cwd?: string;
+  sessionName?: string;
+  alias?: string;
+  lastActivityAt: number;
+}
+
 /**
  * Live drill-in transcript buffer for the currently-open SubagentInspector
  * (feature 4). Only the LIVE path uses it: the store pumps `getSubagentMessages`
@@ -81,6 +91,8 @@ export interface SubagentInspectorState {
 interface ChatState {
   /** Every open session's render state, keyed by studio session id. */
   openSessions: Record<string, LiveSessionState>;
+  /** Message-free live session summaries for shell chrome subscriptions. */
+  sessionSummaries: Record<string, LiveSessionSummary>;
   /**
    * Persisted-but-not-live sessions (restored on boot), keyed by studio session
    * id. The rail lists these as hibernated rows; opening one resumes it and
@@ -232,6 +244,46 @@ interface ChatActions {
 
 export type ChatStore = ChatState & ChatActions;
 
+let nextOptimisticMessageId = 1;
+
+function optimisticId(): string {
+  return `pending:${nextOptimisticMessageId++}`;
+}
+
+function summarizeSession(s: LiveSessionState): LiveSessionSummary {
+  return {
+    sessionId: s.sessionId,
+    status: s.status,
+    cwd: s.cwd,
+    sessionName: s.sessionName,
+    alias: s.alias,
+    lastActivityAt: s.lastActivityAt,
+  };
+}
+
+function sameSummaryIdentity(
+  a: LiveSessionSummary | undefined,
+  b: LiveSessionSummary,
+): boolean {
+  return (
+    a?.sessionId === b.sessionId &&
+    a.status === b.status &&
+    a.cwd === b.cwd &&
+    a.sessionName === b.sessionName &&
+    a.alias === b.alias
+  );
+}
+
+function withoutKey<T>(
+  record: Record<string, T>,
+  key: string,
+): Record<string, T> {
+  if (!(key in record)) return record;
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
@@ -251,17 +303,28 @@ function transcriptIsMissing(t: SessionTranscript): boolean {
 // round-trips. With attachments the content becomes ordered blocks (text first,
 // then images) so MessageBubble can render the image blocks; image-only prompts
 // omit the text block entirely.
-function buildUserMessage(text: string, images?: ImageContent[]): UserMessage {
+function buildUserMessage(
+  text: string,
+  images?: ImageContent[],
+  id = optimisticId(),
+): UserMessage {
   if (!images || images.length === 0) {
-    return { role: "user", content: text, timestamp: Date.now() };
+    return {
+      role: "user",
+      content: text,
+      timestamp: Date.now(),
+      optimisticId: id,
+    };
   }
   const content: ContentBlock[] = [];
   if (text.trim() !== "") content.push({ type: "text", text });
   for (const image of images) {
     content.push({ type: "image", data: image.data, mimeType: image.mimeType });
   }
-  return { role: "user", content, timestamp: Date.now() };
+  return { role: "user", content, timestamp: Date.now(), optimisticId: id };
 }
+
+const MAX_INSPECTOR_MESSAGES = 1000;
 
 // Single-flight guards for the inspector cursor pump: only one
 // `getSubagentMessages` read runs at a time, and a frame that lands mid-read
@@ -271,6 +334,7 @@ let inspectorPumpQueued = false;
 
 export const useChatStore = create<ChatStore>()((set, get) => ({
   openSessions: {},
+  sessionSummaries: {},
   hibernatedSessions: {},
   activeSessionId: null,
   creating: false,
@@ -365,7 +429,11 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         s.activeSessionId === id
           ? (Object.keys(rest)[0] ?? null)
           : s.activeSessionId;
-      return { openSessions: rest, activeSessionId };
+      return {
+        openSessions: rest,
+        sessionSummaries: withoutKey(s.sessionSummaries, id),
+        activeSessionId,
+      };
     });
   },
 
@@ -456,19 +524,24 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     set((s) => {
       const hibernatedSessions = { ...s.hibernatedSessions };
       delete hibernatedSessions[id];
+      const session = createSession(id, {
+        status: "spawning",
+        cwd: descriptor.cwd,
+        sessionName: descriptor.title ?? undefined,
+        thinkingLevel: descriptor.thinkingLevel ?? "medium",
+        sessionFile: descriptor.sessionFile,
+        messages: hydrated,
+        lastActivityAt: Date.now(),
+      });
       return {
         hibernatedSessions,
         openSessions: {
           ...s.openSessions,
-          [id]: createSession(id, {
-            status: "spawning",
-            cwd: descriptor.cwd,
-            sessionName: descriptor.title ?? undefined,
-            thinkingLevel: descriptor.thinkingLevel ?? "medium",
-            sessionFile: descriptor.sessionFile,
-            messages: hydrated,
-            lastActivityAt: Date.now(),
-          }),
+          [id]: session,
+        },
+        sessionSummaries: {
+          ...s.sessionSummaries,
+          [id]: summarizeSession(session),
         },
       };
     });
@@ -498,6 +571,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
           s.activeSessionId === id ? null : s.activeSessionId;
         return {
           openSessions,
+          sessionSummaries: withoutKey(s.sessionSummaries, id),
           activeSessionId,
           hibernatedSessions: {
             ...s.hibernatedSessions,
@@ -528,16 +602,23 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
   async openSession(sessionId, state, init = {}) {
     // Register the slice synchronously so streamed frames route immediately and
     // the pane can render before the transcript finishes hydrating.
-    set((s) => ({
-      openSessions: {
-        ...s.openSessions,
-        [sessionId]: {
-          ...sessionFromState(sessionId, state),
-          lastActivityAt: Date.now(),
-          ...init,
+    set((s) => {
+      const session = {
+        ...sessionFromState(sessionId, state),
+        lastActivityAt: Date.now(),
+        ...init,
+      };
+      return {
+        openSessions: {
+          ...s.openSessions,
+          [sessionId]: session,
         },
-      },
-    }));
+        sessionSummaries: {
+          ...s.sessionSummaries,
+          [sessionId]: summarizeSession(session),
+        },
+      };
+    });
 
     try {
       const messages = await window.omp.chat.getMessages(sessionId);
@@ -591,8 +672,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     const id = sessionId ?? get().activeSessionId;
     const hasImages = Boolean(images && images.length > 0);
     if (!id || (text.trim() === "" && !hasImages)) return false;
+    const pendingId = optimisticId();
     get()._patch(id, (s) =>
-      reduceSession(s, studioFrame.userMessage(buildUserMessage(text, images))),
+      reduceSession(
+        s,
+        studioFrame.userMessage(buildUserMessage(text, images, pendingId)),
+      ),
     );
     try {
       const streaming = get().openSessions[id]?.status === "streaming";
@@ -606,6 +691,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     } catch (e) {
       get()._patch(id, (s) => ({
         ...s,
+        messages: s.messages.filter(
+          (m) => (m as { optimisticId?: string }).optimisticId !== pendingId,
+        ),
         status: "error",
         error: errorMessage(e),
       }));
@@ -617,8 +705,12 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     const id = sessionId ?? get().activeSessionId;
     const hasImages = Boolean(images && images.length > 0);
     if (!id || (text.trim() === "" && !hasImages)) return false;
+    const pendingId = optimisticId();
     get()._patch(id, (s) =>
-      reduceSession(s, studioFrame.userMessage(buildUserMessage(text, images))),
+      reduceSession(
+        s,
+        studioFrame.userMessage(buildUserMessage(text, images, pendingId)),
+      ),
     );
     try {
       if (hasImages) {
@@ -633,7 +725,13 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       }
       return true;
     } catch (e) {
-      get()._patch(id, (s) => ({ ...s, error: errorMessage(e) }));
+      get()._patch(id, (s) => ({
+        ...s,
+        messages: s.messages.filter(
+          (m) => (m as { optimisticId?: string }).optimisticId !== pendingId,
+        ),
+        error: errorMessage(e),
+      }));
       return false;
     }
   },
@@ -782,9 +880,9 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
               return s;
             }
             const incoming = res.messages.map(normalizeMessageContent);
-            const messages = res.reset
-              ? incoming
-              : [...i.messages, ...incoming];
+            const messages = (
+              res.reset ? incoming : [...i.messages, ...incoming]
+            ).slice(-MAX_INSPECTOR_MESSAGES);
             return {
               _subagentInspector: {
                 ...i,
@@ -890,7 +988,19 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
       // in place is copy-free — it powers the SessionList "last activity"
       // column and keeps non-active sessions' rows live as frames arrive.
       next.lastActivityAt = Date.now();
-      return { openSessions: { ...s.openSessions, [sessionId]: next } };
+      const summary = summarizeSession(next);
+      const summaryChanged = !sameSummaryIdentity(
+        s.sessionSummaries[sessionId],
+        summary,
+      );
+      return {
+        openSessions: { ...s.openSessions, [sessionId]: next },
+        ...(summaryChanged
+          ? {
+              sessionSummaries: { ...s.sessionSummaries, [sessionId]: summary },
+            }
+          : {}),
+      };
     });
   },
 
