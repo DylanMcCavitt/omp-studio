@@ -13,13 +13,56 @@ export const DEFAULT_SIDEBAR_WIDTH_PCT = 18;
 export const SIDEBAR_MIN_PCT = 12;
 export const SIDEBAR_MAX_PCT = 32;
 
-/** Default right icon-rail expandable panel width (% of the shell). */
+/** Legacy right icon-rail panel width (% of the shell), read as migration fallback only. */
 export const DEFAULT_RIGHT_PANEL_WIDTH_PCT = 30;
-/** Min/max right-rail panel width (%) the resize handle is clamped to. */
-export const RIGHT_PANEL_MIN_PCT = 18;
-export const RIGHT_PANEL_MAX_PCT = 50;
-/** Minimum center main width (%) so it never collapses behind the rail panel. */
+/** Fixed right icon rail width: Tailwind `w-12` = 3rem = 48px. */
+export const RIGHT_RAIL_WIDTH_PX = 48;
+/** Minimum sheet width when the viewport can afford it. */
+export const RIGHT_PANEL_MIN_WIDTH_PX = 320;
+/** Minimum usable center width left uncovered by the overlay sheet. */
+export const RIGHT_PANEL_MIN_CENTER_GUARD_PX = 360;
+/** Minimum center main width (%) for the sidebar | main split. */
 export const MAIN_MIN_PCT = 30;
+
+const LIST_RIGHT_PANEL_WIDTH_PX = 460;
+const DENSE_RIGHT_PANEL_WIDTH_PX = 600;
+const WIDE_RIGHT_PANEL_WIDTH_PX = 720;
+
+export const DEFAULT_RIGHT_PANEL_WIDTHS_PX: Record<string, number> = {
+  skills: LIST_RIGHT_PANEL_WIDTH_PX,
+  mcp: LIST_RIGHT_PANEL_WIDTH_PX,
+  agents: LIST_RIGHT_PANEL_WIDTH_PX,
+  github: LIST_RIGHT_PANEL_WIDTH_PX,
+  changes: LIST_RIGHT_PANEL_WIDTH_PX,
+  linear: DENSE_RIGHT_PANEL_WIDTH_PX,
+  settings: DENSE_RIGHT_PANEL_WIDTH_PX,
+  dashboard: DENSE_RIGHT_PANEL_WIDTH_PX,
+  browser: WIDE_RIGHT_PANEL_WIDTH_PX,
+  terminal: WIDE_RIGHT_PANEL_WIDTH_PX,
+  sessions: WIDE_RIGHT_PANEL_WIDTH_PX,
+};
+
+export function defaultRightPanelWidthPx(route: string): number {
+  return DEFAULT_RIGHT_PANEL_WIDTHS_PX[route] ?? LIST_RIGHT_PANEL_WIDTH_PX;
+}
+
+export function clampRightPanelWidthPx(
+  desired: number,
+  viewportWidth: number,
+  railWidth = RIGHT_RAIL_WIDTH_PX,
+  minCenterGuard = RIGHT_PANEL_MIN_CENTER_GUARD_PX,
+): number {
+  const fallback = Number.isFinite(desired)
+    ? desired
+    : RIGHT_PANEL_MIN_WIDTH_PX;
+  const maxWidth = Math.max(
+    RIGHT_PANEL_MIN_WIDTH_PX,
+    viewportWidth - railWidth - minCenterGuard,
+  );
+  return Math.round(
+    Math.min(maxWidth, Math.max(RIGHT_PANEL_MIN_WIDTH_PX, fallback)),
+  );
+}
 
 /**
  * Clamp a raw percentage from a resize drag to `[0, 100]` and round to a single

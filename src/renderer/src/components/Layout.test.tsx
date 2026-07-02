@@ -2,12 +2,13 @@
 // and dark/light toggle. The heavy shell children are mocked so these tests stay
 // focused on titlebar wiring instead of resizable-panel behavior.
 
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { forwardRef, type ReactNode } from "react";
+import { forwardRef, type ReactNode, useEffect } from "react";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
+import { useShellStore } from "@/store/shell";
 import { useUiStore } from "@/store/ui";
 import { Layout } from "./Layout";
 
@@ -25,6 +26,9 @@ vi.mock("@/components/shell/RailPanelHost", () => ({
 }));
 vi.mock("@/components/shell/RightRail", () => ({
   RightRail: () => <nav aria-label="Tools" />,
+}));
+vi.mock("@/lib/nav-registry", () => ({
+  isRailRoute: (route: string) => route !== "chat",
 }));
 vi.mock("@/components/ui", () => ({
   Toaster: () => null,
@@ -52,9 +56,20 @@ beforeEach(() => {
       mediaListeners = mediaListeners.filter((item) => item !== listener);
     }),
   }) as never;
+  Element.prototype.getBoundingClientRect = vi.fn().mockReturnValue({
+    width: 1200,
+    height: 800,
+    top: 0,
+    left: 0,
+    bottom: 800,
+    right: 1200,
+  });
+  HTMLElement.prototype.setPointerCapture = vi.fn();
+  HTMLElement.prototype.releasePointerCapture = vi.fn();
   useUiStore.setState({ navPaletteOpen: false });
   useAppStore.setState({ selectedProject: "/p/acme" } as never);
   useChatStore.setState({ activeSessionId: null, openSessions: {} as never });
+  useShellStore.setState({ openPanelId: null });
   useSettingsStore.setState({
     settings: {
       version: 2,
@@ -148,4 +163,61 @@ it("keeps titlebar controls out of the macOS traffic-light drag region", () => {
     screen.getByRole("button", { name: "Open navigation palette" })
       .parentElement?.className,
   ).toContain("no-drag");
+});
+
+it("keeps the center subtree mounted when the rail panel opens and closes", () => {
+  let unmounts = 0;
+  function Probe() {
+    useEffect(() => () => void unmounts++, []);
+    return <div data-testid="center-probe">center</div>;
+  }
+
+  render(
+    <Layout>
+      <Probe />
+    </Layout>,
+  );
+  const probe = screen.getByTestId("center-probe");
+
+  act(() => useShellStore.setState({ openPanelId: "skills" }));
+  expect(screen.getByTestId("center-probe")).toBe(probe);
+  expect(unmounts).toBe(0);
+
+  act(() => useShellStore.setState({ openPanelId: null }));
+  expect(screen.getByTestId("center-probe")).toBe(probe);
+  expect(unmounts).toBe(0);
+});
+
+it("renders a rail panel as a fixed-width overlay and persists left-edge drag width per route", () => {
+  const setLayout = vi.fn();
+  useSettingsStore.setState({ setLayout });
+  useShellStore.setState({ openPanelId: "skills" });
+
+  const { container } = render(<Layout>main</Layout>);
+  const handle = screen.getByTestId("overlay-resize-handle");
+  const sheet = handle.parentElement;
+  expect(sheet).toHaveStyle({ width: "460px" });
+  expect(sheet?.className).toContain("absolute");
+  expect(
+    container.querySelectorAll('[data-testid="resize-handle"]'),
+  ).toHaveLength(1);
+  const pointerDown = new Event("pointerdown", { bubbles: true });
+  Object.defineProperties(pointerDown, {
+    pointerId: { value: 1 },
+    clientX: { value: 700 },
+  });
+  const pointerMove = new Event("pointermove", { bubbles: true });
+  Object.defineProperties(pointerMove, {
+    pointerId: { value: 1 },
+    clientX: { value: 660 },
+  });
+  const pointerUp = new Event("pointerup", { bubbles: true });
+  Object.defineProperty(pointerUp, "pointerId", { value: 1 });
+  fireEvent(handle, pointerDown);
+  fireEvent(handle, pointerMove);
+  fireEvent(handle, pointerUp);
+
+  expect(setLayout).toHaveBeenLastCalledWith({
+    rightPanelWidthsPx: { skills: 500 },
+  });
 });

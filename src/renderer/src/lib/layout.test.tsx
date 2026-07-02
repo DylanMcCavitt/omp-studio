@@ -3,7 +3,12 @@
 // assert the behaviour the Sidebar persists through `setLayout`.
 
 import type { LucideIcon } from "lucide-react";
-import { reorder, resolveNav } from "@/lib/layout";
+import {
+  clampRightPanelWidthPx,
+  defaultRightPanelWidthPx,
+  reorder,
+  resolveNav,
+} from "@/lib/layout";
 import type { NavEntry } from "@/lib/nav-registry";
 import type { Route } from "@/store/app";
 
@@ -87,5 +92,27 @@ describe("resolveNav", () => {
       "chat",
       "sessions",
     ]);
+  });
+});
+
+describe("right panel overlay widths", () => {
+  it("uses content-type defaults by route", () => {
+    expect(defaultRightPanelWidthPx("skills")).toBe(460);
+    expect(defaultRightPanelWidthPx("mcp")).toBe(460);
+    expect(defaultRightPanelWidthPx("agents")).toBe(460);
+    expect(defaultRightPanelWidthPx("github")).toBe(460);
+    expect(defaultRightPanelWidthPx("changes")).toBe(460);
+    expect(defaultRightPanelWidthPx("linear")).toBe(600);
+    expect(defaultRightPanelWidthPx("settings")).toBe(600);
+    expect(defaultRightPanelWidthPx("dashboard")).toBe(600);
+    expect(defaultRightPanelWidthPx("browser")).toBe(720);
+    expect(defaultRightPanelWidthPx("terminal")).toBe(720);
+    expect(defaultRightPanelWidthPx("sessions")).toBe(720);
+  });
+
+  it("clamps to the minimum sheet width and leaves the center guard when possible", () => {
+    expect(clampRightPanelWidthPx(200, 1400)).toBe(320);
+    expect(clampRightPanelWidthPx(900, 1200)).toBe(792);
+    expect(clampRightPanelWidthPx(640.4, 1400)).toBe(640);
   });
 });

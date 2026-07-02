@@ -1,6 +1,15 @@
 import type { LayoutSettings } from "@shared/ipc";
 import { Moon, Sun } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { PanelGroup, Panel as ResizablePanel } from "react-resizable-panels";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { usePersistedPanelLayout } from "@/components/layout/usePersistedPanelLayout";
@@ -9,11 +18,10 @@ import { RightRail } from "@/components/shell/RightRail";
 import { Toaster } from "@/components/ui";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import {
-  DEFAULT_RIGHT_PANEL_WIDTH_PCT,
+  clampRightPanelWidthPx,
   DEFAULT_SIDEBAR_WIDTH_PCT,
+  defaultRightPanelWidthPx,
   MAIN_MIN_PCT,
-  RIGHT_PANEL_MAX_PCT,
-  RIGHT_PANEL_MIN_PCT,
   roundPct,
   SIDEBAR_MAX_PCT,
   SIDEBAR_MIN_PCT,
@@ -41,6 +49,8 @@ export function Layout({ children }: LayoutProps) {
   const openPanelId = useShellStore((s) => s.openPanelId);
   const hydrate = useShellStore((s) => s.hydrate);
   const panelOpen = openPanelId != null && isRailRoute(openPanelId);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const viewportWidth = useMeasuredWidth(shellRef);
   // Ambient location for the titlebar: the active workspace's Live Dot + label
   // (falls back to its path basename, then the product name) instead of a dead
   // brand label.
@@ -115,13 +125,16 @@ export function Layout({ children }: LayoutProps) {
           </button>
         </div>
       </header>
-      <div className="flex min-h-0 flex-1">
-        <ShellSplit
-          key={`${settingsLoaded ? "ready" : "boot"}:${panelOpen ? "panel" : "nopanel"}`}
-          openPanelId={panelOpen ? openPanelId : null}
-        >
+      <div ref={shellRef} className="relative flex min-h-0 flex-1">
+        <ShellSplit key={settingsLoaded ? "ready" : "boot"}>
           {children}
         </ShellSplit>
+        {panelOpen && (
+          <RightPanelOverlay
+            openPanelId={openPanelId}
+            viewportWidth={viewportWidth}
+          />
+        )}
         <RightRail />
       </div>
       <Toaster />
@@ -147,46 +160,19 @@ function getPrefersDarkSnapshot(): boolean {
   return window.matchMedia(PREFERS_DARK_QUERY).matches;
 }
 
-function ShellSplit({
-  openPanelId,
-  children,
-}: {
-  openPanelId: Route | null;
-  children: ReactNode;
-}) {
-  // When a rail panel is open the split has a third (right) panel; otherwise it
-  // is the classic sidebar | main pair. The parent keys this component on open
-  // state so we remount and re-capture the persisted sizes for the active shape.
-  const open = openPanelId != null;
+function ShellSplit({ children }: { children: ReactNode }) {
+  // The shell split is always the stable sidebar | main pair. Right-rail panels
+  // render as an overlay sheet so opening/closing tools never remounts or
+  // resizes the center subtree.
   const { initialLayout, groupRef, onLayout, reset } = usePersistedPanelLayout({
-    defaultLayout: open
-      ? [
-          DEFAULT_SIDEBAR_WIDTH_PCT,
-          100 - DEFAULT_SIDEBAR_WIDTH_PCT - DEFAULT_RIGHT_PANEL_WIDTH_PCT,
-          DEFAULT_RIGHT_PANEL_WIDTH_PCT,
-        ]
-      : [DEFAULT_SIDEBAR_WIDTH_PCT, 100 - DEFAULT_SIDEBAR_WIDTH_PCT],
-    read: (l) => {
-      if (open) {
-        const sidebar = l.sidebarWidthPct ?? DEFAULT_SIDEBAR_WIDTH_PCT;
-        const right = l.rightPanelWidthPct ?? DEFAULT_RIGHT_PANEL_WIDTH_PCT;
-        return [sidebar, 100 - sidebar - right, right];
-      }
-      return l.sidebarWidthPct != null
+    defaultLayout: [DEFAULT_SIDEBAR_WIDTH_PCT, 100 - DEFAULT_SIDEBAR_WIDTH_PCT],
+    read: (l) =>
+      l.sidebarWidthPct != null
         ? [l.sidebarWidthPct, 100 - l.sidebarWidthPct]
-        : undefined;
-    },
-    toPatch: (layout) => {
-      const patch: Partial<LayoutSettings> = {
-        sidebarWidthPct: roundPct(layout[0] ?? DEFAULT_SIDEBAR_WIDTH_PCT),
-      };
-      if (open && layout.length === 3) {
-        patch.rightPanelWidthPct = roundPct(
-          layout[2] ?? DEFAULT_RIGHT_PANEL_WIDTH_PCT,
-        );
-      }
-      return patch;
-    },
+        : undefined,
+    toPatch: (layout) => ({
+      sidebarWidthPct: roundPct(layout[0] ?? DEFAULT_SIDEBAR_WIDTH_PCT),
+    }),
   });
 
   return (
@@ -214,20 +200,119 @@ function ShellSplit({
       >
         <main className="min-w-0 flex-1 overflow-hidden">{children}</main>
       </ResizablePanel>
-      {openPanelId != null && (
-        <>
-          <ResizeHandle ariaLabel="Resize tool panel" onReset={reset} />
-          <ResizablePanel
-            order={3}
-            defaultSize={initialLayout[2]}
-            minSize={RIGHT_PANEL_MIN_PCT}
-            maxSize={RIGHT_PANEL_MAX_PCT}
-            className="flex min-h-0 min-w-0 overflow-hidden"
-          >
-            <RailPanelHost openPanelId={openPanelId} />
-          </ResizablePanel>
-        </>
-      )}
     </PanelGroup>
+  );
+}
+
+function useMeasuredWidth(ref: RefObject<HTMLElement>): number {
+  const [width, setWidth] = useState(() =>
+    typeof window === "undefined" ? 0 : window.innerWidth,
+  );
+
+  useEffect(() => {
+    const measure = () => {
+      setWidth(
+        Math.round(
+          ref.current?.getBoundingClientRect().width ?? window.innerWidth,
+        ),
+      );
+    };
+    measure();
+
+    const ResizeObserverCtor =
+      typeof ResizeObserver === "undefined" ? undefined : ResizeObserver;
+    const observer = ResizeObserverCtor
+      ? new ResizeObserverCtor(measure)
+      : null;
+    if (ref.current && observer) observer.observe(ref.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [ref]);
+
+  return width;
+}
+
+function RightPanelOverlay({
+  openPanelId,
+  viewportWidth,
+}: {
+  openPanelId: Route;
+  viewportWidth: number;
+}) {
+  const layout = useSettingsStore((s) => s.settings?.layout);
+  const setLayout = useSettingsStore((s) => s.setLayout);
+  const desiredWidth = useMemo(() => {
+    const stored = layout?.rightPanelWidthsPx?.[openPanelId];
+    if (typeof stored === "number" && Number.isFinite(stored) && stored > 0) {
+      return stored;
+    }
+    const legacy = layout?.rightPanelWidthPct;
+    if (typeof legacy === "number" && Number.isFinite(legacy) && legacy > 0) {
+      return (viewportWidth * legacy) / 100;
+    }
+    return defaultRightPanelWidthPx(openPanelId);
+  }, [layout, openPanelId, viewportWidth]);
+  const clampedWidth = useMemo(
+    () => clampRightPanelWidthPx(desiredWidth, viewportWidth),
+    [desiredWidth, viewportWidth],
+  );
+  const [width, setWidth] = useState(clampedWidth);
+
+  useEffect(() => setWidth(clampedWidth), [clampedWidth]);
+
+  const persistWidth = (next: number) => {
+    const current =
+      useSettingsStore.getState().settings?.layout?.rightPanelWidthsPx ?? {};
+    const patch: Partial<LayoutSettings> = {
+      rightPanelWidthsPx: { ...current, [openPanelId]: next },
+    };
+    setLayout(patch);
+  };
+
+  const onResizeStart = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const handle = event.currentTarget;
+    const pointerId = event.pointerId;
+    const startX = event.clientX;
+    const startWidth = width;
+    handle.setPointerCapture(pointerId);
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const next = clampRightPanelWidthPx(
+        startWidth - (moveEvent.clientX - startX),
+        viewportWidth,
+      );
+      setWidth(next);
+      persistWidth(next);
+    };
+    const onPointerUp = () => {
+      handle.releasePointerCapture(pointerId);
+      handle.removeEventListener("pointermove", onPointerMove);
+      handle.removeEventListener("pointerup", onPointerUp);
+      handle.removeEventListener("pointercancel", onPointerUp);
+    };
+
+    handle.addEventListener("pointermove", onPointerMove);
+    handle.addEventListener("pointerup", onPointerUp);
+    handle.addEventListener("pointercancel", onPointerUp);
+  };
+
+  return (
+    <div
+      className="absolute inset-y-0 right-12 z-30 flex min-h-0 overflow-hidden border-l border-border bg-bg shadow-2xl"
+      style={{ width }}
+    >
+      {/* Pointer-only drag affordance (same convention as pane drag grips); Esc/rail toggle remain the keyboard path. */}
+      <div
+        aria-hidden="true"
+        data-testid="overlay-resize-handle"
+        className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize touch-none bg-transparent hover:bg-accent/20"
+        onPointerDown={onResizeStart}
+      />
+      <RailPanelHost openPanelId={openPanelId} />
+    </div>
   );
 }

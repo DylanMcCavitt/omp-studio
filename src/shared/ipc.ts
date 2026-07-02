@@ -291,8 +291,10 @@ export interface LayoutSettings {
   chatRailPanels?: { id: string; visible: boolean }[];
   /** Right icon-rail: the last-open destination route id (null/absent = collapsed). */
   rightPanelId?: string | null;
-  /** Right icon-rail expandable panel width (% of the shell). */
+  /** Legacy right icon-rail panel width (% of the shell); read-only fallback. */
   rightPanelWidthPct?: number;
+  /** Right icon-rail overlay sheet widths in px, keyed by destination route id. */
+  rightPanelWidthsPx?: Record<string, number>;
 }
 
 /** Misc renderer UI preferences (features 3 & 6). */

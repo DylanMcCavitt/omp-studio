@@ -1,8 +1,8 @@
 // The thin fixed icon rail pinned to the far right of the shell (AGE-630). Lists
 // every railable destination (NAV_ENTRIES minus the primary `chat` surface);
-// clicking an icon toggles its expandable docked panel open/closed via the shell
-// store. The active panel's icon is highlighted. This strip is always visible —
-// the panel itself is mounted by `Layout` as a resizable panel beside `main`.
+// clicking an icon toggles its overlay sheet open/closed via the shell store.
+// The active panel's icon is highlighted. This strip is always visible — the
+// panel itself is mounted by `Layout` as an absolute sheet over the main area.
 
 import { cn } from "@/lib/cn";
 import { RAIL_ENTRIES } from "@/lib/nav-registry";
