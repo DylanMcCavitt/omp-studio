@@ -55,6 +55,9 @@ export type PaneLayout =
   | { kind: "leaf"; paneId: string }
   | { kind: "split"; direction: "row" | "column"; children: PaneLayout[] };
 
+/** Where a docked pane lands relative to its target. */
+export type PaneEdge = "left" | "right" | "top" | "bottom";
+
 interface PaneState {
   /** Pane entries keyed by paneId. */
   panes: Record<string, PaneEntry>;
@@ -65,14 +68,19 @@ interface PaneState {
 
   /**
    * Open a new pane beside `besideId` (or the focused pane), splitting in
-   * `direction`. Returns the new paneId, or null when the pane cap is hit.
+   * `direction`; `position` places it before or after the target (default
+   * after). Returns the new paneId, or null when the pane cap is hit.
    */
   openPane(
     entry:
       | { kind: "chat"; sessionId?: string }
       | { kind: "file"; path: string }
       | { kind: "subagent"; sessionId: string; subagentId: string },
-    opts?: { besideId?: string; direction?: "row" | "column" },
+    opts?: {
+      besideId?: string;
+      direction?: "row" | "column";
+      position?: "before" | "after";
+    },
   ): string | null;
   /**
    * Swap an existing pane's content in place (same paneId, same layout slot) —
@@ -89,6 +97,14 @@ interface PaneState {
   setPaneSession(paneId: string, sessionId: string | undefined): void;
   /** Focus a pane (no-op for unknown ids). */
   focusPane(paneId: string): void;
+  /**
+   * Re-dock an existing pane against `targetId`'s edge (AGE-806): left/right
+   * dock beside it in a row split, top/bottom in a column split; left/top land
+   * before the target, right/bottom after. The source leaf is removed first
+   * (collapsing its old split) and the moved pane takes focus. No-ops on
+   * self-drops and unknown ids; content is never lost.
+   */
+  movePane(paneId: string, targetId: string, edge: PaneEdge): void;
   /**
    * Close a pane and collapse its split. The last remaining pane can never be
    * closed — the shell always shows at least the default chat surface.
@@ -110,19 +126,22 @@ let paneSeq = 0;
 
 // Replace the leaf for `besideId` with a split of [beside, newLeaf] in
 // `direction`. When the parent split already runs in `direction` the new leaf
-// is inserted as a sibling instead of nesting a redundant split.
+// is inserted as a sibling instead of nesting a redundant split. `position`
+// places the new leaf before or after the target.
 function insertBeside(
   node: PaneLayout,
   besideId: string,
   newPaneId: string,
   direction: "row" | "column",
+  position: "before" | "after",
 ): PaneLayout {
+  const newLeaf: PaneLayout = { kind: "leaf", paneId: newPaneId };
   if (node.kind === "leaf") {
     if (node.paneId !== besideId) return node;
     return {
       kind: "split",
       direction,
-      children: [node, { kind: "leaf", paneId: newPaneId }],
+      children: position === "before" ? [newLeaf, node] : [node, newLeaf],
     };
   }
   const at = node.children.findIndex(
@@ -130,13 +149,13 @@ function insertBeside(
   );
   if (at !== -1 && node.direction === direction) {
     const children = [...node.children];
-    children.splice(at + 1, 0, { kind: "leaf", paneId: newPaneId });
+    children.splice(position === "before" ? at : at + 1, 0, newLeaf);
     return { ...node, children };
   }
   return {
     ...node,
     children: node.children.map((c) =>
-      insertBeside(c, besideId, newPaneId, direction),
+      insertBeside(c, besideId, newPaneId, direction, position),
     ),
   };
 }
@@ -227,7 +246,13 @@ export const usePaneStore = create<PaneState>((set, get) => ({
     const id = `pane-${paneSeq}`;
     set({
       panes: { ...panes, [id]: paneEntry(id, entry) },
-      layout: insertBeside(layout, besideId, id, opts?.direction ?? "row"),
+      layout: insertBeside(
+        layout,
+        besideId,
+        id,
+        opts?.direction ?? "row",
+        opts?.position ?? "after",
+      ),
       focusedPaneId: id,
     });
     return id;
@@ -237,6 +262,22 @@ export const usePaneStore = create<PaneState>((set, get) => ({
     const { panes } = get();
     if (!panes[paneId]) return;
     set({ panes: { ...panes, [paneId]: paneEntry(paneId, entry) } });
+  },
+
+  movePane(paneId, targetId, edge) {
+    const { panes, layout } = get();
+    if (paneId === targetId || !panes[paneId] || !panes[targetId]) return;
+    // Detach the source leaf first (collapsing its old split); the target
+    // still exists in the remainder because it is a different pane.
+    const without = removeLeaf(layout, paneId);
+    if (!without) return; // the only pane cannot move relative to itself
+    const direction = edge === "left" || edge === "right" ? "row" : "column";
+    const position = edge === "left" || edge === "top" ? "before" : "after";
+    set({
+      layout: insertBeside(without, targetId, paneId, direction, position),
+      // The moved pane takes focus so pane-scoped commands follow the drag.
+      focusedPaneId: paneId,
+    });
   },
 
   setPaneSession(paneId, sessionId) {

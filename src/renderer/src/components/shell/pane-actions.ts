@@ -10,7 +10,7 @@
 //      extends this same payload, so keep it minimal and versionless: a JSON
 //      `{ sessionId, subagentId }`.
 
-import { MAX_PANES, usePaneStore } from "@/store/panes";
+import { MAX_PANES, type PaneEdge, usePaneStore } from "@/store/panes";
 import { toast } from "@/store/toast";
 
 type OpenPaneEntry =
@@ -24,7 +24,11 @@ type OpenPaneEntry =
  */
 export function openPaneWithFeedback(
   entry: OpenPaneEntry,
-  opts?: { besideId?: string; direction?: "row" | "column" },
+  opts?: {
+    besideId?: string;
+    direction?: "row" | "column";
+    position?: "before" | "after";
+  },
 ): string | null {
   const id = usePaneStore.getState().openPane(entry, opts);
   if (id === null) {
@@ -76,4 +80,58 @@ export function readSubagentDragData(
     // Malformed foreign payload — ignore the drop.
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// AGE-806 — the pane rearrange drag contract.
+// ---------------------------------------------------------------------------
+
+/** dataTransfer MIME for a pane dragged by its header. */
+export const PANE_DRAG_MIME = "application/x-omp-pane";
+
+/**
+ * The paneId currently being dragged in THIS window, or null. dragover cannot
+ * read dataTransfer payloads (protected mode), so drop targets need this to
+ * suppress self-drop overlays; it never crosses windows, which is fine — pane
+ * drags are strictly intra-window.
+ */
+let activePaneDrag: string | null = null;
+
+export function paneDragInFlight(): string | null {
+  return activePaneDrag;
+}
+
+/** Arm a pane drag (source's onDragStart). Pair with `endPaneDrag` on dragend. */
+export function setPaneDragData(dt: DataTransfer, paneId: string): void {
+  dt.setData(PANE_DRAG_MIME, paneId);
+  dt.effectAllowed = "move";
+  activePaneDrag = paneId;
+}
+
+export function endPaneDrag(): void {
+  activePaneDrag = null;
+}
+
+/** Read the dragged paneId on drop; null when absent. */
+export function readPaneDragData(dt: DataTransfer | null): string | null {
+  const raw = dt?.getData(PANE_DRAG_MIME);
+  return raw ? raw : null;
+}
+
+/**
+ * Which edge of `rect` a drag at (x, y) targets: the dominant axis of the
+ * offset from the center picks left/right vs top/bottom. Non-finite input
+ * (synthetic events without coordinates) defaults to "right" — dock beside,
+ * the AGE-777 behavior.
+ */
+export function dropEdgeFor(
+  rect: { left: number; top: number; width: number; height: number },
+  x: number,
+  y: number,
+): PaneEdge {
+  const dx = (x - rect.left) / Math.max(1, rect.width) - 0.5;
+  const dy = (y - rect.top) / Math.max(1, rect.height) - 0.5;
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return "right";
+  if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? "left" : "right";
+  return dy < 0 ? "top" : "bottom";
 }

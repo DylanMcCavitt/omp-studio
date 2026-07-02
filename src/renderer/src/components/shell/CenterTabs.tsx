@@ -47,6 +47,7 @@ import {
 } from "@/store/files";
 import {
   MAIN_PANE_ID,
+  type PaneEdge,
   type PaneEntry,
   type PaneLayout,
   usePaneStore,
@@ -54,9 +55,15 @@ import {
 import ChatWorkspace from "@/views/Chat";
 import { rowTitle } from "../chat/SessionList";
 import {
+  dropEdgeFor,
+  endPaneDrag,
   openPaneWithFeedback,
+  PANE_DRAG_MIME,
+  paneDragInFlight,
+  readPaneDragData,
   readSubagentDragData,
   SUBAGENT_DRAG_MIME,
+  setPaneDragData,
 } from "./pane-actions";
 
 const TAB_BASE =
@@ -118,38 +125,79 @@ function PaneTree({ node }: { node: PaneLayout }) {
 // panes render that subagent's inspector; file panes render a single editor.
 // A crash inside one pane must never blank its siblings, so each pane carries
 // its own error boundary.
+//
+// Every pane is a drop target for two drags: a SUBAGENT from the tree (opens
+// its inspector docked at the hovered edge, AGE-777/806) and another PANE
+// dragged by its header (re-docks it at the hovered edge, AGE-806). The
+// hovered edge half is previewed by an overlay; drops on the pane's own
+// surface while it is the drag source are ignored.
 function PaneView({ paneId }: { paneId: string }) {
   const pane = usePaneStore((s) => s.panes[paneId]);
   const focusPane = usePaneStore((s) => s.focusPane);
+  const movePane = usePaneStore((s) => s.movePane);
   const multiPane = usePaneStore((s) => Object.keys(s.panes).length > 1);
   const focused = usePaneStore((s) => s.focusedPaneId === paneId);
   // dragenter/dragleave fire per descendant crossing; a depth counter keeps
-  // the drop overlay steady until the drag truly leaves this pane.
+  // the drop overlay steady until the drag truly leaves this pane. The edge
+  // updates on every dragover so the preview tracks the pointer.
   const [dragDepth, setDragDepth] = useState(0);
+  const [dragEdge, setDragEdge] = useState<PaneEdge>("right");
   if (!pane) return null;
 
+  const acceptsDrag = (dt: DataTransfer): "subagent" | "pane" | null => {
+    if (dt.types.includes(SUBAGENT_DRAG_MIME)) return "subagent";
+    if (dt.types.includes(PANE_DRAG_MIME)) {
+      // Self-drops re-dock a pane against itself — meaningless; don't invite.
+      return paneDragInFlight() === paneId ? null : "pane";
+    }
+    return null;
+  };
+
   const onDragEnter = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes(SUBAGENT_DRAG_MIME)) return;
+    if (!acceptsDrag(e.dataTransfer)) return;
     e.preventDefault();
     setDragDepth((d) => d + 1);
   };
   const onDragOver = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes(SUBAGENT_DRAG_MIME)) return;
+    const kind = acceptsDrag(e.dataTransfer);
+    if (!kind) return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
+    e.dataTransfer.dropEffect = kind === "pane" ? "move" : "copy";
+    setDragEdge(
+      dropEdgeFor(
+        e.currentTarget.getBoundingClientRect(),
+        e.clientX,
+        e.clientY,
+      ),
+    );
   };
   const onDragLeave = (e: DragEvent) => {
-    if (!e.dataTransfer.types.includes(SUBAGENT_DRAG_MIME)) return;
+    if (!acceptsDrag(e.dataTransfer)) return;
     setDragDepth((d) => Math.max(0, d - 1));
   };
   const onDrop = (e: DragEvent) => {
     setDragDepth(0);
+    const edge = dropEdgeFor(
+      e.currentTarget.getBoundingClientRect(),
+      e.clientX,
+      e.clientY,
+    );
+    const movedPaneId = readPaneDragData(e.dataTransfer);
+    if (movedPaneId) {
+      e.preventDefault();
+      movePane(movedPaneId, paneId, edge);
+      return;
+    }
     const payload = readSubagentDragData(e.dataTransfer);
     if (!payload) return;
     e.preventDefault();
     openPaneWithFeedback(
       { kind: "subagent", ...payload },
-      { besideId: paneId, direction: "row" },
+      {
+        besideId: paneId,
+        direction: edge === "left" || edge === "right" ? "row" : "column",
+        position: edge === "left" || edge === "top" ? "before" : "after",
+      },
     );
   };
 
@@ -194,9 +242,20 @@ function PaneView({ paneId }: { paneId: string }) {
         </AppErrorBoundary>
       </div>
       {dragDepth > 0 && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-accent/10 ring-2 ring-inset ring-accent">
+        // The overlay covers the half the drop would occupy (AGE-806) so the
+        // user sees where the dragged pane/subagent will dock.
+        <div
+          data-drop-edge={dragEdge}
+          className={cn(
+            "pointer-events-none absolute z-10 flex items-center justify-center bg-accent/10 ring-2 ring-inset ring-accent",
+            dragEdge === "left" && "bottom-0 left-0 top-0 w-1/2",
+            dragEdge === "right" && "bottom-0 right-0 top-0 w-1/2",
+            dragEdge === "top" && "left-0 right-0 top-0 h-1/2",
+            dragEdge === "bottom" && "bottom-0 left-0 right-0 h-1/2",
+          )}
+        >
           <span className="rounded-md bg-bg-raised px-3 py-1.5 text-xs font-medium text-ink shadow-lg">
-            Open in split pane
+            Dock here
           </span>
         </div>
       )}
@@ -212,16 +271,31 @@ function paneLabel(pane: PaneEntry): string {
   return pane.sessionId ? "Chat pane" : "Main chat pane";
 }
 
-// AGE-777 — per-pane chrome, shown only once a second pane exists (the single-
-// pane shell stays chrome-free). Carries the pane's identity (which chat /
-// subagent / file) and the close affordance. The MAIN pane is permanent shell
+// AGE-777/806 — per-pane chrome, shown only once a second pane exists (the
+// single-pane shell stays chrome-free). Carries the pane's identity (which
+// chat / subagent / file), the close affordance, and doubles as the pane's
+// DRAG HANDLE for re-docking (AGE-806). The MAIN pane is permanent shell
 // chrome (it owns the legacy file tab strip), so it has no close button; live
 // status stays with the surfaces themselves (chat header / inspector header).
 function PaneHeader({ pane }: { pane: PaneEntry }) {
   const closePane = usePaneStore((s) => s.closePane);
   return (
     <div className="flex h-8 shrink-0 items-center gap-1.5 border-b border-border-subtle bg-bg-raised px-2">
-      <PaneTitle pane={pane} />
+      {/* The title area is the drag handle: pointer-only (HTML5 drag has no
+          keyboard path) and out of the tab order — the pane still closes and
+          focuses through its keyboard-reachable controls. */}
+      <button
+        type="button"
+        draggable
+        tabIndex={-1}
+        aria-label={`Move ${paneLabel(pane)}`}
+        title="Drag to re-dock this pane"
+        onDragStart={(e: DragEvent) => setPaneDragData(e.dataTransfer, pane.id)}
+        onDragEnd={endPaneDrag}
+        className="flex h-full min-w-0 flex-1 cursor-grab items-center text-left active:cursor-grabbing"
+      >
+        <PaneTitle pane={pane} />
+      </button>
       {pane.id !== MAIN_PANE_ID && (
         <IconButton
           label="Close pane"
