@@ -9,7 +9,10 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CenterTabs } from "@/components/shell/CenterTabs";
-import { SUBAGENT_DRAG_MIME } from "@/components/shell/pane-actions";
+import {
+  PANE_DRAG_MIME,
+  SUBAGENT_DRAG_MIME,
+} from "@/components/shell/pane-actions";
 import { useChatStore } from "@/store/chat";
 import { CHAT_TAB, type FileTab, useFilesStore } from "@/store/files";
 import { MAIN_PANE_ID, MAX_PANES, usePaneStore } from "@/store/panes";
@@ -368,7 +371,7 @@ it("dropping a dragged subagent on a pane opens its inspector beside it", () => 
   fireEvent.dragEnter(main, {
     dataTransfer: subagentDataTransfer({ sessionId: "s1", subagentId: "a1" }),
   });
-  expect(screen.getByText("Open in split pane")).toBeVisible();
+  expect(screen.getByText("Dock here")).toBeVisible();
 
   // …and the drop opens the subagent pane beside the chat.
   fireEvent.drop(main, {
@@ -390,7 +393,7 @@ it("ignores foreign drags without the subagent payload", () => {
   fireEvent.dragEnter(main, {
     dataTransfer: { types: ["text/plain"], getData: () => "junk" },
   });
-  expect(screen.queryByText("Open in split pane")).not.toBeInTheDocument();
+  expect(screen.queryByText("Dock here")).not.toBeInTheDocument();
   fireEvent.drop(main, {
     dataTransfer: { types: ["text/plain"], getData: () => "junk" },
   });
@@ -414,4 +417,83 @@ it("a drop past the pane cap surfaces the limit toast instead of opening", () =>
   expect(Object.keys(usePaneStore.getState().panes)).toHaveLength(MAX_PANES);
   const toasts = useToastStore.getState().toasts;
   expect(toasts.some((t) => t.title === "Pane limit reached")).toBe(true);
+});
+
+// ---------------------------------------------------------------------------
+// AGE-806: pane drag-rearrange — header handle, edge docking, self-drop guard.
+// ---------------------------------------------------------------------------
+
+/** A minimal DataTransfer stub carrying a dragged pane id. */
+function paneDataTransfer(paneId: string) {
+  return {
+    types: [PANE_DRAG_MIME],
+    getData: (t: string) => (t === PANE_DRAG_MIME ? paneId : ""),
+    dropEffect: "",
+    effectAllowed: "",
+  };
+}
+
+// NOTE: jsdom drag events carry no client coordinates, so host drops exercise
+// dropEdgeFor's default "right" edge; the quadrant geometry itself is pinned
+// by pane-actions.test.ts.
+
+it("drags a pane by its header handle and re-docks it on drop", () => {
+  act(() => {
+    usePaneStore.getState().openPane({ kind: "chat", sessionId: "s2" });
+  });
+  render(<CenterTabs />);
+
+  // The MAIN pane's header title area is its drag handle; it arms the payload.
+  const main = screen.getByRole("region", { name: "Main chat pane" });
+  const handle = within(main).getByRole("button", {
+    name: "Move Main chat pane",
+  });
+  const setData = vi.fn();
+  fireEvent.dragStart(handle, {
+    dataTransfer: { setData, effectAllowed: "" },
+  });
+  expect(setData).toHaveBeenCalledWith(PANE_DRAG_MIME, MAIN_PANE_ID);
+  fireEvent.dragEnd(handle);
+
+  // Dropping main onto the extra pane docks it at the default (right) edge:
+  // the row order flips from [main, extra] to [extra, main].
+  const extra = screen.getByRole("region", { name: "Chat pane" });
+  const extraId = extra.getAttribute("data-pane-id");
+  fireEvent.drop(extra, { dataTransfer: paneDataTransfer(MAIN_PANE_ID) });
+
+  expect(usePaneStore.getState().layout).toEqual({
+    kind: "split",
+    direction: "row",
+    children: [
+      { kind: "leaf", paneId: extraId },
+      { kind: "leaf", paneId: MAIN_PANE_ID },
+    ],
+  });
+  // The moved pane keeps focus; both panes still render with their content.
+  expect(usePaneStore.getState().focusedPaneId).toBe(MAIN_PANE_ID);
+  expect(screen.getAllByTestId("chat-pane")).toHaveLength(2);
+});
+
+it("suppresses the drop preview while a pane hovers its own surface", () => {
+  act(() => {
+    usePaneStore.getState().openPane({ kind: "chat", sessionId: "s2" });
+  });
+  render(<CenterTabs />);
+
+  const extra = screen.getByRole("region", { name: "Chat pane" });
+  const handle = within(extra).getByRole("button", { name: "Move Chat pane" });
+  fireEvent.dragStart(handle, {
+    dataTransfer: { setData: vi.fn(), effectAllowed: "" },
+  });
+
+  // Hovering the dragged pane itself invites nothing…
+  fireEvent.dragEnter(extra, { dataTransfer: { types: [PANE_DRAG_MIME] } });
+  expect(screen.queryByText("Dock here")).not.toBeInTheDocument();
+
+  // …while any OTHER pane previews the dock.
+  const main = screen.getByRole("region", { name: "Main chat pane" });
+  fireEvent.dragEnter(main, { dataTransfer: { types: [PANE_DRAG_MIME] } });
+  expect(screen.getByText("Dock here")).toBeVisible();
+
+  fireEvent.dragEnd(handle);
 });

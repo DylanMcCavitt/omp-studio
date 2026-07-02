@@ -196,3 +196,113 @@ it("replacePane ignores unknown panes", () => {
   usePaneStore.getState().replacePane("ghost", { kind: "chat" });
   expect(usePaneStore.getState().panes.ghost).toBeUndefined();
 });
+
+// ---------------------------------------------------------------------------
+// AGE-806: movePane re-docking + positional inserts.
+// ---------------------------------------------------------------------------
+
+it("movePane docks left/right into a row and top/bottom into a column", () => {
+  const b = usePaneStore.getState().openPane({ kind: "chat" });
+  // right: [main, b] → drop b on main's LEFT edge → [b, main].
+  usePaneStore.getState().movePane(b!, MAIN_PANE_ID, "left");
+  expect(usePaneStore.getState().layout).toEqual({
+    kind: "split",
+    direction: "row",
+    children: [
+      { kind: "leaf", paneId: b },
+      { kind: "leaf", paneId: MAIN_PANE_ID },
+    ],
+  });
+  // bottom: dock b under main → the row collapses into a column pair.
+  usePaneStore.getState().movePane(b!, MAIN_PANE_ID, "bottom");
+  expect(usePaneStore.getState().layout).toEqual({
+    kind: "split",
+    direction: "column",
+    children: [
+      { kind: "leaf", paneId: MAIN_PANE_ID },
+      { kind: "leaf", paneId: b },
+    ],
+  });
+  // The moved pane takes focus and its content entry is untouched.
+  expect(usePaneStore.getState().focusedPaneId).toBe(b);
+  expect(usePaneStore.getState().panes[b!]).toEqual({ id: b, kind: "chat" });
+});
+
+it("movePane collapses the vacated split and never loses a pane", () => {
+  const b = usePaneStore.getState().openPane({ kind: "chat" });
+  const c = usePaneStore
+    .getState()
+    .openPane({ kind: "chat" }, { besideId: b!, direction: "column" });
+  // row[main, column[b, c]] → move c onto main's right edge.
+  usePaneStore.getState().movePane(c!, MAIN_PANE_ID, "right");
+  // The emptied column collapses back to b's leaf; all three panes remain.
+  expect(usePaneStore.getState().layout).toEqual({
+    kind: "split",
+    direction: "row",
+    children: [
+      { kind: "leaf", paneId: MAIN_PANE_ID },
+      { kind: "leaf", paneId: c },
+      { kind: "leaf", paneId: b },
+    ],
+  });
+  expect(layoutPaneIds(usePaneStore.getState().layout).sort()).toEqual(
+    [MAIN_PANE_ID, b, c].sort(),
+  );
+});
+
+it("movePane ignores self-drops, unknown panes, and the only pane", () => {
+  const before = usePaneStore.getState().layout;
+  usePaneStore.getState().movePane(MAIN_PANE_ID, MAIN_PANE_ID, "left");
+  usePaneStore.getState().movePane("ghost", MAIN_PANE_ID, "left");
+  usePaneStore.getState().movePane(MAIN_PANE_ID, "ghost", "left");
+  expect(usePaneStore.getState().layout).toEqual(before);
+});
+
+it("eight panes rearrange into a 2x4 grid by docking onto bottom edges", () => {
+  // Open seven extra panes in one row: [main, p1..p7].
+  const ids: string[] = [MAIN_PANE_ID];
+  for (let i = 1; i < MAX_PANES; i += 1) {
+    const id = usePaneStore
+      .getState()
+      .openPane({ kind: "chat" }, { besideId: ids[i - 1], direction: "row" });
+    expect(id).not.toBeNull();
+    ids.push(id as string);
+  }
+  // Dock the back four under the front four: a 2x4 grid of column pairs.
+  for (let i = 0; i < 4; i += 1) {
+    usePaneStore
+      .getState()
+      .movePane(ids[i + 4] as string, ids[i] as string, "bottom");
+  }
+  const layout = usePaneStore.getState().layout;
+  expect(layout.kind).toBe("split");
+  if (layout.kind === "split") {
+    expect(layout.direction).toBe("row");
+    expect(layout.children).toHaveLength(4);
+    for (let i = 0; i < 4; i += 1) {
+      expect(layout.children[i]).toEqual({
+        kind: "split",
+        direction: "column",
+        children: [
+          { kind: "leaf", paneId: ids[i] },
+          { kind: "leaf", paneId: ids[i + 4] },
+        ],
+      });
+    }
+  }
+  // No pane was lost or duplicated on the way to the grid.
+  expect(layoutPaneIds(layout).sort()).toEqual([...ids].sort());
+});
+
+it("openPane position:before inserts ahead of the target", () => {
+  const b = usePaneStore
+    .getState()
+    .openPane(
+      { kind: "chat" },
+      { besideId: MAIN_PANE_ID, direction: "row", position: "before" },
+    );
+  expect(layoutPaneIds(usePaneStore.getState().layout)).toEqual([
+    b,
+    MAIN_PANE_ID,
+  ]);
+});
