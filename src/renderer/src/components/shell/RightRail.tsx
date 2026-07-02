@@ -4,7 +4,7 @@
 // The active panel's icon is highlighted. This strip is always visible — the
 // panel itself is mounted by `Layout` as an absolute sheet over the main area.
 
-import { cn } from "@/lib/cn";
+import { IconButton } from "@/components/ui";
 import { RAIL_ENTRIES } from "@/lib/nav-registry";
 import { useShellStore } from "@/store/shell";
 
@@ -16,20 +16,14 @@ export function RightRail() {
     const { icon: Icon, label, route } = entry;
     const active = openPanelId === route;
     return (
-      <button
+      <IconButton
         key={route}
-        type="button"
+        label={label}
+        size="lg"
+        variant={active ? "active" : "ghost"}
         onClick={() => togglePanel(route)}
-        aria-label={label}
-        title={label}
         aria-pressed={active}
-        className={cn(
-          "relative inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-          active
-            ? "bg-accent-soft text-accent"
-            : "text-ink-muted hover:bg-bg-hover hover:text-ink",
-        )}
+        className="relative"
       >
         {active && (
           <span
@@ -38,7 +32,7 @@ export function RightRail() {
           />
         )}
         <Icon size={16} className="shrink-0" />
-      </button>
+      </IconButton>
     );
   };
 

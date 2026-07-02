@@ -37,7 +37,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { RenameSessionDialog } from "@/components/session/RenameSessionDialog";
-import { Button } from "@/components/ui";
+import { Button, IconButton } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { useChatStore } from "@/store/chat";
 import { toast } from "@/store/toast";
@@ -382,26 +382,20 @@ export function SessionActionsMenu({
 
   return (
     <>
-      <button
+      <IconButton
         ref={triggerRef}
-        type="button"
+        label="Session actions"
         tabIndex={triggerTabIndex}
-        aria-label="Session actions"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((o) => !o);
         }}
-        className={cn(
-          "inline-flex items-center justify-center rounded-md text-ink-faint transition-colors",
-          "hover:bg-bg-hover hover:text-ink",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
-          className,
-        )}
+        className={cn("text-ink-faint", className)}
       >
         <MoreHorizontal size={16} />
-      </button>
+      </IconButton>
 
       {open &&
         createPortal(
@@ -431,7 +425,7 @@ export function SessionActionsMenu({
                       className={cn(
                         "flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm transition-colors focus:outline-none",
                         item.danger
-                          ? "text-danger hover:bg-danger/10 focus:bg-danger/10"
+                          ? "text-ink hover:bg-warn/10 focus:bg-warn/10"
                           : "text-ink hover:bg-bg-hover focus:bg-bg-hover",
                       )}
                     >
@@ -522,9 +516,9 @@ function ConfirmDialog({
         aria-labelledby="confirm-title"
         aria-describedby="confirm-message"
         tabIndex={-1}
-        className="w-full max-w-md rounded-xl border border-danger/40 bg-bg-panel p-5 shadow-panel focus:outline-none"
+        className="w-full max-w-md rounded-xl border border-warn/40 bg-bg-panel p-5 shadow-panel focus:outline-none"
       >
-        <div className="mb-3 flex items-center gap-2 text-danger">
+        <div className="mb-3 flex items-center gap-2 text-warn">
           <Trash2 className="h-5 w-5 shrink-0" />
           <h2 id="confirm-title" className="text-sm font-semibold">
             {title}
@@ -537,11 +531,7 @@ function ConfirmDialog({
           <Button variant="subtle" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button
-            variant="danger"
-            onClick={() => void confirm()}
-            disabled={busy}
-          >
+          <Button variant="warn" onClick={() => void confirm()} disabled={busy}>
             {busy ? "Deleting…" : confirmLabel}
           </Button>
         </div>

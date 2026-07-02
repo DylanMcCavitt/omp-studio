@@ -43,6 +43,9 @@ describe("ApprovalRequestDialog", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "Deny" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Deny" }).className).toContain(
+      "bg-warn/10",
+    );
     expect(
       screen.getByRole("button", { name: "Approve once" }),
     ).not.toHaveFocus();

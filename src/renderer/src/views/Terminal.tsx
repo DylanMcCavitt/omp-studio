@@ -226,7 +226,7 @@ export default function Terminal() {
                   <button
                     type="button"
                     aria-label={`Close ${label}`}
-                    className="mr-1 rounded p-0.5 text-ink-faint hover:bg-bg-hover hover:text-danger"
+                    className="mr-1 rounded p-0.5 text-ink-faint hover:bg-bg-hover hover:text-warn"
                     onClick={() => void closeTerminal(entry.id)}
                   >
                     <X className="h-3 w-3" />

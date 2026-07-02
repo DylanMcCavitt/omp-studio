@@ -42,7 +42,7 @@ export function LinearConnectCard({ className }: { className?: string }) {
               : "Linear account"}
           </span>
           <Button
-            variant="danger"
+            variant="warn"
             size="sm"
             className="ml-auto"
             disabled={connecting}

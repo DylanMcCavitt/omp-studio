@@ -14,7 +14,7 @@ import { AgentDropChooser } from "@/components/chat/AgentDropChooser";
 import { ModelControl } from "@/components/chat/ModelControl";
 import { PromptComposer } from "@/components/chat/PromptComposer";
 import { SlashCommandPalette } from "@/components/chat/SlashCommandPalette";
-import { Button } from "@/components/ui";
+import { Button, IconButton } from "@/components/ui";
 import type { AgentDragPayload } from "@/lib/agentDrag";
 import { projectLabel, workspaceColorForCwd } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
@@ -131,7 +131,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
                   Steer
                 </Button>
                 <Button
-                  variant="danger"
+                  variant="warn"
                   onClick={() => void abort(sessionId)}
                   disabled={disabled}
                 >
@@ -140,16 +140,16 @@ export function Composer({ sessionId }: { sessionId: string }) {
                 </Button>
               </>
             ) : (
-              <button
-                type="button"
+              <IconButton
+                label="Send"
+                variant="primary"
+                size="sm"
                 onClick={submit}
                 disabled={!canSubmit}
-                aria-label="Send"
-                title="Send"
-                className="inline-flex h-7 w-7 shrink-0 select-none items-center justify-center rounded-lg bg-accent text-bg transition-colors hover:bg-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50"
+                className="select-none"
               >
                 <ArrowUp className="h-4 w-4" />
-              </button>
+              </IconButton>
             )
           }
         />
