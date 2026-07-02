@@ -84,6 +84,18 @@ it("setLayout merges patches across different keys in one flush", () => {
   });
 });
 
+it("setLayout persists right panel pixel widths by route", () => {
+  const update = seed({ ...BASE, layout: { rightPanelWidthsPx: { skills: 460 } } });
+  useSettingsStore.getState().setLayout({
+    rightPanelWidthsPx: { skills: 500, browser: 720 },
+  });
+
+  vi.advanceTimersByTime(250);
+  expect(update).toHaveBeenCalledWith({
+    layout: { rightPanelWidthsPx: { skills: 500, browser: 720 } },
+  });
+});
+
 it("setLayout preserves the already-persisted layout it patches onto", () => {
   const update = seed({ ...BASE, layout: { navHidden: ["mcp"] } });
   useSettingsStore.getState().setLayout({ sidebarWidthPct: 20 });

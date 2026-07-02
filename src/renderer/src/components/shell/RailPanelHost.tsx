@@ -1,8 +1,8 @@
-// The expandable docked panel the right icon rail opens (AGE-630). Rendered by
-// `Layout` as the right-most resizable panel only while a rail panel is open. It
-// shows the active destination's header (label + close button) above that
-// destination's view component, read straight from the nav registry — so the
-// rail mounts the same view the old sidebar nav used to route to.
+// The expandable panel the right icon rail opens (AGE-630). `Layout` renders it
+// in a fixed-width overlay sheet while a rail panel is open. It shows the active
+// destination's header (label + close button) above that destination's view
+// component, read straight from the nav registry — so the rail mounts the same
+// view the old sidebar nav used to route to.
 //
 // Closing: the close button and Esc both collapse the rail. Esc is wired here
 // (not in the global shortcut manager) so it stays local to the open panel, and
@@ -39,7 +39,7 @@ export function RailPanelHost({ openPanelId }: { openPanelId: Route }) {
   return (
     <aside
       aria-label={`${label} panel`}
-      className="flex h-full min-h-0 w-full flex-col border-l border-border bg-bg"
+      className="flex h-full min-h-0 w-full flex-col bg-bg"
     >
       <header className="flex h-9 shrink-0 items-center justify-end border-b border-border-subtle px-2">
         <IconButton

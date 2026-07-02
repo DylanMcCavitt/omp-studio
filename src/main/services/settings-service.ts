@@ -306,6 +306,27 @@ function coerceCollapsedMap(
   return out;
 }
 
+function coercePositiveNumberMap(
+  value: unknown,
+): Record<string, number> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (
+      typeof v === "number" &&
+      Number.isFinite(v) &&
+      v > 0 &&
+      isSafeId(k)
+    ) {
+      out[k] = v;
+    }
+  }
+  if (Object.keys(value).length > 0 && Object.keys(out).length === 0) {
+    return undefined;
+  }
+  return out;
+}
+
 function coerceLayout(value: unknown): LayoutSettings | undefined {
   if (!isRecord(value)) return undefined;
   const out: LayoutSettings = {};
@@ -359,6 +380,8 @@ function coerceLayout(value: unknown): LayoutSettings | undefined {
   ) {
     out.rightPanelWidthPct = value.rightPanelWidthPct;
   }
+  const rightPanelWidthsPx = coercePositiveNumberMap(value.rightPanelWidthsPx);
+  if (rightPanelWidthsPx) out.rightPanelWidthsPx = rightPanelWidthsPx;
   // An object-shaped patch with no accepted field is malformed → preserve prior
   // (returning `{}` here would clobber the existing layout via mergeKnown).
   return Object.keys(out).length === 0 ? undefined : out;
