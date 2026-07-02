@@ -167,10 +167,29 @@ interface ChatActions {
     init?: Partial<LiveSessionState>,
   ): Promise<void>;
   /**
-   * Spawn a new rpc-ui session, register it, and make it active. Resolves
-   * `true` on success, `false` if the spawn failed (createError is set).
+   * Spawn a new rpc-ui session and register it. Activates (routes to chat and
+   * selects it) unless `ui.activate` is false — parallel spawns keep the
+   * user's current view. Resolves the new session id, or null when the spawn
+   * failed (createError is set).
    */
-  start(opts: ChatCreateOptions): Promise<boolean>;
+  start(
+    opts: ChatCreateOptions,
+    ui?: { activate?: boolean },
+  ): Promise<string | null>;
+
+  /**
+   * AGE-779 — start a parallel chat for a dropped agent: spawn a fresh session
+   * in `opts.cwd` (falling back to the active/default workspace like newChat)
+   * with the default model/thinking/approval settings, send `text` as its
+   * first prompt, and DO NOT steal the current view (the new session shows as
+   * a sidebar row; callers may pin it into a pane). Resolves the new session
+   * id — also when the first prompt failed (the slice carries the error) — or
+   * null when no workspace could be resolved or the spawn itself failed.
+   */
+  startParallelChat(
+    text: string,
+    opts?: { cwd?: string },
+  ): Promise<string | null>;
 
   /**
    * Prompt a session, optionally with image attachments (follows up while it
@@ -643,7 +662,7 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
     void get().refreshStats(sessionId);
   },
 
-  async start(opts) {
+  async start(opts, ui) {
     get().ensureSubscribed();
     set({ creating: true, createError: undefined });
     try {
@@ -659,13 +678,44 @@ export const useChatStore = create<ChatStore>()((set, get) => ({
         );
       set({ creating: false });
       // Register + activate before hydrating so the new pane shows instantly.
-      get().openChat(sessionId);
+      // Parallel spawns (activate: false) register without touching the
+      // user's current view — the session appears as a sidebar row only.
+      if (ui?.activate !== false) get().openChat(sessionId);
       await get().openSession(sessionId, state, { cwd: opts.cwd });
-      return true;
+      return sessionId;
     } catch (e) {
       set({ creating: false, createError: errorMessage(e) });
-      return false;
+      return null;
     }
+  },
+
+  async startParallelChat(text, opts = {}) {
+    const app = useAppStore.getState();
+    const settings = useSettingsStore.getState().settings;
+    // Same workspace resolution as newChat, but preferring the caller's cwd
+    // (the session the agent was dropped on) so "parallel" means "beside THIS
+    // chat", not "wherever the switcher points".
+    const cwd = opts.cwd ?? app.selectedProject ?? settings?.defaultProject;
+    if (!cwd) return null;
+    const sessionId = await get().start(
+      {
+        cwd,
+        model: settings?.defaultModel ?? undefined,
+        thinkingLevel: settings?.defaultThinkingLevel,
+        approvalPolicy: settings
+          ? {
+              mode: settings.defaultApprovalMode,
+              autoApprove: settings.defaultAutoApprove,
+            }
+          : undefined,
+      },
+      { activate: false },
+    );
+    if (!sessionId) return null;
+    // First prompt = the previewed steering text; a failed send is NOT silent
+    // data loss — the slice carries the error and the row stays visible.
+    await get().send(text, undefined, sessionId);
+    return sessionId;
   },
 
   async send(text, images, sessionId) {

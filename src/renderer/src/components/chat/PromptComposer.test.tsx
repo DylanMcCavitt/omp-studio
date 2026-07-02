@@ -239,3 +239,70 @@ it("inserts editable steering text from an agent drag payload without submitting
   await user.click(screen.getByRole("button", { name: "Send" }));
   expect(onSubmit).toHaveBeenCalledWith(text, []);
 });
+
+it("hands a valid agent drop to onAgentDrop without inserting text", () => {
+  const onSubmit = vi.fn().mockResolvedValue(true);
+  const onAgentDrop = vi.fn();
+  const agent = {
+    name: "parallelizer",
+    description: "Runs beside the current work",
+    source: "user" as const,
+  };
+
+  render(
+    <PromptComposer
+      onSubmit={onSubmit}
+      placeholder="Message"
+      onAgentDrop={onAgentDrop}
+      renderActions={({ submit, canSubmit }) => (
+        <button type="button" onClick={submit} disabled={!canSubmit}>
+          Send
+        </button>
+      )}
+    />,
+  );
+
+  fireEvent.drop(screen.getByPlaceholderText("Message"), {
+    dataTransfer: {
+      types: [AGENT_DRAG_MIME],
+      getData: (type: string) =>
+        type === AGENT_DRAG_MIME ? serializeAgentDrag(agent) : "",
+      files: [],
+    },
+  });
+
+  expect(onAgentDrop).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: "parallelizer",
+      source: "user",
+    }),
+  );
+  expect(screen.getByPlaceholderText("Message")).toHaveValue("");
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+it("degrades a malformed agent drop to a visible no-op", () => {
+  const onAgentDrop = vi.fn();
+  render(
+    <PromptComposer
+      onSubmit={vi.fn().mockResolvedValue(true)}
+      placeholder="Message"
+      onAgentDrop={onAgentDrop}
+      renderActions={() => <button type="button">Send</button>}
+    />,
+  );
+
+  fireEvent.drop(screen.getByPlaceholderText("Message"), {
+    dataTransfer: {
+      types: [AGENT_DRAG_MIME],
+      getData: () => "{not-json",
+      files: [],
+    },
+  });
+
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "The dropped agent couldn't be read — nothing was added.",
+  );
+  expect(screen.getByPlaceholderText("Message")).toHaveValue("");
+  expect(onAgentDrop).not.toHaveBeenCalled();
+});

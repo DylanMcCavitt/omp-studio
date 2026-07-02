@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconButton } from "@/components/ui";
 import {
   AGENT_DRAG_MIME,
+  type AgentDragPayload,
   agentSteeringText,
   parseAgentDrag,
 } from "@/lib/agentDrag";
@@ -100,6 +101,13 @@ export interface PromptComposerProps {
    * (leading "/") are unaffected. Default true.
    */
   globalShortcuts?: boolean;
+  /**
+   * AGE-779 — take over agent drops. When provided, a valid agent drag payload
+   * is handed to the caller (who shows the routing chooser) instead of the
+   * default behavior of inserting steering text; the drop overlay copy changes
+   * to match. Malformed payloads surface an inline error either way.
+   */
+  onAgentDrop?: (payload: AgentDragPayload) => void;
   className?: string;
 }
 
@@ -117,6 +125,7 @@ export function PromptComposer({
   injectText,
   onInjectConsumed,
   globalShortcuts = true,
+  onAgentDrop,
   className,
 }: PromptComposerProps) {
   const [text, setText] = useState("");
@@ -285,9 +294,17 @@ export function PromptComposer({
     setDragging(null);
     if (kind === "agent") {
       const payload = parseAgentDrag(e.dataTransfer.getData(AGENT_DRAG_MIME));
-      if (payload) {
+      if (!payload) {
+        // Invalid drops degrade to a visible no-op, never a silent one
+        // (AGE-779): the payload was unreadable, nothing was inserted.
+        setErrors(["The dropped agent couldn't be read — nothing was added."]);
+        return;
+      }
+      setErrors([]);
+      if (onAgentDrop) {
+        onAgentDrop(payload);
+      } else {
         applyText(agentSteeringText(payload));
-        setErrors([]);
       }
       return;
     }
@@ -389,7 +406,9 @@ export function PromptComposer({
           {dragging === "agent" ? (
             <>
               <Bot className="h-5 w-5" />
-              Drop agent to add steering text
+              {onAgentDrop
+                ? "Drop agent to choose an action"
+                : "Drop agent to add steering text"}
             </>
           ) : (
             <>
