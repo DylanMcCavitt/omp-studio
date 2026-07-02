@@ -10,7 +10,11 @@ export type { ComboboxOption, ComboboxProps } from "./Combobox";
 export { Combobox, filterOptions } from "./Combobox";
 export type { EmptyStateProps } from "./EmptyState";
 export { EmptyState } from "./EmptyState";
-export type { IconButtonProps, IconButtonSize, IconButtonVariant } from "./IconButton";
+export type {
+  IconButtonProps,
+  IconButtonSize,
+  IconButtonVariant,
+} from "./IconButton";
 export { IconButton } from "./IconButton";
 export type { MenuItemProps, MenuProps } from "./Menu";
 export { Menu, MenuItem, MenuSeparator } from "./Menu";

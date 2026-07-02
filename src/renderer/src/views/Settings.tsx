@@ -294,7 +294,8 @@ function DefaultsPanel({
         <select
           className={cn(
             selectClass,
-            settings.defaultApprovalMode === "yolo" && "border-warn/50 text-ink",
+            settings.defaultApprovalMode === "yolo" &&
+              "border-warn/50 text-ink",
           )}
           value={settings.defaultApprovalMode}
           onChange={(e) => onApprovalChange(e.target.value as ApprovalMode)}
@@ -313,7 +314,9 @@ function DefaultsPanel({
             <span className="text-xs font-medium text-ink-muted">
               Auto-approve all requests
             </span>
-            {settings.defaultAutoApprove && <Badge variant="warn">dangerous</Badge>}
+            {settings.defaultAutoApprove && (
+              <Badge variant="warn">dangerous</Badge>
+            )}
           </div>
           <p className="mt-1 text-xs text-ink-muted">
             Skip every approval dialog for new sessions.

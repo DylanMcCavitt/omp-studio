@@ -319,10 +319,14 @@ it("renders reduced-safety defaults with warn styling while keeping risk confirm
 
   render(<Settings />);
 
-  const approvalMode = (await screen.findByDisplayValue("yolo")) as HTMLSelectElement;
+  const approvalMode = (await screen.findByDisplayValue(
+    "yolo",
+  )) as HTMLSelectElement;
   expect(approvalMode.className).toContain("border-warn/50");
   expect(screen.getByText("dangerous").className).toContain("text-warn");
-  const reducedSafety = screen.getByText(/reduced safety prompts/i).parentElement;
+  const reducedSafety = screen.getByText(
+    /reduced safety prompts/i,
+  ).parentElement;
   expect(reducedSafety?.className).toContain("border-warn/30");
   const autoApproveSwitch = screen.getByRole("switch", {
     name: "Auto-approve all requests by default",

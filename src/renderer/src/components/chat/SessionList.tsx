@@ -24,7 +24,13 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { SessionActionsMenu } from "@/components/session/SessionActionsMenu";
-import { Badge, type BadgeVariant, Button, EmptyState, Spinner } from "@/components/ui";
+import {
+  Badge,
+  type BadgeVariant,
+  Button,
+  EmptyState,
+  Spinner,
+} from "@/components/ui";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";

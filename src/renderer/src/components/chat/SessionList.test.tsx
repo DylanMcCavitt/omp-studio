@@ -347,15 +347,18 @@ it("renders a hibernated session with a faded done dot", () => {
 
 it("keeps failed resume rows red while Retry uses Button and Remove uses warn text", () => {
   seedHibernated("h1", "/p/done", "DoneOne");
-  useChatStore.setState((state) => ({
-    hibernatedSessions: {
-      ...state.hibernatedSessions,
-      h1: {
-        ...state.hibernatedSessions.h1,
-        error: "resume exploded",
-      },
-    },
-  }) as never);
+  useChatStore.setState(
+    (state) =>
+      ({
+        hibernatedSessions: {
+          ...state.hibernatedSessions,
+          h1: {
+            ...state.hibernatedSessions.h1,
+            error: "resume exploded",
+          },
+        },
+      }) as never,
+  );
 
   render(<SessionList />);
 

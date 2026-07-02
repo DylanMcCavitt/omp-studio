@@ -7,7 +7,11 @@ it("preserves trigger aria/tabIndex while using the shared icon button", async (
   render(
     <SessionActionsMenu
       triggerTabIndex={-1}
-      target={{ path: "/tmp/session.jsonl", title: "Build UI", archived: false }}
+      target={{
+        path: "/tmp/session.jsonl",
+        title: "Build UI",
+        archived: false,
+      }}
     />,
   );
 
@@ -19,14 +23,20 @@ it("preserves trigger aria/tabIndex while using the shared icon button", async (
   await user.click(trigger);
 
   expect(trigger).toHaveAttribute("aria-expanded", "true");
-  expect(screen.getByRole("menu", { name: "Session actions" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("menu", { name: "Session actions" }),
+  ).toBeInTheDocument();
 });
 
 it("renders delete affordances with warn styling, not danger red", async () => {
   const user = userEvent.setup();
   render(
     <SessionActionsMenu
-      target={{ path: "/tmp/session.jsonl", title: "Build UI", archived: false }}
+      target={{
+        path: "/tmp/session.jsonl",
+        title: "Build UI",
+        archived: false,
+      }}
     />,
   );
 
@@ -40,7 +50,7 @@ it("renders delete affordances with warn styling, not danger red", async () => {
   const dialog = screen.getByRole("alertdialog", { name: "Delete session" });
   expect(dialog.className).toContain("border-warn/40");
   expect(dialog.className).not.toContain("border-danger");
-  expect(within(dialog).getByRole("button", { name: "Delete" }).className).toContain(
-    "bg-warn/10",
-  );
+  expect(
+    within(dialog).getByRole("button", { name: "Delete" }).className,
+  ).toContain("bg-warn/10");
 });
