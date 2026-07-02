@@ -26,7 +26,7 @@ const MODE_LABEL: Record<ApprovalMode, string> = {
 const MODE_TONE: Record<ApprovalMode, string> = {
   "always-ask": "border-border-strong bg-bg-hover text-ink-muted",
   write: "border-warn/40 bg-warn/10 text-warn",
-  yolo: "border-danger/40 bg-danger/10 text-danger",
+  yolo: "border-warn/40 bg-warn/10 text-ink",
 };
 
 export function ApprovalModeControl({ sessionId }: { sessionId: string }) {

@@ -45,7 +45,7 @@ export function ApprovalRequestDialog({
         <>
           <Button
             data-autofocus
-            variant="danger"
+            variant="warn"
             onClick={() => onResolve(decide(false))}
           >
             Deny

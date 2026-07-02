@@ -294,8 +294,7 @@ function DefaultsPanel({
         <select
           className={cn(
             selectClass,
-            settings.defaultApprovalMode === "yolo" &&
-              "border-danger/50 text-danger",
+            settings.defaultApprovalMode === "yolo" && "border-warn/50 text-ink",
           )}
           value={settings.defaultApprovalMode}
           onChange={(e) => onApprovalChange(e.target.value as ApprovalMode)}
@@ -314,9 +313,7 @@ function DefaultsPanel({
             <span className="text-xs font-medium text-ink-muted">
               Auto-approve all requests
             </span>
-            {settings.defaultAutoApprove && (
-              <Badge variant="danger">dangerous</Badge>
-            )}
+            {settings.defaultAutoApprove && <Badge variant="warn">dangerous</Badge>}
           </div>
           <p className="mt-1 text-xs text-ink-muted">
             Skip every approval dialog for new sessions.
@@ -331,8 +328,8 @@ function DefaultsPanel({
       </div>
 
       {dangerous && (
-        <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex items-start gap-2 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-xs text-ink">
+          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
           <span>
             New sessions will run with reduced safety prompts. Make sure you
             trust the projects you open.
@@ -725,16 +722,13 @@ function WorkspaceRow({
             align="end"
             contentClassName="p-2"
             trigger={({ toggle, triggerRef }) => (
-              <button
+              <IconButton
                 ref={triggerRef}
-                type="button"
-                aria-label="Workspace color"
-                title="Workspace color"
+                label="Workspace color"
                 onClick={toggle}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
               >
                 <Palette className="h-4 w-4 text-ink-faint" />
-              </button>
+              </IconButton>
             )}
           >
             {({ close }) => (
@@ -1179,14 +1173,15 @@ function Toggle({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
         checked
           ? danger
-            ? "border-danger bg-danger/80"
+            ? "border-warn bg-warn/80"
             : "border-accent bg-accent"
           : "border-border-strong bg-bg-raised",
       )}
     >
       <span
         className={cn(
-          "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+          "inline-block h-3.5 w-3.5 rounded-full transition-transform",
+          checked && danger ? "bg-ink dark:bg-bg" : "bg-white",
           checked ? "translate-x-4" : "translate-x-0.5",
         )}
       />
@@ -1220,9 +1215,9 @@ function DangerDialog({
         aria-labelledby="danger-title"
         aria-describedby="danger-message"
         tabIndex={-1}
-        className="w-full max-w-md rounded-xl border border-danger/40 bg-bg-panel p-5 shadow-panel focus:outline-none"
+        className="w-full max-w-md rounded-xl border border-warn/40 bg-bg-panel p-5 shadow-panel focus:outline-none"
       >
-        <div className="mb-3 flex items-center gap-2 text-danger">
+        <div className="mb-3 flex items-center gap-2 text-warn">
           <ShieldAlert className="h-5 w-5 shrink-0" />
           <h2 id="danger-title" className="text-sm font-semibold">
             {request.title}
@@ -1236,7 +1231,7 @@ function DangerDialog({
             Cancel
           </Button>
           <Button
-            variant="danger"
+            variant="warn"
             onClick={() => {
               request.onConfirm();
               onClose();

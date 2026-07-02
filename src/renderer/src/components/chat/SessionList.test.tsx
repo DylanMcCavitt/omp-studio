@@ -345,6 +345,28 @@ it("renders a hibernated session with a faded done dot", () => {
   expect(dot?.style.opacity).toBe("0.3");
 });
 
+it("keeps failed resume rows red while Retry uses Button and Remove uses warn text", () => {
+  seedHibernated("h1", "/p/done", "DoneOne");
+  useChatStore.setState((state) => ({
+    hibernatedSessions: {
+      ...state.hibernatedSessions,
+      h1: {
+        ...state.hibernatedSessions.h1,
+        error: "resume exploded",
+      },
+    },
+  }) as never);
+
+  render(<SessionList />);
+
+  expect(screen.getByText("Resume failed").className).toContain("text-danger");
+  expect(screen.getByRole("button", { name: "Retry" }).className).toContain(
+    "bg-bg-raised",
+  );
+  const remove = screen.getByRole("button", { name: "Remove" });
+  expect(remove.className).toContain("text-warn");
+});
+
 it("renders a status legend footer with live, idle, and done fills", () => {
   seed({ a: createSession("a", { sessionName: "Alpha" }) }, "a");
   render(<SessionList />);

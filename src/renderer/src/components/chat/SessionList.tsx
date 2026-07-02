@@ -24,7 +24,7 @@ import {
 } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { SessionActionsMenu } from "@/components/session/SessionActionsMenu";
-import { Badge, type BadgeVariant, EmptyState, Spinner } from "@/components/ui";
+import { Badge, type BadgeVariant, Button, EmptyState, Spinner } from "@/components/ui";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
@@ -583,22 +583,25 @@ function HibernatedListRow({
           {error}
         </p>
         <div className="mt-2 flex items-center gap-2">
-          <button
+          <Button
             type="button"
+            size="sm"
+            variant="subtle"
             {...nav}
             onClick={() => void resumeSession(sessionId)}
-            className="rounded px-2 py-1 text-xs font-medium text-accent hover:bg-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
           >
             Retry
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            size="sm"
+            variant="ghost"
             tabIndex={-1}
             onClick={() => void removeHibernated(sessionId)}
-            className="rounded px-2 py-1 text-xs font-medium text-ink-muted hover:bg-bg-hover hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            className="text-warn hover:bg-warn/10 hover:text-ink"
           >
             Remove
-          </button>
+          </Button>
         </div>
       </div>
     );

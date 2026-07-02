@@ -92,9 +92,10 @@ it("adopts the returned status on a valid key without storing the key", async ()
   expect(setApiKey).toHaveBeenCalledWith(SECRET);
   // The card flips to the connected state…
   expect(await screen.findByText("Connected")).toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: /Disconnect/ }),
-  ).toBeInTheDocument();
+  const disconnect = screen.getByRole("button", { name: /Disconnect/ });
+  expect(disconnect).toBeInTheDocument();
+  expect(disconnect.className).toContain("bg-warn/10");
+  expect(disconnect.className).not.toContain("text-danger");
   // …status is adopted, and still no key is held anywhere in the store.
   expect(useLinearStore.getState().status?.status).toBe("authenticated");
   expect(JSON.stringify(useLinearStore.getState())).not.toContain(SECRET);

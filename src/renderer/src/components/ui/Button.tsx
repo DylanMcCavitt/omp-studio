@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
 
-export type ButtonVariant = "primary" | "ghost" | "subtle" | "danger";
+export type ButtonVariant = "primary" | "ghost" | "subtle" | "danger" | "warn";
 export type ButtonSize = "sm" | "md";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,7 +11,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 // shadcn/ui button family on the monochrome accent (AGE-672): a near-white/
 // graphite solid `primary` (subtle shadow), an outlined `subtle` (secondary),
-// a borderless `ghost`, and a tinted (not solid) `danger`. rounded-md, h-9.
+// a borderless `ghost`, and tinted `danger`/`warn`. rounded-md, h-9.
 //
 // Usage rule (AGE-673): the solid `primary` is the loudest control (highest
 // contrast), so reserve it for the single decisive action in a focused context —
@@ -26,6 +26,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
   subtle:
     "bg-bg-raised text-ink hover:bg-bg-hover border border-border-strong shadow-sm",
   danger: "bg-danger/10 text-danger hover:bg-danger/20 border border-danger/30",
+  warn: "border border-warn/40 bg-warn/10 text-ink hover:bg-warn/20",
 };
 
 const SIZES: Record<ButtonSize, string> = {

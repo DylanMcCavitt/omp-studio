@@ -7,7 +7,7 @@
 // The model chip and slash palette are stubbed so this exercises only the
 // placeholder wiring.
 
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
@@ -99,6 +99,32 @@ it("reads 'No active session' when the pane's session is not registered", () => 
   render(<Composer sessionId="ghost-session" />);
 
   expect(placeholder()).toBe("No active session");
+});
+
+it("uses a primary IconButton for Send and a warn Button for Stop", () => {
+  activate("/home/me/widget-shop");
+  const { rerender } = render(<Composer sessionId={SESSION_ID} />);
+
+  const send = screen.getByRole("button", { name: "Send" });
+  expect(send.className).toContain("bg-accent");
+  expect(send.className).toContain("text-bg");
+
+  act(() => {
+    useChatStore.setState((state) => ({
+      openSessions: {
+        ...state.openSessions,
+        [SESSION_ID]: {
+          ...state.openSessions[SESSION_ID],
+          status: "streaming",
+        },
+      } as never,
+    }));
+  });
+
+  rerender(<Composer sessionId={SESSION_ID} />);
+  const stop = screen.getByRole("button", { name: "Stop" });
+  expect(stop.className).toContain("bg-warn/10");
+  expect(stop.className).toContain("text-ink");
 });
 
 // ---------------------------------------------------------------------------

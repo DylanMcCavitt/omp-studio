@@ -308,3 +308,28 @@ it("keeps the model error state visible when the catalog fails", async () => {
   expect(screen.getByText("catalog unavailable")).toBeInTheDocument();
   expect(screen.queryByLabelText("Search models")).not.toBeInTheDocument();
 });
+
+it("renders reduced-safety defaults with warn styling while keeping risk confirmation behavior", async () => {
+  const user = userEvent.setup();
+  const update = seedSettings({
+    ...BASE,
+    defaultApprovalMode: "yolo",
+    defaultAutoApprove: true,
+  });
+
+  render(<Settings />);
+
+  const approvalMode = (await screen.findByDisplayValue("yolo")) as HTMLSelectElement;
+  expect(approvalMode.className).toContain("border-warn/50");
+  expect(screen.getByText("dangerous").className).toContain("text-warn");
+  const reducedSafety = screen.getByText(/reduced safety prompts/i).parentElement;
+  expect(reducedSafety?.className).toContain("border-warn/30");
+  const autoApproveSwitch = screen.getByRole("switch", {
+    name: "Auto-approve all requests by default",
+  });
+  expect(autoApproveSwitch.className).toContain("bg-warn/80");
+  expect(autoApproveSwitch.firstElementChild?.className).toContain("bg-ink");
+
+  await user.selectOptions(approvalMode, "always-ask");
+  expect(update).toHaveBeenCalledWith({ defaultApprovalMode: "always-ask" });
+});

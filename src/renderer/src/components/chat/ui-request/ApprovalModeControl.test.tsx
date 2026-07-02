@@ -66,11 +66,12 @@ describe("ApprovalModeControl — header chip (AGE-686)", () => {
       rules: [rule("k1", "write a.txt")],
     });
     render(<ApprovalModeControl sessionId="s1" />);
-    expect(
-      screen.getByRole("button", {
-        name: /Approval mode: Yolo — all tools\. 1 always-allow rule/,
-      }),
-    ).toHaveTextContent("Yolo — all tools");
+    const chip = screen.getByRole("button", {
+      name: /Approval mode: Yolo — all tools\. 1 always-allow rule/,
+    });
+    expect(chip).toHaveTextContent("Yolo — all tools");
+    expect(chip.className).toContain("border-warn/40");
+    expect(chip.className).toContain("text-ink");
   });
 
   it("falls back to Always ask when the session has no captured policy", () => {
