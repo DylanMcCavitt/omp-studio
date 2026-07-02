@@ -125,3 +125,74 @@ it("opening a file pane for an already-open path focuses the existing pane", () 
   expect(Object.keys(usePaneStore.getState().panes)).toHaveLength(2);
   expect(usePaneStore.getState().focusedPaneId).toBe(first);
 });
+
+// ---------------------------------------------------------------------------
+// AGE-777: subagent panes + replacePane.
+// ---------------------------------------------------------------------------
+
+it("opens a subagent pane carrying its session and subagent ids", () => {
+  const id = usePaneStore
+    .getState()
+    .openPane({ kind: "subagent", sessionId: "s1", subagentId: "a1" });
+  expect(id).not.toBeNull();
+  expect(usePaneStore.getState().panes[id!]).toEqual({
+    id,
+    kind: "subagent",
+    sessionId: "s1",
+    subagentId: "a1",
+  });
+  expect(usePaneStore.getState().focusedPaneId).toBe(id);
+});
+
+it("reopening the same subagent focuses its existing pane instead of duplicating", () => {
+  const first = usePaneStore
+    .getState()
+    .openPane({ kind: "subagent", sessionId: "s1", subagentId: "a1" });
+  usePaneStore.getState().focusPane(MAIN_PANE_ID);
+  const again = usePaneStore
+    .getState()
+    .openPane({ kind: "subagent", sessionId: "s1", subagentId: "a1" });
+  expect(again).toBe(first);
+  expect(Object.keys(usePaneStore.getState().panes)).toHaveLength(2);
+  expect(usePaneStore.getState().focusedPaneId).toBe(first);
+  // A DIFFERENT subagent of the same session still gets its own pane.
+  const other = usePaneStore
+    .getState()
+    .openPane({ kind: "subagent", sessionId: "s1", subagentId: "a2" });
+  expect(other).not.toBe(first);
+  expect(Object.keys(usePaneStore.getState().panes)).toHaveLength(3);
+});
+
+it("the MAX_PANES cap applies to subagent panes", () => {
+  for (let i = 1; i < MAX_PANES; i += 1) {
+    expect(
+      usePaneStore
+        .getState()
+        .openPane({ kind: "subagent", sessionId: "s1", subagentId: `a${i}` }),
+    ).not.toBeNull();
+  }
+  expect(
+    usePaneStore
+      .getState()
+      .openPane({ kind: "subagent", sessionId: "s1", subagentId: "overflow" }),
+  ).toBeNull();
+  expect(Object.keys(usePaneStore.getState().panes)).toHaveLength(MAX_PANES);
+});
+
+it("replacePane swaps a pane's content in place, keeping its id and layout slot", () => {
+  const id = usePaneStore
+    .getState()
+    .openPane({ kind: "subagent", sessionId: "s1", subagentId: "a1" });
+  const layoutBefore = usePaneStore.getState().layout;
+  usePaneStore.getState().replacePane(id!, { kind: "chat", sessionId: "s1" });
+  const { panes, layout } = usePaneStore.getState();
+  // Same pane id, same layout tree — only the content entry changed (the
+  // subagent pane's "Back to chat" swap must never reflow the split).
+  expect(panes[id!]).toEqual({ id, kind: "chat", sessionId: "s1" });
+  expect(layout).toEqual(layoutBefore);
+});
+
+it("replacePane ignores unknown panes", () => {
+  usePaneStore.getState().replacePane("ghost", { kind: "chat" });
+  expect(usePaneStore.getState().panes.ghost).toBeUndefined();
+});
