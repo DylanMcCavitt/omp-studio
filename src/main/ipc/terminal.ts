@@ -61,11 +61,13 @@ export function registerTerminalIpc(
       return session.info;
     },
   );
-  // write/resize/kill no-op on an unknown id: the renderer may race a write
-  // against an exit it has not processed yet, so a late call must never throw.
-  handle(CH.terminalWrite, (id: string, data: string) => {
-    registry.get(id)?.write(data);
-  });
+  // resize/kill no-op on an unknown id: the renderer may race a call against
+  // an exit it has not processed yet, so a late call must never throw. write
+  // goes through the registry's gated path: capability re-checked in main on
+  // EVERY write and the payload shape/size-validated before any pty sees it.
+  handle(CH.terminalWrite, (id: string, data: string) =>
+    registry.write(id, data),
+  );
   handle(CH.terminalResize, (id: string, cols: number, rows: number) => {
     registry.get(id)?.resize(cols, rows);
   });

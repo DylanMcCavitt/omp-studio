@@ -1,12 +1,25 @@
-import { expect, test } from "bun:test";
+import { beforeEach, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { BrowserWindow, IpcMain } from "electron";
 import type {
   BrowserViewManager,
   ViewBounds,
 } from "../src/main/browser/view-manager";
 import { registerBrowserIpc } from "../src/main/ipc/browser";
+import {
+  setSettingsDir,
+  updateSettings,
+} from "../src/main/services/settings-service";
 import type { BrowserViewState } from "../src/shared/domain";
 import { CH } from "../src/shared/ipc";
+
+// Each test gets an isolated settings dir; the browser capability starts at
+// its real default (disabled) and is enabled explicitly where needed.
+beforeEach(() => {
+  setSettingsDir(mkdtempSync(join(tmpdir(), "omp-studio-browser-ipc-")));
+});
 
 type IpcHandler = (event: unknown, ...args: unknown[]) => unknown;
 
@@ -28,7 +41,7 @@ function makeIpcMain(): {
   return { ipcMain: ipcMain as unknown as IpcMain, invoke };
 }
 
-test("browser IPC forwards explicit diagnostics actions through the manager", () => {
+test("browser IPC forwards explicit diagnostics actions through the manager", async () => {
   const calls: Array<[string, ...unknown[]]> = [];
   let pushState!: (state: BrowserViewState) => void;
   const state: BrowserViewState = {
@@ -84,8 +97,10 @@ test("browser IPC forwards explicit diagnostics actions through the manager", ()
 
   registerBrowserIpc(ipcMain, manager, () => win);
 
+  // The gate reads real settings: enable the capability for this test.
+  await updateSettings({ browser: { enabled: true } });
   expect(
-    invoke(CH.browserCreate, {
+    await invoke(CH.browserCreate, {
       url: "https://example.com",
       bounds: { x: 1, y: 2, width: 3, height: 4 },
     }),
@@ -106,4 +121,42 @@ test("browser IPC forwards explicit diagnostics actions through the manager", ()
     ["openExternal", "v1"],
   ]);
   expect(sends).toEqual([[CH.evtBrowserState, state]]);
+});
+
+// ---------------------------------------------------------------------------
+// AGE-802: browser:create is gated on the browser capability IN MAIN; destroy
+// and teardown stay available while disabled.
+// ---------------------------------------------------------------------------
+
+test("browser:create rejects when the capability is disabled (default), destroy stays available", async () => {
+  const calls: Array<[string, ...unknown[]]> = [];
+  const manager = {
+    onState() {
+      return () => {};
+    },
+    create() {
+      calls.push(["create"]);
+      return {} as BrowserViewState;
+    },
+    destroy(id: string) {
+      calls.push(["destroy", id]);
+    },
+  } as unknown as BrowserViewManager;
+  const { ipcMain, invoke } = makeIpcMain();
+  registerBrowserIpc(ipcMain, manager, () => null);
+
+  // Default settings: browser.enabled is false — create must reject in main
+  // WITHOUT reaching the manager.
+  await expect(
+    invoke(CH.browserCreate, {
+      url: "https://example.com",
+      bounds: { x: 0, y: 0, width: 10, height: 10 },
+    }) as Promise<unknown>,
+  ).rejects.toThrow(/browser capability is disabled/);
+  expect(calls).toEqual([]);
+
+  // Teardown of a pre-existing view is NOT gated: a toggle-off must never
+  // strand a live view.
+  await invoke(CH.browserDestroy, "v1");
+  expect(calls).toEqual([["destroy", "v1"]]);
 });

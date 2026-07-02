@@ -26,6 +26,11 @@ const DEFAULT_MAX_CONCURRENT = 4;
 const DEFAULT_COLS = 80;
 const DEFAULT_ROWS = 24;
 
+// Hard ceiling on one terminal:write payload. A pty is a real shell; a
+// renderer bug (or hostile payload) must not be able to stream unbounded
+// bytes into it in a single call. Generous enough for any human paste.
+const MAX_WRITE_BYTES = 1_048_576;
+
 /** Resolved spawn config handed to the pty factory. */
 export interface PtySpawnOptions {
   shell: string;
@@ -179,6 +184,31 @@ export class TerminalRegistry {
 
   get(id: string): PtySession | undefined {
     return this.sessions.get(id);
+  }
+
+  // Write renderer input to a live pty. A pty is a REAL SHELL with full user
+  // privileges, so the capability gate is re-checked on every write (fresh
+  // read — a settings toggle-off takes effect immediately, even for ptys
+  // spawned while enabled) and the payload is shape/size-validated before it
+  // can reach the native handle. An unknown id stays a silent no-op: the
+  // renderer may race a write against an exit it has not processed yet.
+  async write(id: unknown, data: unknown): Promise<void> {
+    if (typeof id !== "string" || typeof data !== "string") {
+      throw new Error("terminal write requires a string id and string data");
+    }
+    if (data.length === 0) return;
+    // Cap in BYTES (what the pty fd actually receives), not UTF-16 code
+    // units — a non-ASCII payload is up to 3x its .length in UTF-8.
+    if (Buffer.byteLength(data, "utf8") > MAX_WRITE_BYTES) {
+      throw new Error("terminal write payload exceeds the maximum size");
+    }
+    const session = this.sessions.get(id);
+    if (!session) return;
+    const { enabled } = await this.readCaps();
+    if (!enabled) {
+      throw new Error("terminal capability is disabled");
+    }
+    session.write(data);
   }
 
   /** Snapshot of every live terminal. */
