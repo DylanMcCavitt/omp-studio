@@ -62,7 +62,7 @@ it("renders the two-column card content from existing agent data", async () => {
   render(<Agents />);
 
   expect(await screen.findByTestId("agents-card-grid")).toHaveClass(
-    "sm:grid-cols-2",
+    "sm:grid-cols-[repeat(2,minmax(0,1fr))]",
   );
   expect(screen.getByText("B")).toBeInTheDocument();
   expect(screen.getByText("builder")).toBeInTheDocument();

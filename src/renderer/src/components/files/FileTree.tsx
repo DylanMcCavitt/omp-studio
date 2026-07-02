@@ -134,7 +134,9 @@ function TreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
           <span className="w-3.5 shrink-0" aria-hidden />
         )}
         <NodeIcon isDir={isDir} expanded={expanded} />
-        <span className="min-w-0 flex-1 truncate" title={entry.path}>{entry.name}</span>
+        <span className="min-w-0 flex-1 truncate" title={entry.path}>
+          {entry.name}
+        </span>
       </button>
       {isDir && expanded && (
         <TreeChildren dir={entry.path} depth={depth} indent={indent} />

@@ -91,7 +91,9 @@ function StatRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3">
       <dt className="min-w-0 text-ink-muted">{label}</dt>
-      <dd className="shrink-0 truncate font-mono tabular-nums text-ink">{value}</dd>
+      <dd className="shrink-0 truncate font-mono tabular-nums text-ink">
+        {value}
+      </dd>
     </div>
   );
 }

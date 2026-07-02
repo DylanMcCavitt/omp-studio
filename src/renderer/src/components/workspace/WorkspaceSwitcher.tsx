@@ -167,7 +167,12 @@ export function WorkspaceSwitcher() {
             {gitInfo.branch && (
               <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink">
                 <GitBranch className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
-                <span className="min-w-0 flex-1 truncate" title={gitInfo.branch}>{gitInfo.branch}</span>
+                <span
+                  className="min-w-0 flex-1 truncate"
+                  title={gitInfo.branch}
+                >
+                  {gitInfo.branch}
+                </span>
               </span>
             )}
             {gitInfo.repo && gitInfo.worktreePath && (

@@ -171,7 +171,10 @@ function IssuesTab() {
             <span className="font-mono text-xs text-ink-faint">
               #{issue.number}
             </span>
-            <span className="min-w-0 flex-1 truncate text-sm text-ink" title={issue.title}>
+            <span
+              className="min-w-0 flex-1 truncate text-sm text-ink"
+              title={issue.title}
+            >
               {issue.title}
             </span>
             <Badge
@@ -236,7 +239,10 @@ function PrsTab() {
               <span className="font-mono text-xs text-ink-faint">
                 #{pr.number}
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm text-ink" title={pr.title}>
+              <span
+                className="min-w-0 flex-1 truncate text-sm text-ink"
+                title={pr.title}
+              >
                 {pr.title}
               </span>
               <Badge
@@ -344,8 +350,10 @@ export default function GitHub() {
                 className="flex min-w-0 max-w-full items-center gap-2 text-left"
               >
                 <GitBranch className="h-4 w-4 shrink-0 text-ink-muted" />
-                <span className="min-w-0 flex-1 truncate text-lg font-semibold text-ink hover:text-accent"
-              title={repo.nameWithOwner}>
+                <span
+                  className="min-w-0 flex-1 truncate text-lg font-semibold text-ink hover:text-accent"
+                  title={repo.nameWithOwner}
+                >
                   {repo.nameWithOwner}
                 </span>
                 <Badge variant={repo.isPrivate ? "warn" : "success"}>

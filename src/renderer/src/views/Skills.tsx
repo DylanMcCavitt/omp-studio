@@ -205,8 +205,10 @@ export default function Skills() {
                 <Card key={skill.path} className="flex flex-col gap-1.5 p-4">
                   <div className="flex items-start gap-2">
                     <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-                    <span className="min-w-0 flex-1 break-words font-mono text-sm text-ink [overflow-wrap:anywhere]"
-                      title={skill.name}>
+                    <span
+                      className="min-w-0 flex-1 break-words font-mono text-sm text-ink [overflow-wrap:anywhere]"
+                      title={skill.name}
+                    >
                       {skill.name}
                     </span>
                     <Badge
@@ -222,8 +224,10 @@ export default function Skills() {
                       {skill.source}
                     </Badge>
                   </div>
-                  <p className="line-clamp-2 break-words pl-6 text-xs text-ink-muted [overflow-wrap:anywhere]"
-                    title={skill.description}>
+                  <p
+                    className="line-clamp-2 break-words pl-6 text-xs text-ink-muted [overflow-wrap:anywhere]"
+                    title={skill.description}
+                  >
                     {skill.description}
                   </p>
                 </Card>

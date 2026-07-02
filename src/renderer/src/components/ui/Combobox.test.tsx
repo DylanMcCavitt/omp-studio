@@ -48,7 +48,11 @@ it("shows the selected option's label on the trigger", () => {
   render(<Harness value="b" />);
   const trigger = screen.getByRole("combobox", { name: "Fruit" });
   expect(trigger).toHaveTextContent("Banana");
-  expect(screen.getByText("Banana")).toHaveClass("min-w-0", "flex-1", "truncate");
+  expect(screen.getByText("Banana")).toHaveClass(
+    "min-w-0",
+    "flex-1",
+    "truncate",
+  );
   expect(screen.getByText("Banana")).toHaveAttribute("title", "Banana");
 });
 

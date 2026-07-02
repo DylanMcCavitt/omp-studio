@@ -515,7 +515,10 @@ function AgentUsagePanel({ rows }: { rows: OmpStatsBreakdown[] | undefined }) {
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: colors[index] }}
                     />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink" title={agentLabel(row)}>
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-ink"
+                      title={agentLabel(row)}
+                    >
                       {agentLabel(row)}
                     </span>
                   </div>
@@ -737,7 +740,10 @@ function RecentModelActivity({
               className="grid gap-2 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
             >
               <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-ink" title={modelLabel(row)}>
+                <div
+                  className="truncate text-sm font-medium text-ink"
+                  title={modelLabel(row)}
+                >
                   {modelLabel(row)}
                 </div>
                 <div className="mt-1 text-xs text-ink-muted">

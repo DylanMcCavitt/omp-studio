@@ -59,7 +59,9 @@ function ChooserOption({
     >
       <span className="mt-0.5 shrink-0 text-accent">{icon}</span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-ink">{title}</span>
+        <span className="block truncate text-sm font-medium text-ink">
+          {title}
+        </span>
         <span className="block line-clamp-2 text-xs text-ink-muted">
           {disabled && disabledReason ? disabledReason : description}
         </span>
@@ -138,8 +140,10 @@ export function AgentDropChooser({
         className="absolute inset-x-0 bottom-full z-40 mb-2 overflow-hidden rounded-xl border border-border-strong bg-bg-panel shadow-panel"
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink"
-            title={`${payload.name} (${payload.source})`}>
+          <span
+            className="min-w-0 flex-1 truncate text-sm font-medium text-ink"
+            title={`${payload.name} (${payload.source})`}
+          >
             Drop <span className="font-mono">{payload.name}</span>
             <span className="ml-1.5 text-xs font-normal text-ink-muted">
               {payload.source} agent

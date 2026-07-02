@@ -343,7 +343,12 @@ function PaneTitle({ pane }: { pane: PaneEntry }) {
   return (
     <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-medium text-ink-muted">
       <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate text-ink" title={pane.kind === "file" ? pane.path : title}>{title}</span>
+      <span
+        className="truncate text-ink"
+        title={pane.kind === "file" ? pane.path : title}
+      >
+        {title}
+      </span>
     </span>
   );
 }

@@ -102,8 +102,13 @@ export function Combobox({
             className,
           )}
         >
-          <span className={cn("min-w-0 flex-1 truncate", !selected && "text-ink-faint")}
-            title={triggerTitle}>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate",
+              !selected && "text-ink-faint",
+            )}
+            title={triggerTitle}
+          >
             {selected ? selected.label : placeholder}
           </span>
           <ChevronsUpDown className="h-4 w-4 shrink-0 text-ink-faint" />

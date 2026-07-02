@@ -55,8 +55,10 @@ export function TodoPanel({
         <div className="space-y-3">
           {phases.map((phase) => (
             <div key={phase.id}>
-              <div className="mb-1 min-w-0 truncate text-[0.7rem] font-medium uppercase tracking-wide text-ink-faint"
-                title={phase.name}>
+              <div
+                className="mb-1 min-w-0 truncate text-[0.7rem] font-medium uppercase tracking-wide text-ink-faint"
+                title={phase.name}
+              >
                 {phase.name}
               </div>
               <ul className="space-y-1">

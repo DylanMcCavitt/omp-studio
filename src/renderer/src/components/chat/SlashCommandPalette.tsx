@@ -139,14 +139,18 @@ export function SlashCommandPalette({
                 i === active ? "bg-bg-hover" : "hover:bg-bg-hover/60",
               )}
             >
-              <span className="min-w-0 max-w-[45%] truncate font-mono text-sm text-ink"
-                title={`/${commandName(command)}`}>
+              <span
+                className="min-w-0 max-w-[45%] truncate font-mono text-sm text-ink"
+                title={`/${commandName(command)}`}
+              >
                 /{commandName(command)}
               </span>
               {typeof command.description === "string" &&
                 command.description !== "" && (
-                  <span className="min-w-0 flex-1 truncate text-xs text-ink-muted"
-                    title={command.description}>
+                  <span
+                    className="min-w-0 flex-1 truncate text-xs text-ink-muted"
+                    title={command.description}
+                  >
                     {command.description}
                   </span>
                 )}

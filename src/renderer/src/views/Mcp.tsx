@@ -91,8 +91,11 @@ export default function Mcp() {
                     {server.authType && (
                       <Badge variant="warn">{server.authType}</Badge>
                     )}
-                    <Badge variant="muted" className="ml-auto max-w-full truncate"
-                    title={server.source}>
+                    <Badge
+                      variant="muted"
+                      className="ml-auto max-w-full truncate"
+                      title={server.source}
+                    >
                       {server.source}
                     </Badge>
                   </div>

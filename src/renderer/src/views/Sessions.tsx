@@ -91,7 +91,9 @@ function SessionDetail({
           </h2>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
             {summary.archived && <Badge variant="muted">Archived</Badge>}
-            <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">{summary.project}</span>
+            <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
+              {summary.project}
+            </span>
             <span>·</span>
             <span>{formatDateTime(summary.updatedAt)}</span>
             <span>·</span>
@@ -99,7 +101,13 @@ function SessionDetail({
             {summary.model && (
               <>
                 <span>·</span>
-                <Badge variant="muted" className="max-w-full truncate" title={summary.model}>{summary.model}</Badge>
+                <Badge
+                  variant="muted"
+                  className="max-w-full truncate"
+                  title={summary.model}
+                >
+                  {summary.model}
+                </Badge>
               </>
             )}
           </div>
@@ -397,7 +405,13 @@ export default function Sessions() {
                         {s.model && (
                           <>
                             <span>·</span>
-                            <Badge variant="muted" className="max-w-[12rem] truncate" title={s.model}>{s.model}</Badge>
+                            <Badge
+                              variant="muted"
+                              className="max-w-[12rem] truncate"
+                              title={s.model}
+                            >
+                              {s.model}
+                            </Badge>
                           </>
                         )}
                         <span>·</span>
