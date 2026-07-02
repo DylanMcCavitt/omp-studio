@@ -1,12 +1,12 @@
 # AGE-### — slice title
 
-This PR belongs to the OMP Native Zed track. The branch name carries the Linear issue id so Linear links the PR and merge closes the issue through the GitHub bridge.
+This PR belongs to the OMP Studio app. The branch name carries the Linear issue id so Linear links the PR and merge closes the issue through the GitHub bridge.
 
 Fixes AGE-###
 
 ## Summary
 
-One short paragraph: what changed, why it belongs in this slice, and which repo it touches (`omp-studio` planning repo or Zed fork).
+One short paragraph: what changed and why it belongs in this slice.
 
 ## Changes
 

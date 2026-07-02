@@ -41,6 +41,8 @@ Use real `dmcc` states only.
 
 These are the labels in active use on the OMP Studio project. Prefer them; do not invent parallel names.
 
+Excluded workspace labels: `symphony` belongs to the separate `OMP Native Zed` project/Symphony-runnable workflow, not OMP Studio. Do not apply it to OMP Studio issues or pull `symphony` issues into this repo unless the issue is explicitly in the `OMP Studio` Linear project.
+
 ### Area
 
 | Label | Use |
