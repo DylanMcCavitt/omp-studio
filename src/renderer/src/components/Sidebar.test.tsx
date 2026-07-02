@@ -85,11 +85,10 @@ it("switches to the Files tree and hides the session list", async () => {
   expect(
     await screen.findByText(/no files in this workspace/i),
   ).toBeInTheDocument();
-  // The session list (and its New chat action) are gone in Files mode.
+  // The session list is gone in Files mode; New chat stays available from the
+  // persistent tool row (AGE-807).
   expect(screen.queryByText("Alpha")).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("button", { name: "New chat" }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
 });
 
 it("restores the session list when toggled back to Chats", async () => {

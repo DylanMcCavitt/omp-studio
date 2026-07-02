@@ -1,15 +1,17 @@
-// The session list for the left sidebar's Chats surface (AGE-632). Lists every
-// open session from the normalized store, surfaces each one's headline status
-// (incl. the needs-approval / needs-input badge derived from its uiRequests
-// queue), and lets the user switch between them (keeping all children alive) or
-// close one (disposing that child only — transcript untouched). Selecting a row
-// opens it in the center pane via the active-session wiring.
+// The session list for the left sidebar's Chats surface (AGE-632, grouped by
+// workspace in AGE-807). Every workspace with at least one open or hibernated
+// session renders as its own section — the selected workspace's group first and
+// accent-marked, so all active projects are visible at once instead of hiding
+// behind the switcher dropdown. Clicking a non-selected group's header points
+// new chats at that workspace (same semantics as picking it in the switcher).
 //
-// Persisted-but-not-live sessions (restored on boot, D3r) render below the live
-// rows as muted "hibernated" rows: clicking one resumes it (hydrating its
-// transcript from JSONL), and a failed resume becomes a disabled error row with
-// Retry / Remove affordances. The "New chat" action lives in the sidebar above
-// this list, not in the list itself.
+// Rows surface each session's headline status (incl. the needs-approval /
+// needs-input badge derived from its uiRequests queue) and let the user switch
+// between them (keeping all children alive) or close one (disposing that child
+// only — transcript untouched). Persisted-but-not-live sessions render as muted
+// "hibernated" rows inside their workspace group: clicking one resumes it, and
+// a failed resume becomes a disabled error row with Retry / Remove affordances.
+// The "New chat" action lives in the sidebar tool row above this list.
 
 import type { OpenSessionDescriptor } from "@shared/ipc";
 import { MessageSquarePlus, Moon, X } from "lucide-react";
@@ -26,7 +28,12 @@ import { Badge, type BadgeVariant, EmptyState, Spinner } from "@/components/ui";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatRelativeTime } from "@/lib/format";
-import { workspaceColorForCwd, workspaceColorValue } from "@/lib/workspaces";
+import {
+  projectLabel,
+  workspaceColorForCwd,
+  workspaceColorValue,
+} from "@/lib/workspaces";
+import { useAppStore } from "@/store/app";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
 import {
   deriveSessionBadgeKind,
@@ -119,22 +126,103 @@ interface ListItemNav {
   onFocus: () => void;
 }
 
+/** One workspace section of the list: its identity plus member session ids. */
+interface WorkspaceGroup {
+  /** Grouping key — the members' cwd; "" collects sessions with no cwd. */
+  cwd: string;
+  label: string;
+  liveIds: string[];
+  hibernatedIds: string[];
+}
+
+/**
+ * Group live + hibernated session ids by their workspace cwd. The selected
+ * workspace's group sorts first (it is the sidebar's anchor context); the rest
+ * follow in label order; cwd-less sessions collect under "Other" last.
+ */
+export function groupSessionsByWorkspace(
+  liveCwdById: Record<string, string>,
+  hibernatedCwdById: Record<string, string>,
+  selectedProject: string | null,
+  labelFor: (cwd: string) => string,
+): WorkspaceGroup[] {
+  const groups = new Map<string, WorkspaceGroup>();
+  const groupFor = (cwd: string): WorkspaceGroup => {
+    let g = groups.get(cwd);
+    if (!g) {
+      g = {
+        cwd,
+        label: cwd === "" ? "Other" : labelFor(cwd),
+        liveIds: [],
+        hibernatedIds: [],
+      };
+      groups.set(cwd, g);
+    }
+    return g;
+  };
+  for (const [id, cwd] of Object.entries(liveCwdById)) {
+    groupFor(cwd).liveIds.push(id);
+  }
+  for (const [id, cwd] of Object.entries(hibernatedCwdById)) {
+    groupFor(cwd).hibernatedIds.push(id);
+  }
+  return [...groups.values()].sort((a, b) => {
+    if (a.cwd === selectedProject) return -1;
+    if (b.cwd === selectedProject) return 1;
+    if (a.cwd === "") return 1;
+    if (b.cwd === "") return -1;
+    return a.label.localeCompare(b.label);
+  });
+}
+
 export function SessionList() {
-  // Subscribe shallowly to the id lists so the list container re-renders only
-  // when sessions open/close — each row subscribes to its own slice for live
-  // status updates (including background, non-active sessions).
-  const ids = useChatStore(useShallow((s) => Object.keys(s.openSessions)));
-  const hibernatedIds = useChatStore(
-    useShallow((s) => Object.keys(s.hibernatedSessions)),
+  // Subscribe shallowly to id→cwd maps so the list container re-renders only
+  // when sessions open/close or move workspace — each row subscribes to its
+  // own slice for live status updates (including background sessions).
+  const liveCwdById = useChatStore(
+    useShallow((s) =>
+      Object.fromEntries(
+        Object.entries(s.openSessions).map(([id, v]) => [id, v.cwd ?? ""]),
+      ),
+    ),
+  );
+  const hibernatedCwdById = useChatStore(
+    useShallow((s) =>
+      Object.fromEntries(
+        Object.entries(s.hibernatedSessions).map(([id, v]) => [
+          id,
+          v.descriptor.cwd ?? "",
+        ]),
+      ),
+    ),
   );
   const activeSessionId = useChatStore((s) => s.activeSessionId);
-  const total = ids.length + hibernatedIds.length;
+  const selectedProject = useAppStore((s) => s.selectedProject);
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
+  const total =
+    Object.keys(liveCwdById).length + Object.keys(hibernatedCwdById).length;
+
+  // AGE-807 — every workspace with sessions is visible as its own section.
+  const groups = useMemo(
+    () =>
+      groupSessionsByWorkspace(
+        liveCwdById,
+        hibernatedCwdById,
+        selectedProject,
+        (cwd) =>
+          workspaces?.find((w) => w.cwd === cwd)?.label ?? projectLabel(cwd),
+      ),
+    [liveCwdById, hibernatedCwdById, selectedProject, workspaces],
+  );
 
   // Roving tabindex: the list is one Tab stop and Up/Down move focus between
-  // rows (Enter/Space activate via the native buttons). The ordered id list is
-  // the live rows, then the hibernated rows.
+  // rows (Enter/Space activate via the native buttons). The ordered id list
+  // follows the rendered order: per group, live rows then hibernated rows.
   const listRef = useRef<HTMLElement>(null);
-  const order = useMemo(() => [...ids, ...hibernatedIds], [ids, hibernatedIds]);
+  const order = useMemo(
+    () => groups.flatMap((g) => [...g.liveIds, ...g.hibernatedIds]),
+    [groups],
+  );
   const [rovingId, setRovingId] = useState<string>(activeSessionId ?? "");
 
   // Keep the tab stop valid as rows open/close; default it to the active session.
@@ -181,6 +269,11 @@ export function SessionList() {
     onFocus: () => setRovingId(id),
   });
 
+  // Headers are chrome, not content: with one group in the selected workspace
+  // the context block above already names it, so the header row is skipped.
+  const showHeaders =
+    groups.length > 1 || (groups[0] && groups[0].cwd !== selectedProject);
+
   return (
     <aside
       ref={listRef}
@@ -195,31 +288,89 @@ export function SessionList() {
             hint="Start a chat to spawn a session — it will appear here so you can switch between live agents."
           />
         ) : (
-          <>
-            {ids.map((id) => (
-              <SessionListRow
-                key={id}
-                sessionId={id}
-                active={id === activeSessionId}
-                nav={navProps(id)}
-              />
-            ))}
-            {hibernatedIds.length > 0 && (
-              <p
-                className="px-1 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint"
-                aria-hidden="true"
-              >
-                Hibernated
-              </p>
-            )}
-            {hibernatedIds.map((id) => (
-              <HibernatedListRow key={id} sessionId={id} nav={navProps(id)} />
-            ))}
-          </>
+          groups.map((group) => (
+            <section
+              key={group.cwd || "__other__"}
+              aria-label={`${group.label} sessions`}
+            >
+              {showHeaders && (
+                <WorkspaceGroupHeader
+                  group={group}
+                  selected={group.cwd === selectedProject}
+                />
+              )}
+              {group.liveIds.map((id) => (
+                <SessionListRow
+                  key={id}
+                  sessionId={id}
+                  active={id === activeSessionId}
+                  nav={navProps(id)}
+                />
+              ))}
+              {group.hibernatedIds.map((id) => (
+                <HibernatedListRow key={id} sessionId={id} nav={navProps(id)} />
+              ))}
+            </section>
+          ))
         )}
       </div>
       {total > 0 && <SessionStatusLegend />}
     </aside>
+  );
+}
+
+/**
+ * A workspace section header (AGE-807). The selected workspace's header is a
+ * static marker; any other workspace's header is a button that points new
+ * chats at that workspace — the same semantics as picking it in the switcher.
+ */
+function WorkspaceGroupHeader({
+  group,
+  selected,
+}: {
+  group: WorkspaceGroup;
+  selected: boolean;
+}) {
+  const setSelectedProject = useAppStore((s) => s.setSelectedProject);
+  const recordWorkspace = useSettingsStore((s) => s.recordWorkspace);
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
+  const color = group.cwd
+    ? workspaceColorForCwd(workspaces, group.cwd)
+    : undefined;
+
+  const body = (
+    <>
+      <WorkspaceColorDot color={color} className="h-2 w-2" />
+      <span className="truncate">{group.label}</span>
+    </>
+  );
+  const base =
+    "flex w-full min-w-0 items-center gap-1.5 px-1 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide";
+
+  if (selected || !group.cwd) {
+    return (
+      <p className={cn(base, selected ? "text-ink" : "text-ink-faint")}>
+        {body}
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      aria-label={`Switch to ${group.label}`}
+      title={`Point new chats at ${group.label}`}
+      onClick={() => {
+        setSelectedProject(group.cwd);
+        void recordWorkspace(group.cwd);
+      }}
+      className={cn(
+        base,
+        "rounded text-ink-faint transition-colors hover:text-ink",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+      )}
+    >
+      {body}
+    </button>
   );
 }
 
@@ -310,7 +461,7 @@ function SessionListRow({
         aria-current={active ? "true" : undefined}
         onClick={() => setActiveSession(sessionId)}
         className={cn(
-          "flex w-full gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
+          "flex w-full gap-2.5 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
           active
             ? "border-border-subtle bg-bg-hover"
@@ -323,25 +474,25 @@ function SessionListRow({
             <span className="truncate">{rowTitle(session)}</span>
           </span>
 
-          <span className="mt-0.5 block truncate font-mono text-xs text-ink-muted">
-            {modelLabel(session)}
-          </span>
-
-          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-faint">
+          {/* AGE-807 density: one mono meta line — model · live/recency ·
+              context — instead of a dedicated model row. */}
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-ink-faint">
+            <span className="truncate text-ink-muted">
+              {modelLabel(session)}
+            </span>
             {status === "running" ? (
               <span
-                className="font-mono lowercase"
+                className="lowercase"
                 style={colorValue ? { color: colorValue } : undefined}
               >
                 live
               </span>
             ) : (
               session.lastActivityAt > 0 && (
-                <span className="font-mono">
-                  {formatRelativeTime(session.lastActivityAt)}
-                </span>
+                <span>{formatRelativeTime(session.lastActivityAt)}</span>
               )
             )}
+            {percent !== null && <span>{percent}%</span>}
             {showStatusBadge && (
               <SessionStatusBadge
                 status={session.status}
@@ -349,7 +500,6 @@ function SessionListRow({
                 isCompacting={session.isCompacting}
               />
             )}
-            {percent !== null && <span>{percent}% context</span>}
             {session.queuedCount > 0 && (
               <Badge variant="muted">{session.queuedCount} queued</Badge>
             )}

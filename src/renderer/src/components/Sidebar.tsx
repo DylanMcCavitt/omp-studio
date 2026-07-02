@@ -1,9 +1,10 @@
-// The workspace-centric left sidebar (AGE-632/634). Top to bottom: the workspace
-// switcher, a segmented Chats | Files toggle, then the active surface. Chats =
-// a New chat action + the live/hibernated session list (selecting a row opens
-// it in the center). Files = the workspace file tree (AGE-634), whose file
-// clicks open a center editor tab. The flat nav list that used to live here
-// moved to the right icon rail (AGE-630).
+// The workspace-centric left sidebar (AGE-632/634, minimal pass AGE-807). Top
+// to bottom: the workspace context block (the switcher trigger — repo, branch,
+// worktree; app branding lives in the titlebar, not here), one slim tool row
+// (Chats | Files toggle + New chat), then the active surface. Chats = the
+// session list grouped by workspace (every project with open or hibernated
+// sessions is visible — AGE-807); Files = the workspace file tree (AGE-634).
+// The panel dock collapses to a one-line counter strip at the bottom.
 
 import {
   FileText,
@@ -14,7 +15,7 @@ import {
 import { ChatPanelDock } from "@/components/chat/ChatPanelDock";
 import { SessionList } from "@/components/chat/SessionList";
 import { FileTree } from "@/components/files/FileTree";
-import { Button } from "@/components/ui";
+import { IconButton } from "@/components/ui";
 import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher";
 import { cn } from "@/lib/cn";
 import { useChatStore } from "@/store/chat";
@@ -27,41 +28,24 @@ export function Sidebar() {
 
   return (
     <nav className="no-drag flex h-full w-full min-w-0 flex-col border-r border-border bg-bg-raised">
-      <div className="flex items-center gap-2.5 px-3 pb-3 pt-2">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-bg shadow-glow">
-          ω
-        </div>
-        <div className="flex min-w-0 flex-col leading-tight">
-          <span className="truncate text-sm font-semibold text-ink">
-            OMP Studio
-          </span>
-          <span className="truncate text-xs text-ink-faint">
-            Oh My Pi cockpit
-          </span>
-        </div>
-      </div>
-
-      <div className="px-3 pb-3">
+      <div className="px-3 pb-2 pt-2">
         <WorkspaceSwitcher />
       </div>
 
-      <div className="px-3 pb-2">
+      <div className="flex items-center gap-2 px-3 pb-2">
         <SidebarModeToggle mode={mode} onChange={setMode} />
+        <IconButton
+          label="New chat"
+          onClick={newChat}
+          className="ml-auto h-7 w-7"
+        >
+          <MessageSquarePlus className="h-4 w-4" />
+        </IconButton>
       </div>
 
-      {mode === "chats" ? <ChatsPane onNewChat={newChat} /> : <FileTree />}
+      {mode === "chats" ? <SessionList /> : <FileTree />}
 
       <ChatPanelDock />
-
-      <div className="flex items-center gap-2 border-t border-border-subtle px-3 py-3">
-        {/* Brand/logo placeholder — reserve this footer slot for the omp mark;
-            swap the dashed box for the real asset when it lands. */}
-        <span
-          aria-hidden="true"
-          className="h-5 w-5 shrink-0 rounded-md border border-dashed border-border-strong"
-        />
-        <span className="text-xs text-ink-faint">omp harness</span>
-      </div>
     </nav>
   );
 }
@@ -102,24 +86,5 @@ function SidebarModeToggle({
         );
       })}
     </div>
-  );
-}
-
-function ChatsPane({ onNewChat }: { onNewChat: () => void }) {
-  return (
-    <>
-      <div className="px-3 pb-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onNewChat}
-          className="w-full"
-        >
-          <MessageSquarePlus className="h-4 w-4" />
-          New chat
-        </Button>
-      </div>
-      <SessionList />
-    </>
   );
 }

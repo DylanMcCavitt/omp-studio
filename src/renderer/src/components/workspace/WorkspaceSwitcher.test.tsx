@@ -51,7 +51,7 @@ it("shows no swatch in the trigger when the workspace has no color", () => {
   expect(trigger.querySelector("span[style]")).toBeNull();
 });
 
-it("shows active git branch and worktree path in the trigger", async () => {
+it("shows active git branch and worktree chip in the trigger (AGE-807)", async () => {
   seedWorkspace("blue");
   vi.mocked(window.omp.changes.workspaceInfo).mockResolvedValue({
     repo: true,
@@ -61,9 +61,10 @@ it("shows active git branch and worktree path in the trigger", async () => {
 
   render(<WorkspaceSwitcher />);
 
-  expect(
-    await screen.findByText(/feature\/alpha .*\/private\/tmp\/omp-wt\/age-741/),
-  ).toBeInTheDocument();
+  // The branch is its own prominent line; the worktree renders as a compact
+  // chip carrying the toplevel's last two path segments.
+  expect(await screen.findByText("feature/alpha")).toBeInTheDocument();
+  expect(screen.getByText("omp-wt/age-741")).toBeInTheDocument();
   expect(window.omp.changes.workspaceInfo).toHaveBeenCalledWith("/p/alpha");
 });
 
@@ -82,11 +83,11 @@ it("refreshes git metadata when the window regains focus", async () => {
     });
 
   render(<WorkspaceSwitcher />);
-  await screen.findByText(/main .*\/p\/alpha/);
+  await screen.findByText("main");
 
   window.dispatchEvent(new Event("focus"));
 
-  await screen.findByText(/feature\/focus .*\/p\/alpha/);
+  await screen.findByText("feature/focus");
 });
 
 it("clears stale git metadata while a new workspace is loading", async () => {
@@ -126,7 +127,7 @@ it("clears stale git metadata while a new workspace is loading", async () => {
   });
 
   render(<WorkspaceSwitcher />);
-  await screen.findByText(/feature\/alpha .*\/p\/alpha/);
+  await screen.findByText("feature/alpha");
 
   useAppStore.setState({ selectedProject: "/p/beta" } as never);
 

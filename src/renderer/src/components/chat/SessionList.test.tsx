@@ -12,6 +12,7 @@
 import type { ChatUiRequestEvent, WorkspaceColorKey } from "@shared/ipc";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useAppStore } from "@/store/app";
 import { type LiveSessionState, useChatStore } from "@/store/chat";
 import { createSession } from "@/store/session-reducer";
 import { useSettingsStore } from "@/store/settings";
@@ -26,6 +27,7 @@ beforeEach(() => {
     { ...PRISTINE, openSessions: {}, activeSessionId: null },
     true,
   );
+  useAppStore.setState({ selectedProject: null } as never);
 });
 
 function seed(
@@ -58,9 +60,10 @@ it("renders one row per open session with its title", () => {
     "a",
   );
   render(<SessionList />);
-  // Title precedence: sessionName, else basename(cwd).
-  expect(screen.getByText("Alpha")).toBeInTheDocument();
-  expect(screen.getByText("beta")).toBeInTheDocument();
+  // Title precedence: sessionName, else basename(cwd). The row's workspace
+  // group header (AGE-807) may repeat the basename, so assert on the row.
+  expect(railItem("a")).toHaveTextContent("Alpha");
+  expect(railItem("b")).toHaveTextContent("beta");
 });
 
 it("switches the active session when a row is clicked", async () => {
@@ -369,4 +372,75 @@ it("renders the legend live fill as a static (non-pulsing) dot", () => {
 it("hides the legend when no sessions are open", () => {
   render(<SessionList />);
   expect(screen.queryByLabelText("Session status legend")).toBeNull();
+});
+
+// ---------------------------------------------------------------------------
+// AGE-807: the list groups sessions by workspace.
+// ---------------------------------------------------------------------------
+
+it("groups sessions under every workspace that has them, selected first", () => {
+  useAppStore.setState({ selectedProject: "/p/alpha" } as never);
+  seed(
+    {
+      a: createSession("a", { sessionName: "One", cwd: "/p/alpha" }),
+      b: createSession("b", { sessionName: "Two", cwd: "/p/zeta" }),
+      c: createSession("c", { sessionName: "Three", cwd: "/p/beta" }),
+    },
+    "a",
+  );
+  render(<SessionList />);
+
+  // Every workspace with sessions renders as a section; the selected
+  // workspace's group comes first, the rest follow in label order.
+  const sections = screen.getAllByRole("region");
+  expect(sections.map((s) => s.getAttribute("aria-label"))).toEqual([
+    "alpha sessions",
+    "beta sessions",
+    "zeta sessions",
+  ]);
+  // The selected group's header is a static marker, not a switch button.
+  expect(
+    screen.queryByRole("button", { name: "Switch to alpha" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Switch to zeta" }),
+  ).toBeInTheDocument();
+});
+
+it("clicking a non-selected group header points new chats at that workspace", async () => {
+  const user = userEvent.setup();
+  useAppStore.setState({ selectedProject: "/p/alpha" } as never);
+  const recordWorkspace = vi.fn();
+  useSettingsStore.setState({ recordWorkspace } as never);
+  seed(
+    {
+      a: createSession("a", { sessionName: "One", cwd: "/p/alpha" }),
+      b: createSession("b", { sessionName: "Two", cwd: "/p/zeta" }),
+    },
+    "a",
+  );
+  render(<SessionList />);
+
+  await user.click(screen.getByRole("button", { name: "Switch to zeta" }));
+
+  expect(useAppStore.getState().selectedProject).toBe("/p/zeta");
+  expect(recordWorkspace).toHaveBeenCalledWith("/p/zeta");
+});
+
+it("hides group headers when only the selected workspace has sessions", () => {
+  useAppStore.setState({ selectedProject: "/p/alpha" } as never);
+  seed(
+    {
+      a: createSession("a", { sessionName: "One", cwd: "/p/alpha" }),
+      b: createSession("b", { sessionName: "Two", cwd: "/p/alpha" }),
+    },
+    "a",
+  );
+  render(<SessionList />);
+
+  // One group in the selected workspace: the context block above the list
+  // already names it, so no header chrome is added.
+  expect(screen.queryByText("alpha")).not.toBeInTheDocument();
+  expect(railItem("a")).toHaveTextContent("One");
+  expect(railItem("b")).toHaveTextContent("Two");
 });
