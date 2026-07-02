@@ -118,7 +118,7 @@ export default function Changes() {
                   className="flex w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-bg-hover"
                 >
                   <FileDiffIcon className="h-4 w-4 shrink-0 text-ink-muted" />
-                  <span className="min-w-0 flex-1 truncate font-mono text-sm text-ink">
+                  <span className="min-w-0 flex-1 truncate font-mono text-sm text-ink" title={file.relPath}>
                     {file.relPath}
                   </span>
                   <Badge variant={STATUS_VARIANT[file.status]}>
@@ -179,7 +179,7 @@ function FileDiffView({
         <IconButton label="All changes" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
         </IconButton>
-        <span className="min-w-0 flex-1 truncate font-mono text-sm text-ink">
+        <span className="min-w-0 flex-1 truncate font-mono text-sm text-ink" title={relPath}>
           {relPath}
         </span>
       </div>

@@ -343,7 +343,7 @@ function PaneTitle({ pane }: { pane: PaneEntry }) {
   return (
     <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs font-medium text-ink-muted">
       <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span className="truncate text-ink">{title}</span>
+      <span className="truncate text-ink" title={pane.kind === "file" ? pane.path : title}>{title}</span>
     </span>
   );
 }
@@ -505,7 +505,7 @@ function FileTabButton({
         className={cn(TAB_BASE, "pr-7", active ? TAB_ACTIVE : TAB_INACTIVE)}
       >
         <FileText size={14} className="shrink-0 text-ink-faint" />
-        <span className="max-w-[11rem] truncate">{name}</span>
+        <span className="max-w-[11rem] min-w-0 truncate">{name}</span>
         {dirty && (
           <span
             role="img"

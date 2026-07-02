@@ -52,7 +52,7 @@ export function Collapsible({
               open && "rotate-90",
             )}
           />
-          <span className="truncate">{title}</span>
+          <span className="min-w-0 flex-1 truncate">{title}</span>
         </button>
         {actions && (
           <div className="flex shrink-0 items-center gap-1">{actions}</div>

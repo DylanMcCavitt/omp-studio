@@ -45,12 +45,11 @@ export function FileTree() {
       <div className="flex items-center gap-1.5 px-3 pb-1">
         <FolderOpen size={14} className="shrink-0 text-ink-faint" />
         <span
-          className="truncate text-xs font-semibold uppercase tracking-wide text-ink-muted"
+          className="min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide text-ink-muted"
           title={selectedProject ?? undefined}
         >
           {rootLabel}
         </span>
-        <div className="flex-1" />
         <IconButton
           label="Refresh files"
           onClick={() => void refreshTree()}
@@ -135,7 +134,7 @@ function TreeNode({ entry, depth }: { entry: FileEntry; depth: number }) {
           <span className="w-3.5 shrink-0" aria-hidden />
         )}
         <NodeIcon isDir={isDir} expanded={expanded} />
-        <span className="truncate">{entry.name}</span>
+        <span className="min-w-0 flex-1 truncate" title={entry.path}>{entry.name}</span>
       </button>
       {isDir && expanded && (
         <TreeChildren dir={entry.path} depth={depth} indent={indent} />

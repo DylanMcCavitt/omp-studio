@@ -165,14 +165,14 @@ export function WorkspaceSwitcher() {
               <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
             </span>
             {gitInfo.branch && (
-              <span className="mt-1 flex items-center gap-1.5 text-[13px] font-semibold text-ink">
+              <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-ink">
                 <GitBranch className="h-3.5 w-3.5 shrink-0 text-ink-muted" />
-                <span className="truncate">{gitInfo.branch}</span>
+                <span className="min-w-0 flex-1 truncate" title={gitInfo.branch}>{gitInfo.branch}</span>
               </span>
             )}
             {gitInfo.repo && gitInfo.worktreePath && (
               <span className="mt-1.5 inline-flex max-w-full items-center rounded-md border border-border-subtle bg-bg-panel px-1.5 py-0.5 font-mono text-[10.5px] text-ink-faint">
-                <span className="truncate">
+                <span className="min-w-0 truncate" title={gitInfo.worktreePath}>
                   {worktreeChipLabel(gitInfo.worktreePath)}
                 </span>
               </span>

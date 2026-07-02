@@ -104,7 +104,7 @@ export function SlashCommandPalette({
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           onBlur={close}
-          className="w-full bg-transparent py-2.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-ink placeholder:text-ink-faint focus:outline-none"
         />
       </div>
 
@@ -135,16 +135,18 @@ export function SlashCommandPalette({
               onClick={() => select(command)}
               onMouseMove={() => setActiveIndex(i)}
               className={cn(
-                "flex w-full items-baseline gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
+                "flex w-full min-w-0 items-baseline gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
                 i === active ? "bg-bg-hover" : "hover:bg-bg-hover/60",
               )}
             >
-              <span className="shrink-0 font-mono text-sm text-ink">
+              <span className="min-w-0 max-w-[45%] truncate font-mono text-sm text-ink"
+                title={`/${commandName(command)}`}>
                 /{commandName(command)}
               </span>
               {typeof command.description === "string" &&
                 command.description !== "" && (
-                  <span className="truncate text-xs text-ink-muted">
+                  <span className="min-w-0 flex-1 truncate text-xs text-ink-muted"
+                    title={command.description}>
                     {command.description}
                   </span>
                 )}

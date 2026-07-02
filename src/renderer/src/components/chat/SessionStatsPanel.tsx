@@ -89,9 +89,9 @@ function formatCompactTokens(tokens: number): string {
 
 function StatRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <dt className="text-ink-muted">{label}</dt>
-      <dd className="font-mono tabular-nums text-ink">{value}</dd>
+    <div className="flex min-w-0 items-center justify-between gap-3">
+      <dt className="min-w-0 text-ink-muted">{label}</dt>
+      <dd className="shrink-0 truncate font-mono tabular-nums text-ink">{value}</dd>
     </div>
   );
 }
@@ -140,7 +140,7 @@ export function ContextMeterChip({ sessionId }: { sessionId: string }) {
   if (!usage && tokens == null && cost == null) return null;
 
   return (
-    <div className="ml-auto flex items-center gap-2 text-xs text-ink-faint">
+    <div className="ml-auto hidden shrink-0 items-center gap-2 text-xs text-ink-faint sm:flex">
       {usage && (
         <span
           className="flex items-center gap-1.5"

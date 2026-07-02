@@ -64,7 +64,7 @@ export default function Mcp() {
             }
           />
         ) : (
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[repeat(2,minmax(0,1fr))]">
             {servers.map((server) => {
               const target =
                 server.url ??
@@ -84,19 +84,20 @@ export default function Mcp() {
                       )}
                       title={server.enabled ? "enabled" : "disabled"}
                     />
-                    <span className="break-words font-mono text-sm text-ink">
+                    <span className="break-words font-mono text-sm text-ink [overflow-wrap:anywhere]">
                       {server.name}
                     </span>
                     <Badge variant="accent">{server.type}</Badge>
                     {server.authType && (
                       <Badge variant="warn">{server.authType}</Badge>
                     )}
-                    <Badge variant="muted" className="ml-auto">
+                    <Badge variant="muted" className="ml-auto max-w-full truncate"
+                    title={server.source}>
                       {server.source}
                     </Badge>
                   </div>
                   {target && (
-                    <code className="break-words font-mono text-xs text-ink-muted">
+                    <code className="break-words font-mono text-xs text-ink-muted [overflow-wrap:anywhere]">
                       {target}
                     </code>
                   )}

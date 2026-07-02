@@ -13,6 +13,7 @@ export interface BadgeProps {
   children?: ReactNode;
   variant?: BadgeVariant;
   className?: string;
+  title?: string;
 }
 
 const VARIANTS: Record<BadgeVariant, string> = {
@@ -28,14 +29,16 @@ export function Badge({
   children,
   variant = "default",
   className,
+  title,
 }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium leading-none",
+        "inline-flex max-w-full shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium leading-none",
         VARIANTS[variant],
         className,
       )}
+      title={title}
     >
       {children}
     </span>

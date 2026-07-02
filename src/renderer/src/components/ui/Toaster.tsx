@@ -48,11 +48,11 @@ function ToastItem({
     >
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", ACCENT[toast.kind])} />
       <div className="min-w-0 flex-1">
-        <p className="break-words text-sm font-medium text-ink">
+        <p className="break-words text-sm font-medium text-ink [overflow-wrap:anywhere]">
           {toast.title}
         </p>
         {toast.detail && (
-          <p className="mt-0.5 break-words text-xs text-ink-muted">
+          <p className="mt-0.5 break-words text-xs text-ink-muted [overflow-wrap:anywhere]">
             {toast.detail}
           </p>
         )}
@@ -63,7 +63,8 @@ function ToastItem({
               toast.action?.onClick();
               onDismiss();
             }}
-            className="mt-1.5 rounded text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            className="mt-1.5 max-w-full truncate rounded text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            title={toast.action.label}
           >
             {toast.action.label}
           </button>
@@ -89,7 +90,7 @@ export function Toaster() {
     <section
       aria-live="polite"
       aria-label="Notifications"
-      className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2"
+      className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[min(20rem,calc(100vw-2rem))] flex-col gap-2"
     >
       {toasts.map((t) => (
         <ToastItem key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />

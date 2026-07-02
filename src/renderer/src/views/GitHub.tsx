@@ -166,18 +166,20 @@ function IssuesTab() {
           onClick={() => window.omp.openExternal(issue.url)}
           className={ROW}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <CircleDot className="h-3.5 w-3.5 shrink-0 text-success" />
             <span className="font-mono text-xs text-ink-faint">
               #{issue.number}
             </span>
-            <span className="flex-1 truncate text-sm text-ink">
+            <span className="min-w-0 flex-1 truncate text-sm text-ink" title={issue.title}>
               {issue.title}
             </span>
             <Badge
               variant={
                 issue.state.toLowerCase() === "open" ? "success" : "muted"
               }
+              className="max-w-[8rem] shrink-0 truncate"
+              title={issue.state}
             >
               {issue.state.toLowerCase()}
             </Badge>
@@ -229,12 +231,12 @@ function PrsTab() {
             onClick={() => window.omp.openExternal(pr.url)}
             className={ROW}
           >
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-accent" />
               <span className="font-mono text-xs text-ink-faint">
                 #{pr.number}
               </span>
-              <span className="flex-1 truncate text-sm text-ink">
+              <span className="min-w-0 flex-1 truncate text-sm text-ink" title={pr.title}>
                 {pr.title}
               </span>
               <Badge
@@ -247,13 +249,17 @@ function PrsTab() {
                         ? "accent"
                         : "muted"
                 }
+                className="shrink-0"
               >
                 {pr.isDraft ? "draft" : state}
               </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2 pl-6 text-xs text-ink-faint">
               {pr.headRefName && pr.baseRefName && (
-                <span className="font-mono">
+                <span
+                  className="break-words font-mono [overflow-wrap:anywhere]"
+                  title={`${pr.headRefName} -> ${pr.baseRefName}`}
+                >
                   {pr.headRefName} → {pr.baseRefName}
                 </span>
               )}
@@ -335,10 +341,11 @@ export default function GitHub() {
             <>
               <button
                 onClick={() => window.omp.openExternal(repo.url)}
-                className="flex items-center gap-2 text-left"
+                className="flex min-w-0 max-w-full items-center gap-2 text-left"
               >
                 <GitBranch className="h-4 w-4 shrink-0 text-ink-muted" />
-                <span className="truncate text-lg font-semibold text-ink hover:text-accent">
+                <span className="min-w-0 flex-1 truncate text-lg font-semibold text-ink hover:text-accent"
+              title={repo.nameWithOwner}>
                   {repo.nameWithOwner}
                 </span>
                 <Badge variant={repo.isPrivate ? "warn" : "success"}>

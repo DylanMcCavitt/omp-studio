@@ -86,12 +86,12 @@ function SessionDetail({
     <div className="p-6">
       <div className="mb-4 flex items-start justify-between gap-3 border-b border-border pb-3">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-ink">
+          <h2 className="break-words text-base font-semibold text-ink [overflow-wrap:anywhere]">
             {summary.title || "(untitled)"}
           </h2>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
             {summary.archived && <Badge variant="muted">Archived</Badge>}
-            <span>{summary.project}</span>
+            <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">{summary.project}</span>
             <span>·</span>
             <span>{formatDateTime(summary.updatedAt)}</span>
             <span>·</span>
@@ -99,7 +99,7 @@ function SessionDetail({
             {summary.model && (
               <>
                 <span>·</span>
-                <Badge variant="muted">{summary.model}</Badge>
+                <Badge variant="muted" className="max-w-full truncate" title={summary.model}>{summary.model}</Badge>
               </>
             )}
           </div>
@@ -310,7 +310,7 @@ export default function Sessions() {
                         <Badge variant="muted">Archived</Badge>
                       )}
                     </div>
-                    <div className="break-words px-3 pb-1 text-xs text-ink-muted">
+                    <div className="break-words px-3 pb-1 text-xs text-ink-muted [overflow-wrap:anywhere]">
                       {group.session.project} ·{" "}
                       {formatRelativeTime(group.session.updatedAt)}
                     </div>
@@ -386,7 +386,7 @@ export default function Sessions() {
                           "border-border-strong bg-bg-hover",
                       )}
                     >
-                      <span className="line-clamp-2 break-words text-sm text-ink">
+                      <span className="line-clamp-2 break-words text-sm text-ink [overflow-wrap:anywhere]">
                         {s.title || "(untitled)"}
                       </span>
                       <span className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
@@ -397,7 +397,7 @@ export default function Sessions() {
                         {s.model && (
                           <>
                             <span>·</span>
-                            <Badge variant="muted">{s.model}</Badge>
+                            <Badge variant="muted" className="max-w-[12rem] truncate" title={s.model}>{s.model}</Badge>
                           </>
                         )}
                         <span>·</span>

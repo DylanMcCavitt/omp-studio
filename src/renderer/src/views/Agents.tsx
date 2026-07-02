@@ -60,7 +60,7 @@ export default function Agents() {
         ) : (
           <div
             data-testid="agents-card-grid"
-            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+            className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(2,minmax(0,1fr))]"
           >
             {agents.map((agent) => (
               <button
@@ -84,11 +84,14 @@ export default function Agents() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-start gap-2">
-                        <span className="break-words font-mono text-sm font-semibold text-ink">
+                        <span className="min-w-0 flex-1 break-words font-mono text-sm font-semibold text-ink [overflow-wrap:anywhere]">
                           {agent.name}
                         </span>
                         {agent.model && (
-                          <span className="ml-auto max-w-28 shrink-0 truncate rounded-md border border-border bg-bg-raised px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
+                          <span
+                            className="ml-auto max-w-28 shrink-0 truncate rounded-md border border-border bg-bg-raised px-1.5 py-0.5 font-mono text-[10px] text-ink-muted"
+                            title={agent.model}
+                          >
                             {agent.model}
                           </span>
                         )}
@@ -99,9 +102,11 @@ export default function Agents() {
                     </div>
                   </div>
                   <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-dashed border-border px-4 py-2 font-mono text-[10px] uppercase tracking-[0.08em] text-ink-faint">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-ink-faint" />
-                      {agent.source}
+                    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-ink-faint" />
+                      <span className="min-w-0 truncate" title={agent.source}>
+                        {agent.source}
+                      </span>
                     </span>
                     {agent.readOnly && (
                       <span className="inline-flex items-center gap-1.5">
