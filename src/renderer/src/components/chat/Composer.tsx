@@ -9,10 +9,13 @@
 
 import type { AvailableCommand } from "@shared/rpc";
 import { ArrowUp, Navigation, Square } from "lucide-react";
+import { useState } from "react";
+import { AgentDropChooser } from "@/components/chat/AgentDropChooser";
 import { ModelControl } from "@/components/chat/ModelControl";
 import { PromptComposer } from "@/components/chat/PromptComposer";
 import { SlashCommandPalette } from "@/components/chat/SlashCommandPalette";
 import { Button } from "@/components/ui";
+import type { AgentDragPayload } from "@/lib/agentDrag";
 import { projectLabel, workspaceColorForCwd } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
 import { useChatStore, useSession } from "@/store/chat";
@@ -46,6 +49,13 @@ export function Composer({ sessionId }: { sessionId: string }) {
   const clearPendingComposerText = useAppStore(
     (s) => s.clearPendingComposerText,
   );
+  // AGE-779 — a dropped agent opens the routing chooser instead of silently
+  // inserting steering text; "Steer" adopts the previewed text via the same
+  // one-shot inject seam the Skills prefill uses (local, pane-scoped).
+  const [droppedAgent, setDroppedAgent] = useState<AgentDragPayload | null>(
+    null,
+  );
+  const [steerText, setSteerText] = useState<string | null>(null);
 
   const streaming = status === "streaming";
   // Disabled until this pane's session is registered in the store — a pane
@@ -65,12 +75,26 @@ export function Composer({ sessionId }: { sessionId: string }) {
     <div className="border-t border-border-subtle bg-bg-panel px-4 py-3">
       <div
         data-testid="composer-width"
-        className="mx-auto w-full max-w-[min(100%,72rem)]"
+        className="relative mx-auto w-full max-w-[min(100%,72rem)]"
       >
+        {droppedAgent && (
+          <AgentDropChooser
+            payload={droppedAgent}
+            sessionId={sessionId}
+            onSteer={setSteerText}
+            onClose={() => setDroppedAgent(null)}
+          />
+        )}
         <PromptComposer
           disabled={disabled}
-          injectText={pendingComposerText}
-          onInjectConsumed={clearPendingComposerText}
+          injectText={steerText ?? pendingComposerText}
+          onInjectConsumed={() => {
+            // The local steer adoption and the global Skills prefill share the
+            // inject seam; consume whichever fed it.
+            if (steerText != null) setSteerText(null);
+            else clearPendingComposerText();
+          }}
+          onAgentDrop={setDroppedAgent}
           globalShortcuts={isActivePane}
           placeholder={
             disabled
