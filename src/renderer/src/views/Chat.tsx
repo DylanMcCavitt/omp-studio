@@ -7,7 +7,7 @@
 
 import type { ChatUiRequestEvent } from "@shared/ipc";
 import type { OmpMessage, SubagentInfo, SubagentSnapshot } from "@shared/rpc";
-import { MessageSquarePlus } from "lucide-react";
+import { Columns2, MessageSquarePlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Composer } from "@/components/chat/Composer";
 import { MessageList } from "@/components/chat/MessageList";
@@ -16,13 +16,14 @@ import { ContextMeterChip } from "@/components/chat/SessionStatsPanel";
 import { SubagentInspector } from "@/components/chat/SubagentInspector";
 import { ThinkingControl } from "@/components/chat/ThinkingControl";
 import { ApprovalModeControl } from "@/components/chat/ui-request/ApprovalModeControl";
+import { openPaneWithFeedback } from "@/components/shell/pane-actions";
 import {
   ActivityRail,
   deriveActivitySteps,
   type TranscriptMode,
   TranscriptModeToggle,
 } from "@/components/transcript/ActivityRail";
-import { Button, EmptyState } from "@/components/ui";
+import { Button, EmptyState, IconButton } from "@/components/ui";
 import { workspaceColorForCwd } from "@/lib/workspaces";
 import { useChatStore, useSession } from "@/store/chat";
 import type { ActivityRunState } from "@/store/session-reducer";
@@ -160,7 +161,17 @@ function ChatSession({ sessionId }: { sessionId: string }) {
         />
         <ApprovalModeControl sessionId={sessionId} />
         <ContextMeterChip sessionId={sessionId} />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {/* AGE-777 — open this chat in a second pane. The new pane is PINNED
+              to this session, so the (unpinned) default pane can then switch to
+              another chat while this one stays visible. openPane targets the
+              focused pane, which is this one — the click focused it. */}
+          <IconButton
+            label="Open this chat in a split pane"
+            onClick={() => openPaneWithFeedback({ kind: "chat", sessionId })}
+          >
+            <Columns2 className="h-4 w-4" />
+          </IconButton>
           <TranscriptModeToggle value={mode} onChange={setMode} />
         </div>
       </header>

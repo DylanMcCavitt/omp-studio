@@ -30,7 +30,7 @@ export const MAX_PANES = 8;
 /** The id of the default, always-present chat pane. */
 export const MAIN_PANE_ID = "pane-main";
 
-export type PaneKind = "chat" | "file";
+export type PaneKind = "chat" | "file" | "subagent";
 
 export interface PaneEntry {
   id: string;
@@ -43,6 +43,11 @@ export interface PaneEntry {
   sessionId?: string;
   /** File panes: the workspace-relative path this pane edits. */
   path?: string;
+  /**
+   * Subagent panes: the inspected subagent's id. `sessionId` names the parent
+   * session that spawned it (always set for subagent panes).
+   */
+  subagentId?: string;
 }
 
 /** A split-tree node: either one pane (leaf) or an ordered split of children. */
@@ -65,9 +70,21 @@ interface PaneState {
   openPane(
     entry:
       | { kind: "chat"; sessionId?: string }
-      | { kind: "file"; path: string },
+      | { kind: "file"; path: string }
+      | { kind: "subagent"; sessionId: string; subagentId: string },
     opts?: { besideId?: string; direction?: "row" | "column" },
   ): string | null;
+  /**
+   * Swap an existing pane's content in place (same paneId, same layout slot) —
+   * e.g. a subagent pane's "Back" showing the parent session's transcript.
+   */
+  replacePane(
+    paneId: string,
+    entry:
+      | { kind: "chat"; sessionId?: string }
+      | { kind: "file"; path: string }
+      | { kind: "subagent"; sessionId: string; subagentId: string },
+  ): void;
   /** Point a CHAT pane at a session (pin), or unset to follow the active one. */
   setPaneSession(paneId: string, sessionId: string | undefined): void;
   /** Focus a pane (no-op for unknown ids). */
@@ -141,6 +158,33 @@ export function layoutPaneIds(node: PaneLayout): string[] {
   return node.children.flatMap(layoutPaneIds);
 }
 
+/** Build a normalized PaneEntry for `openPane`/`replacePane` input. */
+function paneEntry(
+  id: string,
+  entry:
+    | { kind: "chat"; sessionId?: string }
+    | { kind: "file"; path: string }
+    | { kind: "subagent"; sessionId: string; subagentId: string },
+): PaneEntry {
+  switch (entry.kind) {
+    case "chat":
+      return {
+        id,
+        kind: "chat",
+        ...(entry.sessionId && { sessionId: entry.sessionId }),
+      };
+    case "file":
+      return { id, kind: "file", path: entry.path };
+    case "subagent":
+      return {
+        id,
+        kind: "subagent",
+        sessionId: entry.sessionId,
+        subagentId: entry.subagentId,
+      };
+  }
+}
+
 export const usePaneStore = create<PaneState>((set, get) => ({
   panes: defaultPanes(),
   layout: defaultLayout(),
@@ -162,25 +206,37 @@ export const usePaneStore = create<PaneState>((set, get) => ({
         return existing.id;
       }
     }
+    // ONE inspector per subagent: dropping/opening the same subagent again
+    // focuses its existing pane instead of stacking duplicate inspectors.
+    if (entry.kind === "subagent") {
+      const existing = Object.values(panes).find(
+        (p) =>
+          p.kind === "subagent" &&
+          p.sessionId === entry.sessionId &&
+          p.subagentId === entry.subagentId,
+      );
+      if (existing) {
+        set({ focusedPaneId: existing.id });
+        return existing.id;
+      }
+    }
     if (Object.keys(panes).length >= MAX_PANES) return null;
     const besideId = opts?.besideId ?? focusedPaneId;
     if (!panes[besideId]) return null;
     paneSeq += 1;
     const id = `pane-${paneSeq}`;
-    const pane: PaneEntry =
-      entry.kind === "chat"
-        ? {
-            id,
-            kind: "chat",
-            ...(entry.sessionId && { sessionId: entry.sessionId }),
-          }
-        : { id, kind: "file", path: entry.path };
     set({
-      panes: { ...panes, [id]: pane },
+      panes: { ...panes, [id]: paneEntry(id, entry) },
       layout: insertBeside(layout, besideId, id, opts?.direction ?? "row"),
       focusedPaneId: id,
     });
     return id;
+  },
+
+  replacePane(paneId, entry) {
+    const { panes } = get();
+    if (!panes[paneId]) return;
+    set({ panes: { ...panes, [paneId]: paneEntry(paneId, entry) } });
   },
 
   setPaneSession(paneId, sessionId) {

@@ -13,8 +13,9 @@ import type {
   SubagentSnapshot,
   ToolExecutionFrame,
 } from "@shared/rpc";
-import { Eye, Users } from "lucide-react";
-import { type ReactNode, useMemo } from "react";
+import { Columns2, Eye, GripVertical, Users } from "lucide-react";
+import { type DragEvent, type ReactNode, useMemo } from "react";
+import { setSubagentDragData } from "@/components/shell/pane-actions";
 import type { BadgeVariant } from "@/components/ui";
 import {
   Badge,
@@ -24,7 +25,7 @@ import {
   Panel,
 } from "@/components/ui";
 import { formatNumber } from "@/lib/format";
-import { useActiveSession } from "@/store/chat";
+import { useActiveSession, useChatStore } from "@/store/chat";
 import type { SubagentLiveState } from "@/store/session-reducer";
 
 export type SubagentStatus = AgentProgress["status"];
@@ -179,15 +180,28 @@ function NodeTicker({ progress }: { progress: AgentProgress }) {
 function NodeView({
   node,
   onInspect,
+  onOpenInPane,
+  dragSessionId,
 }: {
   node: SubagentNode;
   onInspect: (id: string) => void;
+  onOpenInPane?: (id: string) => void;
+  dragSessionId?: string;
 }) {
   const { sub, progress, children } = node;
   const actions = (
     <>
       <Badge variant={SOURCE_VARIANT[sub.agentSource]}>{sub.agentSource}</Badge>
       <Badge variant={STATUS_VARIANT[sub.status]}>{sub.status}</Badge>
+      {onOpenInPane && (
+        <IconButton
+          label={`Open ${subagentLabel(sub)} in split pane`}
+          onClick={() => onOpenInPane(sub.id)}
+          className="h-6 w-6"
+        >
+          <Columns2 className="h-3.5 w-3.5" />
+        </IconButton>
+      )}
       <IconButton
         label={`Inspect ${subagentLabel(sub)}`}
         onClick={() => onInspect(sub.id)}
@@ -195,6 +209,29 @@ function NodeView({
       >
         <Eye className="h-3.5 w-3.5" />
       </IconButton>
+      {dragSessionId && (
+        // AGE-777 — drag source for workspace split targets. The grip (not the
+        // whole row) is draggable so row clicks/disclosure stay untouched; the
+        // payload is the shared subagent drag contract (pane-actions.ts).
+        // Pointer-only affordance (HTML5 drag has no keyboard path) — it stays
+        // out of the tab order; the split-pane IconButton is the keyboard route.
+        <button
+          type="button"
+          draggable
+          tabIndex={-1}
+          aria-label={`Drag ${subagentLabel(sub)} into a split pane`}
+          title="Drag into the workspace to open in a split pane"
+          onDragStart={(e: DragEvent) =>
+            setSubagentDragData(e.dataTransfer, {
+              sessionId: dragSessionId,
+              subagentId: sub.id,
+            })
+          }
+          className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center text-ink-faint hover:text-ink active:cursor-grabbing"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </button>
+      )}
     </>
   );
 
@@ -221,7 +258,13 @@ function NodeView({
     >
       {progress && <NodeTicker progress={progress} />}
       {children.map((child) => (
-        <NodeView key={child.sub.id} node={child} onInspect={onInspect} />
+        <NodeView
+          key={child.sub.id}
+          node={child}
+          onInspect={onInspect}
+          onOpenInPane={onOpenInPane}
+          dragSessionId={dragSessionId}
+        />
       ))}
     </Collapsible>
   );
@@ -233,14 +276,23 @@ const EMPTY_EVENTS: Record<string, SubagentLiveState> = {};
 export function SubagentTree({
   headerLeading,
   onInspect,
+  onOpenInPane,
   dense,
 }: {
   headerLeading?: ReactNode;
   onInspect: (subagentId: string) => void;
+  /** AGE-777 — open the subagent's inspector in a split pane (also arms drag). */
+  onOpenInPane?: (subagentId: string) => void;
   dense?: boolean;
 }) {
   const roster = useActiveSession((s) => s?.subagents ?? EMPTY_SUBAGENTS);
   const events = useActiveSession((s) => s?.subagentEvents ?? EMPTY_EVENTS);
+  // Drag payloads name the session that spawned the roster — the active one,
+  // since this tree renders the active session's subagents. Drag is only armed
+  // when a pane-opening callback exists (the dock context).
+  const activeSessionId = useChatStore((s) => s.activeSessionId);
+  const dragSessionId =
+    onOpenInPane && activeSessionId ? activeSessionId : undefined;
 
   // chat.getSubagents returns the richer SubagentSnapshot at runtime; the slice
   // field type still reads as the legacy SubagentInfo. Cast once here (same
@@ -268,7 +320,13 @@ export function SubagentTree({
       ) : (
         <div className="space-y-1">
           {tree.map((node) => (
-            <NodeView key={node.sub.id} node={node} onInspect={onInspect} />
+            <NodeView
+              key={node.sub.id}
+              node={node}
+              onInspect={onInspect}
+              onOpenInPane={onOpenInPane}
+              dragSessionId={dragSessionId}
+            />
           ))}
         </div>
       )}
