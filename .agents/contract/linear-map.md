@@ -70,7 +70,6 @@ These are the labels in active use on the OMP Studio project. Prefer them; do no
 | `risk:low` | Small, well-understood change with no sensitive boundary. |
 | `risk:medium` | UX-sensitive, public API, or first-touch integration work. |
 | `risk:high` | Security boundary, credentials, signing/distribution, browser/terminal control, or external-account writes. |
-| `symphony` | Runnable by autonomous agents from Linear state. |
 
 ## Estimates and priority
 
