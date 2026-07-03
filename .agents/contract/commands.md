@@ -11,6 +11,12 @@ From `package.json` scripts. Do not invent gates in issue work. Default branch: 
 | Preview built app | `npm run start` |
 | Build | `npm run build` |
 
+## Issue worktree bootstrap
+
+For each fresh issue worktree under `/private/tmp/omp-wt/<lowercase-issue-id>`, run `npm install` in that worktree before any gate.
+
+This is the explicit networked dependency-install step (cold caches may fetch packages). It creates an untracked `node_modules/` and runs `postinstall` → `scripts/ensure-node-pty-exec.mjs`. Do not commit `node_modules/` or machine-local paths.
+
 ## Gates
 
 | Purpose | Command |

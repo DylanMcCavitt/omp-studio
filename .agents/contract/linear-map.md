@@ -99,7 +99,7 @@ If a slice starts AFK and later needs HITL behavior, stop and update the issue b
 
 - One Linear issue -> one branch/worktree -> one PR.
 - Branch names must carry the Linear issue id. Prefer Linear's generated branch name, e.g. `dylanmccavitt2015/age-667-platform-terminal-fails-to-start-node-pty-spawn-helper-not`.
-- Local worktrees live under `/private/tmp/omp-wt/<lowercase-issue-id>`.
+- Local worktrees live under `/private/tmp/omp-wt/<lowercase-issue-id>`; bootstrap each fresh worktree with `commands.md` before running gates.
 - PR body uses the repo template in `.agents/contract/templates/pull-request.md` and references the Linear issue id.
 - Merge through the GitHub/Linear bridge (squash merge closes the issue); do not manually close Linear issues from an implementation agent.
 
