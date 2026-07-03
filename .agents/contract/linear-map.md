@@ -60,7 +60,7 @@ These are the labels in active use on the OMP Studio project. Prefer them; do no
 | `team:platform` | Runtime/backend/integration/infra lanes. |
 | `model:opus` / `model:gpt5.5` | Owning model lane for the slice. |
 
-### Type / risk / runnability
+### Type / risk
 
 | Label | Use |
 | --- | --- |
