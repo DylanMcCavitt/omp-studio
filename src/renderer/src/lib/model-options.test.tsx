@@ -7,6 +7,8 @@ import type { ModelInfo } from "@shared/domain";
 import { filterOptions } from "@/components/ui/Combobox";
 import {
   FIRST_AVAILABLE_OPTION,
+  filterModels,
+  groupModelsByProvider,
   modelComboboxOptions,
   modelOptionDescription,
 } from "./model-options";
@@ -80,5 +82,25 @@ describe("modelComboboxOptions (AGE-691)", () => {
     expect(filterOptions(opts, "reasoning").map((o) => o.value)).toEqual([
       "anthropic/claude-opus-4",
     ]);
+  });
+});
+
+describe("groupModelsByProvider", () => {
+  it("groups models under their provider, sorted alphabetically", () => {
+    const groups = groupModelsByProvider([full, ctxOnly, bare]);
+    expect(groups.map((g) => g.provider)).toEqual(["anthropic", "local", "x"]);
+    expect(groups[0]?.models).toEqual([full]);
+    expect(groups[1]?.models).toEqual([bare]);
+    expect(groups[2]?.models).toEqual([ctxOnly]);
+  });
+});
+
+describe("filterModels", () => {
+  it("matches model name, provider, id, and selector", () => {
+    expect(filterModels([full, ctxOnly, bare], "anthropic").map((m) => m.id)).toEqual(
+      ["claude-opus-4"],
+    );
+    expect(filterModels([full, ctxOnly, bare], "openai")).toEqual([]);
+    expect(filterModels([full, ctxOnly, bare], "x/m").map((m) => m.id)).toEqual(["m"]);
   });
 });

@@ -44,3 +44,35 @@ export function modelComboboxOptions(models: ModelInfo[]): ComboboxOption[] {
     })),
   ];
 }
+
+export interface ModelOptionGroup {
+  provider: string;
+  models: ModelInfo[];
+}
+
+/** Group models by provider id, sorted alphabetically by provider. */
+export function groupModelsByProvider(models: ModelInfo[]): ModelOptionGroup[] {
+  const byProvider = new Map<string, ModelInfo[]>();
+  for (const model of models) {
+    const arr = byProvider.get(model.provider);
+    if (arr) arr.push(model);
+    else byProvider.set(model.provider, [model]);
+  }
+  return Array.from(byProvider, ([provider, items]) => ({
+    provider,
+    models: items,
+  })).sort((a, b) => a.provider.localeCompare(b.provider));
+}
+
+/** Case-insensitive match over model name, provider, id, and selector. */
+export function filterModels(models: ModelInfo[], query: string): ModelInfo[] {
+  const q = query.trim().toLowerCase();
+  if (q === "") return models;
+  return models.filter(
+    (model) =>
+      model.name.toLowerCase().includes(q) ||
+      model.provider.toLowerCase().includes(q) ||
+      model.id.toLowerCase().includes(q) ||
+      model.selector.toLowerCase().includes(q),
+  );
+}

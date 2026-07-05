@@ -167,6 +167,18 @@ it("filters the list as the query is typed", async () => {
   expect(screen.queryByRole("option", { name: "Claude Opus 4" })).toBeNull();
 });
 
+it("groups models by provider in the dropdown", async () => {
+  const user = userEvent.setup();
+  stubModels();
+  render(<ModelControl model={CURRENT} onChange={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: "Claude Opus 4" }));
+  await screen.findByRole("option", { name: "GPT-5" });
+
+  expect(screen.getByRole("group", { name: "anthropic" })).toBeInTheDocument();
+  expect(screen.getByRole("group", { name: "openai" })).toBeInTheDocument();
+});
+
 it("disables the trigger when no models are available", async () => {
   stubModels([]);
   render(<ModelControl model={CURRENT} onChange={vi.fn()} />);
