@@ -177,6 +177,12 @@ export class OmpRpcSession extends EventEmitter {
     return this.readyPromise;
   }
 
+  /** Live child PID, when the omp process is still running. */
+  pid(): number | undefined {
+    const pid = this.child.pid;
+    return typeof pid === "number" && pid > 0 ? pid : undefined;
+  }
+
   // Intentional teardown. ORDERING IS LOAD-BEARING: removeAllListeners()
   // runs BEFORE the child is killed, so the "exit" the kill produces never
   // reaches consumers — the registry's crash/self-exit listener (which marks

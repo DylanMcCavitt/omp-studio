@@ -6,7 +6,7 @@ import type {
 } from "@shared/domain";
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
-import { dialog, shell } from "electron";
+import { app, dialog, shell } from "electron";
 import { safeOpenExternal } from "../external-open";
 import {
   listAgents,
@@ -21,6 +21,7 @@ import {
   listPrs,
   listRepos,
 } from "../services/github";
+import { getMemoryUsage } from "../services/memory-usage";
 import { getOmpStats } from "../services/omp-stats";
 import {
   archiveSession,
@@ -33,6 +34,21 @@ import {
   searchSessions,
   unarchiveSession,
 } from "../services/session-store";
+
+function readElectronAppRss(): number {
+  try {
+    // Electron's MemoryInfo.workingSetSize is in kilobytes — convert to bytes so
+    // the renderer's formatBytes() reads like Activity Monitor / Task Manager.
+    return app
+      .getAppMetrics()
+      .reduce(
+        (sum, metric) => sum + (metric.memory?.workingSetSize ?? 0) * 1024,
+        0,
+      );
+  } catch {
+    return process.memoryUsage().rss;
+  }
+}
 
 async function buildDashboard(cwd?: string): Promise<DashboardData> {
   const [sessions, models, mcp, skills, agents, repo, issues, prs] =
@@ -100,11 +116,17 @@ async function buildDashboard(cwd?: string): Promise<DashboardData> {
 export function registerDataIpc(
   ipcMain: IpcMain,
   activeCwd: () => string | undefined = () => undefined,
+  deps?: { ompRootPids?: () => number[] },
 ): void {
   const resolveCwd = (cwd?: string): string | undefined => cwd ?? activeCwd();
 
   ipcMain.handle(CH.dashboard, () => buildDashboard(activeCwd()));
   ipcMain.handle(CH.ompStats, () => getOmpStats());
+  ipcMain.handle(CH.memoryUsage, () =>
+    getMemoryUsage(deps?.ompRootPids?.() ?? [], {
+      appRssBytes: readElectronAppRss,
+    }),
+  );
 
   ipcMain.handle(CH.listSessions, (_event, opts?: ListSessionsOptions) =>
     listSessions(opts),

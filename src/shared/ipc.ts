@@ -20,6 +20,7 @@ import type {
   LinearTeam,
   ListSessionsOptions,
   McpServerInfo,
+  MemoryUsageSnapshot,
   ModelInfo,
   OmpStatsSnapshot,
   ProviderInfo,
@@ -50,6 +51,7 @@ import type {
 export const CH = {
   // read-only data services
   dashboard: "data:dashboard",
+  memoryUsage: "data:memoryUsage",
   ompStats: "data:ompStats",
   listSessions: "data:sessions:list",
   readSession: "data:sessions:read",
@@ -389,6 +391,7 @@ export type StudioSettings = StudioSettingsV2;
 
 export interface OmpApi {
   getDashboard(): Promise<DashboardData>;
+  getMemoryUsage(): Promise<MemoryUsageSnapshot>;
   getOmpStats(): Promise<OmpStatsSnapshot | null>;
   listSessions(opts?: ListSessionsOptions): Promise<SessionSummary[]>;
   readSession(path: string): Promise<SessionTranscript>;

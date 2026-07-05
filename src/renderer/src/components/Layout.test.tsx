@@ -86,6 +86,16 @@ let prefersDark = false;
 let mediaListeners: Array<() => void> = [];
 
 beforeEach(() => {
+  window.omp = {
+    ...window.omp,
+    getMemoryUsage: vi.fn().mockResolvedValue({
+      totalBytes: 1_610_612_736,
+      appBytes: 268_435_456,
+      ompBytes: 1_342_177_280,
+      ompInstanceCount: 2,
+      generatedAt: "2026-07-05T00:00:00.000Z",
+    }),
+  } as never;
   updateSettings.mockResolvedValue(undefined);
   prefersDark = false;
   mediaListeners = [];
@@ -142,6 +152,20 @@ beforeEach(() => {
     update: updateSettings,
     setLayout: vi.fn(),
   });
+});
+
+
+it("shows live memory usage to the left of the Cmd+K pill", async () => {
+  render(<Layout>main</Layout>);
+
+  const memory = await screen.findByRole("button", {
+    name: "Memory usage 1.5 GB",
+  });
+  expect(memory).toHaveTextContent("1.5 GB");
+  const palette = screen.getByRole("button", { name: "Open navigation palette" });
+  expect(
+    palette.compareDocumentPosition(memory) & Node.DOCUMENT_POSITION_PRECEDING,
+  ).toBeTruthy();
 });
 
 it("opens the navigation palette from the titlebar Cmd+K pill", async () => {

@@ -18,6 +18,7 @@ import {
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { usePersistedPanelLayout } from "@/components/layout/usePersistedPanelLayout";
 import { RailPanelHost } from "@/components/shell/RailPanelHost";
+import { TitlebarMemoryUsage } from "@/components/shell/TitlebarMemoryUsage";
 import { RightRail } from "@/components/shell/RightRail";
 import { Toaster } from "@/components/ui";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
@@ -106,6 +107,7 @@ export function Layout({ children }: LayoutProps) {
           <span className="truncate">{titleLabel}</span>
         </span>
         <div className="no-drag ml-auto flex h-full items-center gap-1 pr-2">
+          <TitlebarMemoryUsage />
           <button
             type="button"
             aria-label="Open navigation palette"
