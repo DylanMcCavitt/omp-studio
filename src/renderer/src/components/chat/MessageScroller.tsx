@@ -49,6 +49,12 @@ export function MessageScroller({
     update();
     const observer = new ResizeObserver(update);
     observer.observe(root);
+    // The scroller's own box only changes on pane/window resize — content
+    // growth (a message streaming in) changes scrollHeight via the inner
+    // wrapper. Observe it too, or the trail stays hidden until the next
+    // scroll/new message crosses the threshold.
+    const content = root.firstElementChild;
+    if (content) observer.observe(content);
     root.addEventListener("scroll", update, { passive: true });
 
     return () => {

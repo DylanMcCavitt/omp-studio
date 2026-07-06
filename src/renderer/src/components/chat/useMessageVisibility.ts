@@ -71,12 +71,12 @@ export function useMessageVisibility(
       },
     );
 
-    const observed = new Map<HTMLElement, string>();
+    const observed = new Set<HTMLElement>();
 
     /** (Re)observe mounted rows, release unmounted ones. True if state moved. */
     const observeCurrent = (): boolean => {
       let changed = false;
-      for (const [element] of observed) {
+      for (const element of observed) {
         if (!element.isConnected) {
           observer.unobserve(element);
           observed.delete(element);
@@ -91,7 +91,7 @@ export function useMessageVisibility(
         if (!id) continue;
         present.add(id);
         if (!observed.has(element)) {
-          observed.set(element, id);
+          observed.add(element);
           observer.observe(element);
         }
       }
