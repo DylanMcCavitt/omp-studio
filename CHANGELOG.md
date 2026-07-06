@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **Chat navigation trail (AGE-774):** long transcripts show a compact MessageScroller rail for jumping through the thread without breaking bottom-follow while streaming.
+
 Expands OMP Studio from read-only browsers into an interactive v2 cockpit.
 
 ### UI/UX polish — Claude/Codex/Cursor-grade shell (AGE-654)
