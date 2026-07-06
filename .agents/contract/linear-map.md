@@ -133,7 +133,7 @@ Keep local when **any** hold:
 - Every dispatch prompt carries the AGE id and Linear-generated branch name. Bare `cursor/*` heads violate the bridge — rename before opening the PR.
 - PR body uses the repo template in `.agents/contract/templates/pull-request.md`.
 - Cloud PRs open as **draft** until VM proof artifacts are attached (video/screenshot + gate output).
-- Same landing strip as local: CI gates, Droid review, human squash-merge. No cloud-special path.
+- Same landing strip as local: CI gates, human squash-merge. No cloud-special path.
 
 ### Sync ritual
 

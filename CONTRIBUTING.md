@@ -56,7 +56,7 @@ Use the template at `.github/pull_request_template.md`. Fill every section:
 Other rules:
 
 - **Squash-merge only.** The merge commit lands on `main`; head branches are auto-deleted after merge.
-- **CI runs on every PR**, including automated review (Factory Droid via `.github/workflows/droid-review.yml`).
+- **CI runs on every PR** — all gates must be green before merge.
 - Add a line under `## [Unreleased]` in `CHANGELOG.md` for user-visible changes. Docs-only slices may omit it when the issue does not require a changelog entry.
 
 ## Security boundaries
