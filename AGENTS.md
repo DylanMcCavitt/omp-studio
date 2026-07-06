@@ -7,9 +7,11 @@ command tables.
 
 ## Cursor Cloud specific instructions
 
-The update script runs `npm install` (which runs the `postinstall`
-`ensure-node-pty-exec` step). The following are already provisioned in the VM image
-and do **not** need reinstalling — they are noted here as durable, non-obvious context.
+The environment definition is versioned at `.cursor/environment.json`; mirror any
+dashboard-side environment edits there. The install/update script is `npm install`
+(which runs the `postinstall` `ensure-node-pty-exec` step). The following are already
+provisioned in the VM image and do **not** need reinstalling — they are noted here as
+durable, non-obvious context.
 
 - **Node-side test suite needs `bun`.** `bun test` and `npm run test:rpc` run under
   Bun (scoped to `test/` via `bunfig.toml`), not Node/Vitest. Bun is installed at
