@@ -75,9 +75,9 @@ export function MessageScroller({
   return (
     <nav
       aria-label="Message position"
-      className="pointer-events-none absolute inset-y-3 right-1.5 z-10 flex w-2 justify-center"
+      className="pointer-events-none absolute inset-y-3 right-2 z-10 flex w-6 items-center justify-center"
     >
-      <div className="pointer-events-auto flex max-h-full flex-col gap-0.5 rounded-full bg-bg/40 px-0.5 py-1 backdrop-blur-[1px]">
+      <div className="pointer-events-auto flex max-h-full flex-col items-center gap-1.5">
         {buckets.map((bucket) => {
           const active = bucket.id === activeBucketId;
           return (
@@ -96,12 +96,11 @@ export function MessageScroller({
                   : "Jump to message"
               }
               onClick={() => onNavigate(bucket.anchorId)}
+              // Horizontal tick marks (shadcn MessageScroller style): a slim
+              // dash per bucket; the active one widens and brightens.
               className={cn(
-                "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
-                bucket.count > 1 && "h-2",
-                active
-                  ? "bg-ink-muted shadow-[0_0_0_1px_rgba(255,255,255,0.08)]"
-                  : "bg-ink-faint/50 hover:bg-ink-faint",
+                "h-[3px] w-3 shrink-0 rounded-full transition-all",
+                active ? "w-4 bg-ink" : "bg-ink-faint/60 hover:bg-ink-muted",
               )}
             />
           );
