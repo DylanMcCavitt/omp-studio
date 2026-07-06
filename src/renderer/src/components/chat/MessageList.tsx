@@ -11,14 +11,20 @@ import type {
   ToolResultMessage,
 } from "@shared/rpc";
 import { Loader } from "lucide-react";
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { workspaceColorForCwd } from "@/lib/workspaces";
 import { useSession } from "@/store/chat";
 import { type SystemCard, toContentBlocks } from "@/store/session-reducer";
 import { useSettingsStore } from "@/store/settings";
 import { MessageBubble } from "./MessageBubble";
+import { MessageScroller } from "./MessageScroller";
 import { SystemCardBubble } from "./SystemCardBubble";
+import {
+  MESSAGE_ANCHOR_ATTR,
+  messageAnchorSelector,
+  useMessageVisibility,
+} from "./useMessageVisibility";
 
 const EMPTY_MESSAGES: OmpMessage[] = [];
 const EMPTY_CARDS: SystemCard[] = [];
@@ -86,7 +92,10 @@ const Row = memo(function Row({
   workspaceColorKey: ReturnType<typeof workspaceColorForCwd>;
 }) {
   return (
-    <div className="px-4 py-2">
+    <div
+      className="px-4 py-2"
+      {...(row.kind !== "loader" ? { [MESSAGE_ANCHOR_ATTR]: row.key } : {})}
+    >
       <div className="mx-auto w-full max-w-[min(100%,72rem)]">
         {row.kind === "system" ? (
           <SystemCardBubble card={row.card} />
@@ -218,6 +227,29 @@ export function MessageList({ sessionId }: { sessionId: string }) {
     [messages, systemCards, liveMessage, streaming, activeTool, toolResults],
   );
 
+  const scrollRootRef = useRef<HTMLElement | null>(null);
+  const navigableIds = useMemo(
+    () => rows.filter((row) => row.kind !== "loader").map((row) => row.key),
+    [rows],
+  );
+  const { currentAnchorId, visibleMessageIds } = useMessageVisibility(
+    scrollRootRef,
+    navigableIds,
+  );
+
+  // react-virtuoso's scrollerRef is callback-only — a RefObject is silently
+  // ignored and the trail would never attach.
+  const attachScroller = useCallback((el: HTMLElement | Window | null) => {
+    scrollRootRef.current = el instanceof HTMLElement ? el : null;
+  }, []);
+
+  const handleNavigate = useCallback((anchorId: string) => {
+    const root = scrollRootRef.current;
+    if (!root) return;
+    const target = root.querySelector(messageAnchorSelector(anchorId));
+    target?.scrollIntoView({ block: "start" });
+  }, []);
+
   if (rows.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-ink-faint">
@@ -227,22 +259,35 @@ export function MessageList({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <Virtuoso
-      className="scrollbar flex-1"
-      data={rows}
-      computeItemKey={(_, row) => row.key}
-      followOutput={(atBottom) => (atBottom ? "auto" : false)}
-      atBottomThreshold={80}
-      increaseViewportBy={{ top: 400, bottom: 800 }}
-      initialItemCount={Math.min(rows.length, 30)}
-      itemContent={(_, row) => (
-        <Row
-          row={row}
-          toolResults={toolResults}
-          sessionRunning={streaming}
-          workspaceColorKey={workspaceColorKey}
-        />
-      )}
-    />
+    <div
+      className="relative flex min-h-0 flex-1"
+      data-visible-message-count={visibleMessageIds.length}
+      data-current-anchor={currentAnchorId ?? ""}
+    >
+      <Virtuoso
+        className="scrollbar flex-1"
+        data={rows}
+        computeItemKey={(_, row) => row.key}
+        followOutput={(atBottom) => (atBottom ? "auto" : false)}
+        atBottomThreshold={80}
+        increaseViewportBy={{ top: 400, bottom: 800 }}
+        initialItemCount={Math.min(rows.length, 30)}
+        scrollerRef={attachScroller}
+        itemContent={(_, row) => (
+          <Row
+            row={row}
+            toolResults={toolResults}
+            sessionRunning={streaming}
+            workspaceColorKey={workspaceColorKey}
+          />
+        )}
+      />
+      <MessageScroller
+        scrollRootRef={scrollRootRef}
+        messageIds={navigableIds}
+        currentAnchorId={currentAnchorId}
+        onNavigate={handleNavigate}
+      />
+    </div>
   );
 }
