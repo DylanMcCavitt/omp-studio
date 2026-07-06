@@ -29,7 +29,8 @@
     "dist:dir": "electron-vite build && electron-builder --dir",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "release": "node scripts/release.mjs",
-    "release:notes": "node scripts/changelog.mjs"
+    "release:notes": "node scripts/changelog.mjs",
+    "sync-check": "node scripts/sync-check.mjs"
   },
   "dependencies": {
     "@electron-toolkit/utils": "^3.0.0",
