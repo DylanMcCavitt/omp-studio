@@ -105,6 +105,44 @@ If a slice starts AFK and later needs HITL behavior, stop and update the issue b
 - PR body uses the repo template in `.agents/contract/templates/pull-request.md` and references the Linear issue id.
 - Merge through the GitHub/Linear bridge (squash merge closes the issue); do not manually close Linear issues from an implementation agent.
 
+## Executors
+
+Two executors implement the same delivery loop: **local OMP agents** (worktree under `/private/tmp/omp-wt`) and **Cursor Cloud background agents** (headless VM). Both follow Linear issue → branch → PR → gates → squash-merge through the bridge. Executor choice is per-issue, not a separate track.
+
+### Cloud-eligible (Cursor Cloud)
+
+Dispatch to Cursor Cloud only when **all** hold:
+
+- `Execution: AFK` per the classification above.
+- Proof is hermetic: `commands.md` gates suffice; VM video/screenshot artifacts may supplement gate output.
+- `risk:low` or `risk:medium`; no security-boundary files in scope (`src/main/browser`, `src/main/terminal` gating, `src/main/services/secret-store.ts`).
+- Acceptance criteria are already written on the issue.
+- One Cursor Cloud agent per issue — never batch multiple issues on one agent.
+
+### Local-only
+
+Keep local when **any** hold:
+
+- `Execution: HITL` per the classification above (paid omp turns, keychain/`safeStorage`, live-site browser automation, agent-driven terminal, signing/distribution, external writes).
+- `risk:high` or security-boundary code.
+- Design judgment on real macOS rendering (`team:ui` polish, Live Dot work) — cloud may draft; local run gates approval.
+- Merge itself: `rocket-launch` is always human/local-initiated. Cloud agents never merge and never push `main`.
+
+### Cloud dispatch rules
+
+- Every dispatch prompt carries the AGE id and Linear-generated branch name. Bare `cursor/*` heads violate the bridge — rename before opening the PR.
+- PR body uses the repo template in `.agents/contract/templates/pull-request.md`.
+- Cloud PRs open as **draft** until VM proof artifacts are attached (video/screenshot + gate output).
+- Same landing strip as local: CI gates, Droid review, human squash-merge. No cloud-special path.
+
+### Sync ritual
+
+At session start and before any cloud dispatch batch:
+
+- `git pull --ff-only` on `main`.
+- `git worktree prune`.
+- Review open PRs and Linear `In Progress` / `Ready` issues (automation tracked by `AGE-835`).
+
 ## Gated work
 
 - Terminal and browser are user-initiated and off by default. Agent frames never write directly to pty input; the browser stays in its sandboxed boundary (separate WebContents, http(s)-only, no OMP bridge/preload/Node, ephemeral storage).
