@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import type { Ref } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { useChatStore } from "@/store/chat";
 import { createSession } from "@/store/session-reducer";
@@ -14,19 +15,37 @@ interface VirtuosoProps<Row> {
   atBottomThreshold?: number;
 }
 
+interface VirtuosoHandleMock {
+  scrollToIndex(opts: { index: number }): void;
+}
+
 vi.mock("react-virtuoso", async () => {
+  // vi.mock factories are hoisted above top-level imports, so React must be
+  // loaded dynamically inside the factory (vitest requirement).
   const React = await import("react");
   return {
-    Virtuoso<Row>({
-      data,
-      computeItemKey,
-      itemContent,
-      scrollerRef,
-      followOutput,
-      atBottomThreshold = 80,
-    }: VirtuosoProps<Row>) {
+    Virtuoso: React.forwardRef(function VirtuosoMock(
+      {
+        data,
+        computeItemKey,
+        itemContent,
+        scrollerRef,
+        followOutput,
+        atBottomThreshold = 80,
+      }: VirtuosoProps<unknown>,
+      fwdRef: Ref<VirtuosoHandleMock>,
+    ) {
       const ref = React.useRef<HTMLDivElement | null>(null);
       const [atBottom, setAtBottom] = React.useState(true);
+
+      // The real library exposes an imperative handle; the trail's click-jump
+      // relies on scrollToIndex because virtualization unmounts far rows.
+      React.useImperativeHandle(fwdRef, () => ({
+        scrollToIndex({ index }: { index: number }) {
+          const el = ref.current;
+          if (el) el.scrollTop = index * 80;
+        },
+      }));
 
       React.useEffect(() => {
         // Mirror the real react-virtuoso contract: scrollerRef is a callback,
@@ -71,7 +90,7 @@ vi.mock("react-virtuoso", async () => {
           ))}
         </div>
       );
-    },
+    }),
   };
 });
 
@@ -192,10 +211,7 @@ test("shows the navigation trail for long scrollable transcripts", () => {
   ).toBeInTheDocument();
 });
 
-test("clicking a trail segment scrolls the target message into view", () => {
-  const scrollIntoView = vi.fn();
-  Element.prototype.scrollIntoView = scrollIntoView;
-
+test("clicking a trail segment jumps to unmounted targets via the virtualized scroller", () => {
   useChatStore.setState({
     openSessions: {
       s1: createSession("s1", {
@@ -205,10 +221,17 @@ test("clicking a trail segment scrolls the target message into view", () => {
   });
 
   render(<MessageList sessionId="s1" />);
+  const scroller = screen.getByTestId("virtuoso");
+  scroller.scrollTop = 0; // start at the top, far from the last message
+
   const segments = screen.getAllByRole("button", { name: /jump to message/i });
   fireEvent.click(segments[segments.length - 1]!);
 
-  expect(scrollIntoView).toHaveBeenCalledWith({ block: "start" });
+  // Regression (caught by the live demo): the old querySelector +
+  // scrollIntoView path silently no-oped for rows virtualization had
+  // unmounted. The jump must go through Virtuoso's scrollToIndex — the mock
+  // handle scrolls index * row-height (12 messages -> last row index 11).
+  expect(scroller.scrollTop).toBe(11 * 80);
 });
 
 test("keeps bottom-follow while streaming until the user scrolls away", () => {

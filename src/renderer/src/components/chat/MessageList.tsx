@@ -12,7 +12,7 @@ import type {
 } from "@shared/rpc";
 import { Loader } from "lucide-react";
 import { memo, useCallback, useMemo, useRef } from "react";
-import { Virtuoso } from "react-virtuoso";
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { workspaceColorForCwd } from "@/lib/workspaces";
 import { useSession } from "@/store/chat";
 import { type SystemCard, toContentBlocks } from "@/store/session-reducer";
@@ -22,7 +22,6 @@ import { MessageScroller } from "./MessageScroller";
 import { SystemCardBubble } from "./SystemCardBubble";
 import {
   MESSAGE_ANCHOR_ATTR,
-  messageAnchorSelector,
   useMessageVisibility,
 } from "./useMessageVisibility";
 
@@ -243,12 +242,21 @@ export function MessageList({ sessionId }: { sessionId: string }) {
     scrollRootRef.current = el instanceof HTMLElement ? el : null;
   }, []);
 
-  const handleNavigate = useCallback((anchorId: string) => {
-    const root = scrollRootRef.current;
-    if (!root) return;
-    const target = root.querySelector(messageAnchorSelector(anchorId));
-    target?.scrollIntoView({ block: "start" });
-  }, []);
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  // Trail jumps target rows that virtualization has NOT mounted — a DOM query
+  // can never reach them. Jump through Virtuoso's index-based scroller instead.
+  const handleNavigate = useCallback(
+    (anchorId: string) => {
+      const index = rows.findIndex((row) => row.key === anchorId);
+      if (index === -1) return;
+      virtuosoRef.current?.scrollToIndex({
+        index,
+        align: "start",
+        behavior: "smooth",
+      });
+    },
+    [rows],
+  );
 
   if (rows.length === 0) {
     return (
@@ -265,6 +273,7 @@ export function MessageList({ sessionId }: { sessionId: string }) {
       data-current-anchor={currentAnchorId ?? ""}
     >
       <Virtuoso
+        ref={virtuosoRef}
         className="scrollbar flex-1"
         data={rows}
         computeItemKey={(_, row) => row.key}
