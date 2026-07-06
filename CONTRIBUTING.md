@@ -66,7 +66,7 @@ Terminal and browser capabilities are **user-initiated and gated** — both are 
 - Never add code that writes agent output, RPC frames, or remote content to pty input.
 - The embedded browser stays in its sandboxed boundary (separate `WebContents`, no OMP bridge/preload/Node).
 
-For the full threat model and process-isolation details, see the [Security notes](docs/ARCHITECTURE.md#security-notes) section in `docs/ARCHITECTURE.md`. Do not restate or duplicate that section here.
+For the full threat model and process-isolation details, see [Security notes](docs/ARCHITECTURE.md#security-notes) in `docs/ARCHITECTURE.md` — that document is the single source of truth for boundary details.
 
 To report vulnerabilities, see [SECURITY.md](SECURITY.md).
 
