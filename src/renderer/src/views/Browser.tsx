@@ -73,7 +73,15 @@ export default function Browser() {
       ) => Pick<NonNullable<typeof browserSettings>, "bookmarks" | "history">,
     ) => {
       metadataUpdateQueue.current = metadataUpdateQueue.current
-        .catch(() => undefined)
+        .catch((error) => {
+          if (import.meta.env.DEV) {
+            console.warn(
+              "[browser] metadata update failed; continuing metadata queue",
+              error,
+            );
+          }
+          return undefined;
+        })
         .then(async () => {
           const browser = useSettingsStore.getState().settings?.browser;
           if (!browser) return;
