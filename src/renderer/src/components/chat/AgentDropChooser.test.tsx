@@ -3,6 +3,7 @@
 // Pane. These tests keep each route honest without asserting visual styling.
 
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -201,6 +202,47 @@ it("disables pane routing at the pane cap", async () => {
   expect(startParallelChat).not.toHaveBeenCalled();
   expect(onClose).not.toHaveBeenCalled();
   expect(layoutPaneIds(usePaneStore.getState().layout)).toHaveLength(MAX_PANES);
+});
+
+it("rechecks the pane cap at click time before starting a pane route", async () => {
+  const user = userEvent.setup();
+  const startParallelChat = vi.fn().mockResolvedValue("parallel-1");
+  useChatStore.setState({ startParallelChat } as never);
+  const { onClose } = renderChooser();
+  const pane = screen.getByRole("button", { name: /open in pane/i });
+  expect(pane).not.toBeDisabled();
+
+  act(() => {
+    for (let i = 1; i < MAX_PANES; i += 1) {
+      usePaneStore
+        .getState()
+        .openPane({ kind: "chat", sessionId: `s${i + 1}` });
+    }
+  });
+  const cappedState = usePaneStore.getState();
+  act(() => {
+    usePaneStore.getState().reset();
+  });
+  const openPane = vi.fn().mockReturnValue(null);
+  const getState = vi.spyOn(usePaneStore, "getState").mockReturnValue({
+    ...cappedState,
+    openPane,
+  });
+
+  await user.click(pane);
+  getState.mockRestore();
+
+  expect(startParallelChat).not.toHaveBeenCalled();
+  expect(openPane).toHaveBeenCalledWith(
+    { kind: "chat", sessionId: "s1" },
+    undefined,
+  );
+  expect(useToastStore.getState().toasts.at(-1)).toMatchObject({
+    kind: "error",
+    title: "Pane limit reached",
+    detail: `Up to ${MAX_PANES} panes can be open — close one first.`,
+  });
+  expect(onClose).toHaveBeenCalledOnce();
 });
 
 it("dismisses by Cancel, backdrop, and Escape without routing", async () => {
