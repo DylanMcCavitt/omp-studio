@@ -31,6 +31,7 @@ This is the explicit networked dependency-install step (cold caches may fetch pa
 | RPC bridge test | `npm run test:rpc` |
 | Hermetic Electron e2e smoke | `npm run build && npm run test:e2e` (Playwright `_electron`) |
 | Live paid e2e | `npm run build && STUDIO_E2E_LIVE=1 npm run test:e2e` (HITL only) |
+| Demo recording (proof mp4 + keyframes) | `npm run build && npm run demo -- <scenario>` (hermetic; `DEMO_OUT` sets output dir; wrap with `xvfb-run -a` headless) |
 
 ## Packaging & release
 

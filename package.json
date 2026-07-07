@@ -25,6 +25,7 @@
     "test:rpc": "bun test test/rpc-bridge.test.ts",
     "test:ui": "vitest run",
     "test:e2e": "playwright test",
+    "demo": "node e2e/demo/run.mjs",
     "dist": "electron-vite build && electron-builder",
     "dist:dir": "electron-vite build && electron-builder --dir",
     "dist:mac": "electron-vite build && electron-builder --mac",

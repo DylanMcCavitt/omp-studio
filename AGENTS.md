@@ -35,3 +35,6 @@ durable, non-obvious context.
 - **`omp` / `gh` are optional.** The data services degrade gracefully when the `omp`
   harness (and, for GitHub features, `gh`) are absent, so the app, unit tests, and the
   hermetic e2e smoke all run without them.
+- **Demo proof recordings.** `npm run build && DEMO_OUT=/opt/cursor/artifacts xvfb-run -a npm run demo -- <scenario>`
+  records a hermetic mp4 + keyframe PNGs of the built app (scenarios under
+  `e2e/demo/scenarios/`). ffmpeg must be on PATH. Attach the artifacts as PR proof.
