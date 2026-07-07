@@ -28,7 +28,13 @@ vi.mock("@/components/chat/SessionStatsPanel", () => ({
   ContextMeterChip: () => null,
 }));
 vi.mock("@/components/chat/SubagentInspector", () => ({
-  SubagentInspector: () => <div data-testid="subagent-inspector" />,
+  SubagentInspector: ({ onBack }: { onBack: () => void }) => (
+    <div data-testid="subagent-inspector">
+      <button type="button" onClick={onBack}>
+        Back to chat
+      </button>
+    </div>
+  ),
 }));
 vi.mock("@/components/chat/UiRequestLayer", () => ({
   UiRequestLayer: () => null,
@@ -93,6 +99,19 @@ describe("ChatSession center view (AGE-674)", () => {
 
     expect(screen.getByTestId("subagent-inspector")).toBeInTheDocument();
     expect(screen.queryByTestId("message-list")).not.toBeInTheDocument();
+  });
+
+  it("returns from the subagent inspector to the chat transcript", () => {
+    useChatStore.setState({
+      inspectedSubagent: { sessionId: SESSION_ID, subagentId: "sub-1" },
+    });
+
+    render(<ChatWorkspace />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to chat" }));
+    expect(useChatStore.getState().inspectedSubagent).toBeNull();
+    expect(screen.getByTestId("message-list")).toBeInTheDocument();
+    expect(screen.queryByTestId("subagent-inspector")).not.toBeInTheDocument();
   });
 
   it("toggles the Focused/Activity-rail layout from the header (AGE-708)", () => {
