@@ -7,11 +7,12 @@
 
 import type { OmpApi } from "@shared/ipc";
 import type { AgentProgress, SubagentSnapshot } from "@shared/rpc";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
+import { createSession } from "@/store/session-reducer";
 import { useSettingsStore } from "@/store/settings";
 import { useShellStore } from "@/store/shell";
 import { SubagentInspector } from "./SubagentInspector";
@@ -139,6 +140,75 @@ it("pumps a live subagent's transcript and advances the cursor", async () => {
     fromByte: 0,
   });
   expect(useChatStore.getState()._subagentInspector?.cursor).toBe(128);
+});
+
+it("re-renders a running subagent transcript when matching live frames arrive", async () => {
+  const onBack = vi.fn();
+  const getSubagentMessages = vi
+    .fn()
+    .mockResolvedValueOnce({
+      sessionFile: "/abs/a.jsonl",
+      fromByte: 0,
+      nextByte: 64,
+      reset: false,
+      entries: [],
+      messages: [],
+    })
+    .mockResolvedValueOnce({
+      sessionFile: "/abs/a.jsonl",
+      fromByte: 64,
+      nextByte: 128,
+      reset: false,
+      entries: [],
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "streamed after eye click" }],
+        },
+      ],
+    });
+  stubBridge({ chat: { getSubagentMessages } } as unknown as Partial<OmpApi>);
+  useChatStore.setState({
+    openSessions: {
+      s1: createSession("s1", {
+        status: "streaming",
+        subagents: [
+          snap({ status: "running", sessionFile: "/abs/a.jsonl" }),
+        ] as never,
+      }),
+    },
+  });
+
+  render(
+    <SubagentInspector
+      sessionId="s1"
+      subagent={snap({ status: "running", sessionFile: "/abs/a.jsonl" })}
+      onBack={onBack}
+    />,
+  );
+
+  await waitFor(() => expect(getSubagentMessages).toHaveBeenCalledTimes(1));
+
+  act(() => {
+    useChatStore.getState()._handleFrame("s1", {
+      type: "subagent_event",
+      payload: {
+        id: "a1",
+        event: { type: "message_update" },
+      },
+    } as never);
+  });
+
+  expect(
+    await screen.findByText("streamed after eye click"),
+  ).toBeInTheDocument();
+  expect(getSubagentMessages).toHaveBeenLastCalledWith("s1", {
+    sessionFile: "/abs/a.jsonl",
+    fromByte: 64,
+  });
+
+  await userEvent.click(screen.getByRole("button", { name: "Back to chat" }));
+  expect(onBack).toHaveBeenCalledOnce();
 });
 
 it("Open in Sessions focuses the subagent's transcript file", async () => {

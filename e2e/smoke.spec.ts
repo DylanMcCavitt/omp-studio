@@ -178,6 +178,10 @@ test.beforeAll(async () => {
   );
 
   const fakeOmp = join(tempAgentDir, "omp");
+  const fakeSessionsDir = join(tempAgentDir, "sessions", "smoke-workspace");
+  mkdirSync(fakeSessionsDir, { recursive: true });
+  const fakeSubagentSessionFile = join(fakeSessionsDir, "subagent-live.jsonl");
+  writeFileSync(fakeSubagentSessionFile, "", "utf8");
   const fakeStats = {
     overall: {
       totalRequests: 123,
@@ -245,11 +249,176 @@ test.beforeAll(async () => {
   writeFileSync(
     fakeOmp,
     `#!/usr/bin/env node
+const subagentSessionFile = ${JSON.stringify(fakeSubagentSessionFile)};
 if (process.argv[2] === "stats" && process.argv.includes("--json")) {
   process.stdout.write(${JSON.stringify(`${JSON.stringify(fakeStats)}\n`)});
   process.exit(0);
 }
-process.exit(1);
+const modeIdx = process.argv.indexOf("--mode");
+if (modeIdx === -1 || process.argv[modeIdx + 1] !== "rpc-ui") {
+  process.exit(1);
+}
+const state = {
+  model: null,
+  thinkingLevel: "medium",
+  isStreaming: false,
+  isCompacting: false,
+  steeringMode: "all",
+  followUpMode: "all",
+  interruptMode: "immediate",
+  autoCompactionEnabled: false,
+  messageCount: 0,
+  queuedMessageCount: 0,
+  todoPhases: [],
+  sessionName: "Hermetic live subagent",
+};
+const subagent = {
+  id: "sub-live",
+  index: 0,
+  agent: "task",
+  agentSource: "bundled",
+  description: "Live drill child",
+  task: "Emit hermetic subagent transcript updates",
+  status: "running",
+  sessionFile: subagentSessionFile,
+  lastUpdate: Date.now(),
+};
+let subagentVisible = false;
+let childMessages = [];
+let scheduled = false;
+function response(id, data) {
+  process.stdout.write(JSON.stringify({ type: "response", id, success: true, data }) + "\\n");
+}
+function emit(frame) {
+  process.stdout.write(JSON.stringify(frame) + "\\n");
+}
+function progress(status = subagent.status) {
+  return {
+    index: 0,
+    id: subagent.id,
+    agent: subagent.agent,
+    agentSource: subagent.agentSource,
+    status,
+    task: subagent.task,
+    description: subagent.description,
+    recentTools: [],
+    recentOutput: [],
+    toolCount: childMessages.length,
+    requests: childMessages.length,
+    tokens: childMessages.length * 10,
+  };
+}
+function scheduleSubagentRun() {
+  if (scheduled) return;
+  scheduled = true;
+  state.isStreaming = true;
+  emit({ type: "turn_start" });
+  setTimeout(() => {
+    subagentVisible = true;
+    emit({
+      type: "subagent_lifecycle",
+      payload: {
+        id: subagent.id,
+        agent: subagent.agent,
+        agentSource: subagent.agentSource,
+        description: subagent.description,
+        status: "started",
+        sessionFile: subagent.sessionFile,
+        index: subagent.index,
+      },
+    });
+    emit({
+      type: "subagent_progress",
+      payload: {
+        index: subagent.index,
+        agent: subagent.agent,
+        agentSource: subagent.agentSource,
+        task: subagent.task,
+        sessionFile: subagent.sessionFile,
+        progress: progress("running"),
+      },
+    });
+  }, 100);
+  setTimeout(() => {
+    childMessages = [
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "hermetic child tick 1" }],
+      },
+    ];
+    emit({
+      type: "subagent_event",
+      payload: { id: subagent.id, event: { type: "message_update" } },
+    });
+  }, 1800);
+  setTimeout(() => {
+    childMessages = [
+      ...childMessages,
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "hermetic child tick 2" }],
+      },
+    ];
+    emit({
+      type: "subagent_event",
+      payload: { id: subagent.id, event: { type: "message_update" } },
+    });
+  }, 2600);
+  setTimeout(() => {
+    subagent.status = "completed";
+    state.isStreaming = false;
+    emit({
+      type: "subagent_lifecycle",
+      payload: {
+        id: subagent.id,
+        agent: subagent.agent,
+        agentSource: subagent.agentSource,
+        description: subagent.description,
+        status: "completed",
+        sessionFile: subagent.sessionFile,
+        index: subagent.index,
+      },
+    });
+    emit({ type: "turn_end" });
+  }, 3400);
+}
+process.stdout.write(JSON.stringify({ type: "ready" }) + "\\n");
+let buf = "";
+process.stdin.on("data", (chunk) => {
+  buf += chunk.toString("utf8");
+  let nl;
+  while ((nl = buf.indexOf("\\n")) !== -1) {
+    const line = buf.slice(0, nl).trim();
+    buf = buf.slice(nl + 1);
+    if (!line) continue;
+    let msg;
+    try { msg = JSON.parse(line); } catch { continue; }
+    if (!msg || typeof msg.id !== "string") continue;
+    if (msg.type === "get_state") response(msg.id, state);
+    else if (msg.type === "get_messages") response(msg.id, { messages: [] });
+    else if (msg.type === "get_subagents") response(msg.id, { subagents: subagentVisible ? [subagent] : [] });
+    else if (msg.type === "get_available_commands") response(msg.id, { commands: [] });
+    else if (msg.type === "get_session_stats") response(msg.id, {});
+    else if (msg.type === "get_subagent_messages") {
+      const from = typeof msg.fromByte === "number" ? msg.fromByte : 0;
+      response(msg.id, {
+        sessionFile: subagentSessionFile,
+        fromByte: from,
+        nextByte: childMessages.length,
+        reset: false,
+        entries: [],
+        messages: childMessages.slice(from),
+      });
+    } else if (msg.type === "prompt") {
+      response(msg.id, {});
+      scheduleSubagentRun();
+    } else if (msg.type === "set_subagent_subscription" || msg.type === "set_thinking_level" || msg.type === "abort") {
+      response(msg.id, {});
+    } else {
+      response(msg.id, {});
+    }
+  }
+});
 `,
     "utf8",
   );
@@ -382,6 +551,43 @@ test("old start-session card is absent", async () => {
   await expect(
     page.getByText("Start a new session", { exact: true }),
   ).toHaveCount(0);
+});
+
+test("hermetic fake omp streams a running subagent drill-in transcript", async () => {
+  await page.getByRole("button", { name: "Chats", exact: true }).click();
+  const chatTab = page.getByRole("tab", { name: "Chat", exact: true });
+  if ((await chatTab.count()) > 0) await chatTab.click();
+  await page.getByText("New chat", { exact: true }).click();
+
+  await expect(page.getByLabel("Message")).toBeEnabled();
+  await page.getByLabel("Message").fill("spawn a hermetic subagent");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+
+  const panels = page.getByRole("button", { name: "Session panels" });
+  await expect(panels).toBeVisible();
+  await panels.click();
+
+  const inspect = page.getByRole("button", {
+    name: /Inspect Live drill child/,
+  });
+  await expect(inspect).toBeVisible({ timeout: 3_000 });
+  await inspect.click();
+
+  await expect(
+    page.getByText("Waiting for the subagent's first messages…"),
+  ).toBeVisible();
+  await expect(page.getByText("hermetic child tick 1")).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect(page.getByText("hermetic child tick 2")).toBeVisible({
+    timeout: 5_000,
+  });
+
+  await page.getByRole("button", { name: "Back to chat" }).click();
+  await expect(page.getByRole("button", { name: "Back to chat" })).toHaveCount(
+    0,
+  );
+  await expect(page.getByLabel("Message")).toBeVisible();
 });
 
 const liveTest = process.env.STUDIO_E2E_LIVE ? test : test.skip;
