@@ -249,6 +249,7 @@ test.beforeAll(async () => {
   writeFileSync(
     fakeOmp,
     `#!/usr/bin/env node
+const { appendFileSync } = require("node:fs");
 const subagentSessionFile = ${JSON.stringify(fakeSubagentSessionFile)};
 if (process.argv[2] === "stats" && process.argv.includes("--json")) {
   process.stdout.write(${JSON.stringify(`${JSON.stringify(fakeStats)}\n`)});
@@ -285,6 +286,7 @@ const subagent = {
 };
 let subagentVisible = false;
 let childMessages = [];
+let childJsonl = "";
 let scheduled = false;
 function response(id, data) {
   process.stdout.write(JSON.stringify({ type: "response", id, success: true, data }) + "\\n");
@@ -307,6 +309,26 @@ function progress(status = subagent.status) {
     requests: childMessages.length,
     tokens: childMessages.length * 10,
   };
+}
+function appendChildMessage(message) {
+  childMessages = [...childMessages, message];
+  const line = JSON.stringify({ type: "message", message }) + "\\n";
+  childJsonl += line;
+  appendFileSync(subagentSessionFile, line, "utf8");
+}
+function messagesFromByte(fromByte) {
+  const bytes = Buffer.from(childJsonl, "utf8");
+  const chunk = bytes.subarray(fromByte).toString("utf8");
+  const messages = [];
+  for (const rawLine of chunk.split("\\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    try {
+      const rec = JSON.parse(line);
+      if (rec.type === "message" && rec.message) messages.push(rec.message);
+    } catch {}
+  }
+  return { nextByte: bytes.length, messages };
 }
 function scheduleSubagentRun() {
   if (scheduled) return;
@@ -340,25 +362,20 @@ function scheduleSubagentRun() {
     });
   }, 100);
   setTimeout(() => {
-    childMessages = [
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "hermetic child tick 1" }],
-      },
-    ];
+    appendChildMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "hermetic child tick 1" }],
+    });
     emit({
       type: "subagent_event",
       payload: { id: subagent.id, event: { type: "message_update" } },
     });
   }, 1800);
   setTimeout(() => {
-    childMessages = [
-      ...childMessages,
-      {
-        role: "assistant",
-        content: [{ type: "text", text: "hermetic child tick 2" }],
-      },
-    ];
+    appendChildMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "hermetic child tick 2" }],
+    });
     emit({
       type: "subagent_event",
       payload: { id: subagent.id, event: { type: "message_update" } },
@@ -401,13 +418,14 @@ process.stdin.on("data", (chunk) => {
     else if (msg.type === "get_session_stats") response(msg.id, {});
     else if (msg.type === "get_subagent_messages") {
       const from = typeof msg.fromByte === "number" ? msg.fromByte : 0;
+      const result = messagesFromByte(from);
       response(msg.id, {
         sessionFile: subagentSessionFile,
         fromByte: from,
-        nextByte: childMessages.length,
+        nextByte: result.nextByte,
         reset: false,
         entries: [],
-        messages: childMessages.slice(from),
+        messages: result.messages,
       });
     } else if (msg.type === "prompt") {
       response(msg.id, {});
