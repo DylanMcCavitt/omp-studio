@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "bun:test";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,13 +46,29 @@ function makeIpcMain(): {
   };
 }
 
-function git(args: string, cwd: string): void {
-  execSync(`git ${args}`, { stdio: ["ignore", "ignore", "ignore"], cwd });
+const ISOLATED_GIT_ENV: NodeJS.ProcessEnv = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_NOSYSTEM: "1",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  HOME: tmpdir(),
+  PATH: process.env.PATH ?? "",
+  TMPDIR: process.env.TMPDIR ?? tmpdir(),
+};
+
+function git(args: string[], cwd: string): void {
+  execFileSync("git", args, {
+    cwd,
+    env: ISOLATED_GIT_ENV,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
 }
 
 function hasGit(): boolean {
   try {
-    execSync("git --version", { stdio: "ignore" });
+    execFileSync("git", ["--version"], {
+      env: ISOLATED_GIT_ENV,
+      stdio: "ignore",
+    });
     return true;
   } catch {
     return false;
@@ -61,16 +77,22 @@ function hasGit(): boolean {
 
 function createChangedRepo(): string {
   const dir = mkdtempSync(join(tmpdir(), "omp-studio-changes-ipc-repo-"));
-  git("init -q", dir);
-  git("config user.email ipc@example.test", dir);
-  git("config user.name ipc", dir);
-  git("config commit.gpgsign false", dir);
-  writeFileSync(join(dir, "sentinel-modified.ts"), "alpha\nbeta\n", "utf8");
-  git("add sentinel-modified.ts", dir);
-  git("commit -q -m base", dir);
-  git("checkout -q -b age-829-ipc", dir);
-  writeFileSync(join(dir, "sentinel-modified.ts"), "alpha\nBETA\n", "utf8");
-  return dir;
+  try {
+    git(["-c", "init.templateDir=", "init", "-q"], dir);
+    git(["config", "user.email", "ipc@example.test"], dir);
+    git(["config", "user.name", "ipc"], dir);
+    git(["config", "commit.gpgsign", "false"], dir);
+    git(["config", "core.hooksPath", "/dev/null"], dir);
+    writeFileSync(join(dir, "sentinel-modified.ts"), "alpha\nbeta\n", "utf8");
+    git(["add", "sentinel-modified.ts"], dir);
+    git(["commit", "-q", "-m", "base"], dir);
+    git(["checkout", "-q", "-b", "age-829-ipc"], dir);
+    writeFileSync(join(dir, "sentinel-modified.ts"), "alpha\nBETA\n", "utf8");
+    return dir;
+  } catch (error) {
+    rmSync(dir, { recursive: true, force: true });
+    throw error;
+  }
 }
 
 let invoke: (channel: string, ...args: unknown[]) => unknown;

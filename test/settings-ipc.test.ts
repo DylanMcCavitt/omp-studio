@@ -1,10 +1,13 @@
 import { beforeEach, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IpcMain } from "electron";
 import { registerSettingsIpc } from "../src/main/ipc/settings";
-import { setSettingsDir } from "../src/main/services/settings-service";
+import {
+  defaultSettings,
+  setSettingsDir,
+} from "../src/main/services/settings-service";
 import { CH, type StudioSettings } from "../src/shared/ipc";
 
 // Settings IPC is the frozen renderer<->main settings API. The channel list is
@@ -43,9 +46,11 @@ function channelsWithPrefix(prefix: string): string[] {
 
 let invoke: (channel: string, ...args: unknown[]) => unknown;
 let registeredChannels: () => string[];
+let settingsDir: string;
 
 beforeEach(() => {
-  setSettingsDir(mkdtempSync(join(tmpdir(), "omp-studio-settings-ipc-")));
+  settingsDir = mkdtempSync(join(tmpdir(), "omp-studio-settings-ipc-"));
+  setSettingsDir(settingsDir);
   const harness = makeIpcMain();
   registerSettingsIpc(harness.ipcMain);
   invoke = harness.invoke;
@@ -54,6 +59,17 @@ beforeEach(() => {
 
 test("registers every settings:* channel declared in shared/ipc", () => {
   expect(registeredChannels()).toEqual(channelsWithPrefix("settings:"));
+});
+
+test("settings:get resolves to defaults for missing and corrupt settings stores", async () => {
+  expect(await invoke(CH.settingsGet)).toEqual(defaultSettings());
+
+  writeFileSync(
+    join(settingsDir, "settings.json"),
+    "{ not valid json ",
+    "utf8",
+  );
+  expect(await invoke(CH.settingsGet)).toEqual(defaultSettings());
 });
 
 test("settings:update forwards the renderer patch and settings:get reads the updated store", async () => {
