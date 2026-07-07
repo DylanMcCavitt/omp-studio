@@ -1,11 +1,6 @@
 import { beforeEach, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
-import {
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IpcMain } from "electron";
@@ -82,7 +77,9 @@ let invoke: (channel: string, ...args: unknown[]) => unknown;
 let registeredChannels: () => string[];
 
 beforeEach(() => {
-  setSettingsDir(mkdtempSync(join(tmpdir(), "omp-studio-changes-ipc-settings-")));
+  setSettingsDir(
+    mkdtempSync(join(tmpdir(), "omp-studio-changes-ipc-settings-")),
+  );
   const harness = makeIpcMain();
   registerChangesIpc(harness.ipcMain);
   invoke = harness.invoke;

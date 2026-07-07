@@ -1,5 +1,5 @@
-import { EventEmitter } from "node:events";
 import { expect, test } from "bun:test";
+import { EventEmitter } from "node:events";
 import type { BrowserWindow, IpcMain } from "electron";
 import { registerTerminalIpc } from "../src/main/ipc/terminal";
 import type { PtySession } from "../src/main/terminal/pty-session";
