@@ -287,6 +287,7 @@ const subagent = {
 let subagentVisible = false;
 let childMessages = [];
 let childJsonl = "";
+const validOffsets = new Set([0]);
 let scheduled = false;
 function response(id, data) {
   process.stdout.write(JSON.stringify({ type: "response", id, success: true, data }) + "\\n");
@@ -314,9 +315,13 @@ function appendChildMessage(message) {
   childMessages = [...childMessages, message];
   const line = JSON.stringify({ type: "message", message }) + "\\n";
   childJsonl += line;
+  validOffsets.add(Buffer.byteLength(childJsonl, "utf8"));
   appendFileSync(subagentSessionFile, line, "utf8");
 }
 function messagesFromByte(fromByte) {
+  // Stricter than real omp on purpose: enforce opaque cursor boundaries so
+  // message-index cursor regressions cannot recover from a mid-line byte offset.
+  if (!validOffsets.has(fromByte)) return { nextByte: fromByte, messages: [] };
   const bytes = Buffer.from(childJsonl, "utf8");
   const chunk = bytes.subarray(fromByte).toString("utf8");
   const messages = [];
