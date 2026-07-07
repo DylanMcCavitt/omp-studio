@@ -23,6 +23,7 @@ export interface LinearIssueFilters {
 const UNAUTHENTICATED: LinearStatusInfo = {
   status: "unauthenticated",
   writesEnabled: false,
+  persisted: false,
 };
 
 interface LinearState {
@@ -78,7 +79,7 @@ export const useLinearStore = create<LinearState>((set, get) => ({
     } catch (e) {
       set({
         statusLoading: false,
-        status: { status: "error", writesEnabled: false },
+        status: { status: "error", writesEnabled: false, persisted: false },
         error: message(e),
       });
     }
@@ -127,6 +128,7 @@ export const useLinearStore = create<LinearState>((set, get) => ({
       const status: LinearStatusInfo = {
         status: "error",
         writesEnabled: false,
+        persisted: false,
       };
       set({ status, connecting: false, error: message(e) });
       return status;

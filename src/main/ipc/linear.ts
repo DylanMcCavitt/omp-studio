@@ -16,7 +16,12 @@ import type {
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
 import { createLinearService } from "../services/linear";
-import { clearSecret, getSecret, setSecret } from "../services/secret-store";
+import {
+  clearSecret,
+  getSecret,
+  getSecretPersistenceStatus,
+  setSecret,
+} from "../services/secret-store";
 import { loadSettings } from "../services/settings-service";
 
 /** Keychain entry name → `<userData>/secrets/linear.bin`. */
@@ -48,17 +53,23 @@ async function writesEnabled(): Promise<boolean> {
 
 async function status(): Promise<LinearStatusInfo> {
   const writes = await writesEnabled();
+  const persistence = getSecretPersistenceStatus(LINEAR_SECRET);
   const now = Date.now();
   if (probeCache && now - probeCache.at < STATUS_CACHE_TTL_MS) {
     return {
       status: probeCache.status,
       viewer: probeCache.viewer,
       writesEnabled: writes,
+      persisted: persistence.persisted,
     };
   }
   if (!getSecret(LINEAR_SECRET)) {
     probeCache = { at: now, status: "unauthenticated" };
-    return { status: "unauthenticated", writesEnabled: writes };
+    return {
+      status: "unauthenticated",
+      writesEnabled: writes,
+      persisted: false,
+    };
   }
   const viewer = await linear.viewer();
   // Key present but probe failed → "error" (transient network OR a now-invalid
@@ -70,20 +81,33 @@ async function status(): Promise<LinearStatusInfo> {
     status: probeCache.status,
     viewer: probeCache.viewer,
     writesEnabled: writes,
+    persisted: getSecretPersistenceStatus(LINEAR_SECRET).persisted,
   };
 }
 
 async function setApiKey(key: string): Promise<LinearStatusInfo> {
   const writes = await writesEnabled();
   const candidate = (key ?? "").trim();
-  if (!candidate) return { status: "unauthenticated", writesEnabled: writes };
+  if (!candidate) {
+    return {
+      status: "unauthenticated",
+      writesEnabled: writes,
+      persisted: false,
+    };
+  }
   // Validate BEFORE persisting: probe viewer{} with a service bound to the
   // candidate key. Never store an unvalidated (or network-unreachable) key.
   const viewer = await createLinearService(async () => candidate).viewer();
-  if (!viewer) return { status: "error", writesEnabled: writes };
+  if (!viewer)
+    return { status: "error", writesEnabled: writes, persisted: false };
   setSecret(LINEAR_SECRET, candidate);
   probeCache = { at: Date.now(), status: "authenticated", viewer };
-  return { status: "authenticated", viewer, writesEnabled: writes };
+  return {
+    status: "authenticated",
+    viewer,
+    writesEnabled: writes,
+    persisted: getSecretPersistenceStatus(LINEAR_SECRET).persisted,
+  };
 }
 
 export function registerLinearIpc(ipcMain: IpcMain): void {

@@ -13,10 +13,12 @@ import Linear from "./Linear";
 const UNAUTH: LinearStatusInfo = {
   status: "unauthenticated",
   writesEnabled: false,
+  persisted: false,
 };
 const AUTHED: LinearStatusInfo = {
   status: "authenticated",
   writesEnabled: false,
+  persisted: true,
   viewer: { id: "u1", name: "Ada" },
 };
 
