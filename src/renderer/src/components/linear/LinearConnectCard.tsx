@@ -9,7 +9,7 @@
 //     validates it, stores it in the OS keychain, and returns only non-secret
 //     status. `disconnect` asks main to delete the stored key.
 
-import { ExternalLink, KeyRound, Unplug } from "lucide-react";
+import { ExternalLink, KeyRound, TriangleAlert, Unplug } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Badge, Button, Spinner } from "@/components/ui";
 import { useLinearStore } from "@/store/linear";
@@ -30,6 +30,7 @@ export function LinearConnectCard({ className }: { className?: string }) {
 
   if (status?.status === "authenticated") {
     const viewer = status.viewer;
+    const memoryOnly = status.persisted === false;
     return (
       <div className={className}>
         <div className="flex flex-wrap items-center gap-2">
@@ -58,6 +59,19 @@ export function LinearConnectCard({ className }: { className?: string }) {
             Disconnect
           </Button>
         </div>
+        {memoryOnly && (
+          <div className="mt-3 flex gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-ink">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
+            <div className="space-y-0.5">
+              <p className="font-medium">Connected for this session only.</p>
+              <p className="text-ink-muted">
+                Your Linear API key is stored in memory and will not survive
+                restart. On Linux, install or enable libsecret so the app can
+                encrypt and persist it.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

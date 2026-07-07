@@ -67,6 +67,7 @@ function stubBridge(overrides: Partial<OmpApi> = {}) {
       status: vi.fn(async () => ({
         status: "unauthenticated",
         writesEnabled: false,
+        persisted: false,
       })),
       listIssues: vi.fn(async () => []),
     },

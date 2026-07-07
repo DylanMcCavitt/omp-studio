@@ -286,6 +286,8 @@ export interface LinearStatusInfo {
   status: LinearAuthStatus;
   viewer?: LinearViewer;
   writesEnabled: boolean;
+  /** True when the current key is backed by encrypted on-disk storage. */
+  persisted: boolean;
 }
 
 // ---------------------------------------------------------------------------

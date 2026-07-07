@@ -48,6 +48,20 @@ function electron(): ElectronBackend {
 /** Session-only fallback when OS encryption is unavailable or a disk op fails. */
 const memory = new Map<string, string>();
 
+/** Non-secret metadata about how a named secret is stored. */
+export function getSecretPersistenceStatus(name: string): {
+  persisted: boolean;
+} {
+  try {
+    if (!electron().safeStorage.isEncryptionAvailable()) {
+      return { persisted: false };
+    }
+    return { persisted: existsSync(secretPath(name)) && !memory.has(name) };
+  } catch {
+    return { persisted: false };
+  }
+}
+
 function secretPath(name: string): string {
   return join(electron().app.getPath("userData"), "secrets", `${name}.bin`);
 }

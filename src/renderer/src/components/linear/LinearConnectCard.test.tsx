@@ -13,10 +13,12 @@ import { LinearConnectCard } from "./LinearConnectCard";
 const UNAUTH: LinearStatusInfo = {
   status: "unauthenticated",
   writesEnabled: false,
+  persisted: false,
 };
 const AUTHED: LinearStatusInfo = {
   status: "authenticated",
   writesEnabled: false,
+  persisted: true,
   viewer: {
     id: "u1",
     name: "Ada Lovelace",
@@ -99,6 +101,26 @@ it("adopts the returned status on a valid key without storing the key", async ()
   // …status is adopted, and still no key is held anywhere in the store.
   expect(useLinearStore.getState().status?.status).toBe("authenticated");
   expect(JSON.stringify(useLinearStore.getState())).not.toContain(SECRET);
+});
+
+it("warns when the validated key is memory-only for this session", () => {
+  stubLinear({});
+  useLinearStore.setState({
+    status: { ...AUTHED, persisted: false },
+  });
+
+  render(<LinearConnectCard />);
+
+  expect(
+    screen.getByText("Connected for this session only."),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/will not survive restart/i)).toBeInTheDocument();
+  expect(screen.getByText(/libsecret/i)).toBeInTheDocument();
+  const warning = screen
+    .getByText("Connected for this session only.")
+    .closest("div")?.parentElement;
+  expect(warning?.className).toContain("border-warn/40");
+  expect(warning?.className).toContain("bg-warn/10");
 });
 
 it("disconnects via clearApiKey and resets to unauthenticated", async () => {

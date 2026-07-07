@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLinearService } from "../src/main/services/linear";
+import {
+  clearSecret,
+  getSecretPersistenceStatus,
+  setSecret,
+  setSecretBackend,
+} from "../src/main/services/secret-store";
 
 // The Linear service is plain-node and electron-free: it speaks GraphQL over the
 // process-global `fetch` using a key from an injected getter. These tests stub
@@ -329,4 +338,24 @@ test("an invalid JSON body degrades to null", async () => {
       }) as unknown as Response,
   );
   expect(await createLinearService(getApiKey).viewer()).toBeNull();
+});
+
+test("secret-store status reports memory-only when OS encryption is unavailable", () => {
+  const userDataDir = mkdtempSync(join(tmpdir(), "omp-studio-secret-status-"));
+  setSecretBackend({
+    app: { getPath: () => userDataDir },
+    safeStorage: {
+      isEncryptionAvailable: () => false,
+      encryptString: (s: string) => Buffer.from(s),
+      decryptString: (b: Buffer) => b.toString(),
+    },
+  });
+  try {
+    clearSecret("linear");
+    setSecret("linear", "lin_api_secret");
+    expect(getSecretPersistenceStatus("linear")).toEqual({ persisted: false });
+  } finally {
+    clearSecret("linear");
+    setSecretBackend(null);
+  }
 });
