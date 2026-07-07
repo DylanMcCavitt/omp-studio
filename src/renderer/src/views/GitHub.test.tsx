@@ -127,3 +127,61 @@ it("renders repo rows with language dots, stars, and relative age", async () => 
     dateNow.mockRestore();
   }
 });
+
+it("keeps repository badges visible when long names truncate", async () => {
+  useAppStore.setState({ selectedProject: "/work/long-owner" });
+  const headerName =
+    "extremely-long-organization-name-that-would-overflow/the-current-repository-name-is-also-extremely-long";
+  const rowName =
+    "another-extremely-long-organization-name-that-would-overflow/the-listed-repository-name-is-also-extremely-long";
+  githubStub({
+    currentRepo: vi.fn().mockResolvedValue({
+      nameWithOwner: headerName,
+      name: "the-current-repository-name-is-also-extremely-long",
+      description:
+        "A current repository description that should keep using the existing two-line clamp.",
+      isPrivate: false,
+      url: "https://github.com/example/current",
+      stargazerCount: 0,
+      updatedAt: "2026-06-11T12:00:00Z",
+      primaryLanguage: "TypeScript",
+    }),
+    listRepos: vi.fn().mockResolvedValue([
+      {
+        nameWithOwner: rowName,
+        name: "the-listed-repository-name-is-also-extremely-long",
+        description:
+          "A listed repository description that should keep using the existing two-line clamp.",
+        isPrivate: true,
+        url: "https://github.com/example/listed",
+        stargazerCount: 0,
+        updatedAt: "2026-06-11T12:00:00Z",
+        primaryLanguage: "TypeScript",
+      },
+    ]),
+  });
+
+  render(<GitHub />);
+
+  const headerNameSpan = await screen.findByText(headerName);
+  expect(headerNameSpan).toHaveClass("min-w-0", "flex-1", "truncate");
+  const header = headerNameSpan.closest("button");
+  expect(header).not.toBeNull();
+  const headerBadge = within(header as HTMLElement).getByText("public");
+  expect(headerBadge).toBeInTheDocument();
+  expect(headerBadge).toHaveClass("shrink-0");
+
+  const rowNameSpan = await screen.findByText(rowName);
+  expect(rowNameSpan).toHaveClass("min-w-0", "flex-1", "truncate");
+  const row = rowNameSpan.closest("button");
+  expect(row).not.toBeNull();
+  const rowQueries = within(row as HTMLElement);
+  const rowBadge = rowQueries.getByText("private");
+  expect(rowBadge).toBeInTheDocument();
+  expect(rowBadge).toHaveClass("shrink-0");
+  expect(
+    rowQueries.getByText(
+      "A listed repository description that should keep using the existing two-line clamp.",
+    ),
+  ).toHaveClass("line-clamp-2");
+});
