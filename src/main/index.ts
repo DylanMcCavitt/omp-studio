@@ -138,7 +138,9 @@ void app.whenReady().then(async () => {
   // set instead of clobbering the un-resumed descriptors. No children spawn —
   // the renderer resumes them on demand (D3r).
   registry.hydrate((await loadSettings()).openSessions);
-  registerDataIpc(ipcMain, () => activeSessionCwd());
+  registerDataIpc(ipcMain, () => activeSessionCwd(), {
+    ompRootPids: () => registry.liveOmpPids(),
+  });
   // FS access is scoped only to a renderer-selected workspace root validated
   // against main-owned settings. No selected workspace => safe-empty, never a
   // fallback to an unrelated active chat cwd.

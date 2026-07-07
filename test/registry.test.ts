@@ -23,6 +23,7 @@ afterAll(() => rmSync(tmpRoot, { recursive: true, force: true }));
 // A stand-in for OmpRpcSession: emits frames on demand and records disposal.
 class FakeSession extends EventEmitter {
   disposed = false;
+  pidValue?: number;
   state: RpcState;
   constructor(state: RpcState) {
     super();
@@ -33,6 +34,9 @@ class FakeSession extends EventEmitter {
   }
   getState(): Promise<RpcState> {
     return Promise.resolve(this.state);
+  }
+  pid(): number | undefined {
+    return this.pidValue;
   }
   dispose(): void {
     this.disposed = true;
@@ -98,6 +102,19 @@ function makeRegistry() {
   const registry = new SessionRegistry({ createSession, store });
   return { registry, spawns, sessions, saves };
 }
+
+
+test("liveOmpPids tracks live children and drops hibernated ones", async () => {
+  const { registry, sessions } = makeRegistry();
+  const a = await registry.create({ cwd: "/work/a" });
+  const b = await registry.create({ cwd: "/work/b" });
+  sessions[0]!.pidValue = 101;
+  sessions[1]!.pidValue = 202;
+  expect(registry.liveOmpPids().sort()).toEqual([101, 202]);
+
+  await registry.hibernate(a.id);
+  expect(registry.liveOmpPids()).toEqual([202]);
+});
 
 test("list reflects created and hibernated sessions", async () => {
   const { registry } = makeRegistry();

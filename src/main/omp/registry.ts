@@ -230,6 +230,20 @@ export class SessionRegistry {
     });
   }
 
+  /** PIDs of every live omp rpc-ui child (registered + spawn-to-ready window). */
+  liveOmpPids(): number[] {
+    const pids = new Set<number>();
+    for (const session of this.inFlight) {
+      const pid = session.pid();
+      if (pid != null) pids.add(pid);
+    }
+    for (const record of this.records.values()) {
+      const pid = record.child?.pid();
+      if (pid != null) pids.add(pid);
+    }
+    return [...pids];
+  }
+
   /** The persisted-shape descriptors backing `chat:list`. */
   descriptors(): OpenSessionDescriptor[] {
     return [...this.records.values()].map((record) => record.descriptor);

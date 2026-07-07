@@ -4,7 +4,7 @@
 // `(provider, id)` and closes. AGE-705 leads the chip with a workspace Live Dot
 // (hue = identity, fill = session status) and lives in the chat composer's
 // controls row. Built on the sanctioned `Popover` primitive; the in-popover
-// search reuses the shared `filterOptions`/`clampIndex`/`moveIndex` helpers so
+// search reuses the shared `filterModels`/`clampIndex`/`moveIndex` helpers so
 // its filtering and keyboard model stay in step with `Combobox` (whose
 // fixed-height trigger is why this rolls its own compact one).
 
@@ -13,9 +13,10 @@ import type { WorkspaceColorKey } from "@shared/ipc";
 import type { RpcModel } from "@shared/rpc";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { type ComboboxOption, filterOptions, Popover } from "@/components/ui";
+import { Popover } from "@/components/ui";
 import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
+import { filterModels, groupModelsByProvider } from "@/lib/model-options";
 import { clampIndex, moveIndex } from "@/lib/slash-commands";
 import { useAsync } from "@/lib/useAsync";
 import type { SessionStatus } from "@/store/session-reducer";
@@ -111,15 +112,16 @@ function ModelList({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const options = useMemo<ComboboxOption[]>(
-    () => models.map((m) => ({ value: m.selector, label: m.name })),
-    [models],
+  const filtered = useMemo(() => filterModels(models, query), [models, query]);
+  const grouped = useMemo(
+    () => groupModelsByProvider(filtered),
+    [filtered],
   );
-  const filtered = useMemo(
-    () => filterOptions(options, query),
-    [options, query],
+  const flatFiltered = useMemo(
+    () => grouped.flatMap((group) => group.models),
+    [grouped],
   );
-  const active = clampIndex(activeIndex, filtered.length);
+  const active = clampIndex(activeIndex, flatFiltered.length);
 
   // Focus the filter input on open and reset the cursor whenever the query
   // changes — mirrors the Combobox listbox so behaviour reads identically.
@@ -135,22 +137,21 @@ function ModelList({
       ?.scrollIntoView({ block: "nearest" });
   }, [active]);
 
-  const select = (selector: string) => {
-    const m = models.find((x) => x.selector === selector);
-    if (m) onSelect(m.provider, m.id);
+  const select = (model: ModelInfo) => {
+    onSelect(model.provider, model.id);
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex(moveIndex(active, "down", filtered.length));
+      setActiveIndex(moveIndex(active, "down", flatFiltered.length));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex(moveIndex(active, "up", filtered.length));
+      setActiveIndex(moveIndex(active, "up", flatFiltered.length));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      const option = filtered[active];
-      if (option) select(option.value);
+      const model = flatFiltered[active];
+      if (model) select(model);
     }
     // Escape is handled by Popover's useDismiss (closes + returns focus).
   };
@@ -179,40 +180,52 @@ function ModelList({
         role="listbox"
         className="scrollbar max-h-64 overflow-auto p-1.5"
       >
-        {filtered.length === 0 ? (
+        {flatFiltered.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-ink-faint">
             {emptyText}
           </div>
         ) : (
-          filtered.map((option, i) => (
-            <button
-              key={option.value}
-              type="button"
-              data-index={i}
-              role="option"
-              aria-selected={option.value === currentSelector}
-              // Keep the input focused through the click so the selection
-              // registers before any blur-driven close.
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => select(option.value)}
-              onMouseMove={() => setActiveIndex(i)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
-                i === active ? "bg-bg-hover" : "hover:bg-bg-hover/60",
-              )}
-            >
-              <Check
-                className={cn(
-                  "h-4 w-4 shrink-0",
-                  option.value === currentSelector
-                    ? "text-accent"
-                    : "text-transparent",
-                )}
-              />
-              <span className="block min-w-0 flex-1 truncate font-mono text-sm text-ink">
-                {option.label}
-              </span>
-            </button>
+          grouped.map((group) => (
+            <div key={group.provider} role="group" aria-label={group.provider}>
+              <div className="px-2.5 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-ink-muted first:pt-1">
+                {group.provider}
+              </div>
+              {group.models.map((model) => {
+                const index = flatFiltered.findIndex(
+                  (item) => item.selector === model.selector,
+                );
+                return (
+                  <button
+                    key={model.selector}
+                    type="button"
+                    data-index={index}
+                    role="option"
+                    aria-selected={model.selector === currentSelector}
+                    // Keep the input focused through the click so the selection
+                    // registers before any blur-driven close.
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => select(model)}
+                    onMouseMove={() => setActiveIndex(index)}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
+                      index === active ? "bg-bg-hover" : "hover:bg-bg-hover/60",
+                    )}
+                  >
+                    <Check
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        model.selector === currentSelector
+                          ? "text-accent"
+                          : "text-transparent",
+                      )}
+                    />
+                    <span className="block min-w-0 flex-1 truncate font-mono text-sm text-ink">
+                      {model.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           ))
         )}
       </div>

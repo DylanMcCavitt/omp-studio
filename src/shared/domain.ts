@@ -240,6 +240,18 @@ export interface DashboardData {
   generatedAt: string;
 }
 
+/** Live memory footprint of the Electron app plus OMP child processes. */
+export interface MemoryUsageSnapshot {
+  /** App + OMP RSS combined. */
+  totalBytes: number;
+  /** Electron main/renderer/GPU/utility processes. */
+  appBytes: number;
+  /** OMP rpc-ui roots and their descendant processes. */
+  ompBytes: number;
+  ompInstanceCount: number;
+  generatedAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // Linear (feature 2) — issue tracking integration. All Linear HTTP happens in
 // the main process; the renderer only ever sees these mapped domain shapes.
