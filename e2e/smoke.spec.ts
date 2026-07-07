@@ -289,6 +289,7 @@ let childMessages = [];
 let childJsonl = "";
 const validOffsets = new Set([0]);
 let scheduled = false;
+let childTimelineScheduled = false;
 function response(id, data) {
   process.stdout.write(JSON.stringify({ type: "response", id, success: true, data }) + "\\n");
 }
@@ -335,6 +336,47 @@ function messagesFromByte(fromByte) {
   }
   return { nextByte: bytes.length, messages };
 }
+function scheduleChildTimeline() {
+  if (childTimelineScheduled) return;
+  childTimelineScheduled = true;
+  setTimeout(() => {
+    appendChildMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "hermetic child tick 1" }],
+    });
+    emit({
+      type: "subagent_event",
+      payload: { id: subagent.id, event: { type: "message_update" } },
+    });
+  }, 600);
+  setTimeout(() => {
+    appendChildMessage({
+      role: "assistant",
+      content: [{ type: "text", text: "hermetic child tick 2" }],
+    });
+    emit({
+      type: "subagent_event",
+      payload: { id: subagent.id, event: { type: "message_update" } },
+    });
+  }, 1400);
+  setTimeout(() => {
+    subagent.status = "completed";
+    state.isStreaming = false;
+    emit({
+      type: "subagent_lifecycle",
+      payload: {
+        id: subagent.id,
+        agent: subagent.agent,
+        agentSource: subagent.agentSource,
+        description: subagent.description,
+        status: "completed",
+        sessionFile: subagent.sessionFile,
+        index: subagent.index,
+      },
+    });
+    emit({ type: "turn_end" });
+  }, 2200);
+}
 function scheduleSubagentRun() {
   if (scheduled) return;
   scheduled = true;
@@ -366,43 +408,6 @@ function scheduleSubagentRun() {
       },
     });
   }, 100);
-  setTimeout(() => {
-    appendChildMessage({
-      role: "assistant",
-      content: [{ type: "text", text: "hermetic child tick 1" }],
-    });
-    emit({
-      type: "subagent_event",
-      payload: { id: subagent.id, event: { type: "message_update" } },
-    });
-  }, 1800);
-  setTimeout(() => {
-    appendChildMessage({
-      role: "assistant",
-      content: [{ type: "text", text: "hermetic child tick 2" }],
-    });
-    emit({
-      type: "subagent_event",
-      payload: { id: subagent.id, event: { type: "message_update" } },
-    });
-  }, 2600);
-  setTimeout(() => {
-    subagent.status = "completed";
-    state.isStreaming = false;
-    emit({
-      type: "subagent_lifecycle",
-      payload: {
-        id: subagent.id,
-        agent: subagent.agent,
-        agentSource: subagent.agentSource,
-        description: subagent.description,
-        status: "completed",
-        sessionFile: subagent.sessionFile,
-        index: subagent.index,
-      },
-    });
-    emit({ type: "turn_end" });
-  }, 3400);
 }
 process.stdout.write(JSON.stringify({ type: "ready" }) + "\\n");
 let buf = "";
@@ -432,6 +437,7 @@ process.stdin.on("data", (chunk) => {
         entries: [],
         messages: result.messages,
       });
+      if (subagentVisible) scheduleChildTimeline();
     } else if (msg.type === "prompt") {
       response(msg.id, {});
       scheduleSubagentRun();
