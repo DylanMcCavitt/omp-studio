@@ -11,7 +11,11 @@ function server(overrides: Partial<McpServerInfo> = {}): McpServerInfo {
     enabled: overrides.enabled ?? true,
     source: overrides.source ?? "user",
     command: overrides.command ?? "npx",
-    args: overrides.args ?? ["-y", "@modelcontextprotocol/server-filesystem", "/repo"],
+    args: overrides.args ?? [
+      "-y",
+      "@modelcontextprotocol/server-filesystem",
+      "/repo",
+    ],
     url: overrides.url,
     authType: overrides.authType,
     toolCount: overrides.toolCount ?? 12,
@@ -19,7 +23,12 @@ function server(overrides: Partial<McpServerInfo> = {}): McpServerInfo {
 }
 
 function installListMcpServers(results: McpServerInfo[][] = [[]]) {
-  const listMcpServers = vi.fn(async () => results[Math.min(listMcpServers.mock.calls.length - 1, results.length - 1)]);
+  const listMcpServers = vi.fn(
+    async () =>
+      results[
+        Math.min(listMcpServers.mock.calls.length - 1, results.length - 1)
+      ],
+  );
   Object.assign(window.omp, { listMcpServers } as Partial<OmpApi>);
   return listMcpServers;
 }
@@ -49,7 +58,9 @@ it("renders configured MCP servers with their launch target and tool count", asy
   render(<Mcp />);
 
   expect(await screen.findByText("filesystem")).toBeInTheDocument();
-  expect(screen.getByText("npx -y @modelcontextprotocol/server-filesystem /repo")).toBeInTheDocument();
+  expect(
+    screen.getByText("npx -y @modelcontextprotocol/server-filesystem /repo"),
+  ).toBeInTheDocument();
   expect(screen.getByText("12 tools")).toBeInTheDocument();
   expect(screen.getByText("linear")).toBeInTheDocument();
   expect(screen.getByText("https://mcp.example.test/sse")).toBeInTheDocument();
@@ -58,12 +69,17 @@ it("renders configured MCP servers with their launch target and tool count", asy
 });
 
 it("shows the empty state and reloads the read-only bridge on demand", async () => {
-  const listMcpServers = installListMcpServers([[ ], [server({ name: "github" })]]);
+  const listMcpServers = installListMcpServers([
+    [],
+    [server({ name: "github" })],
+  ]);
   const user = userEvent.setup();
 
   render(<Mcp />);
 
-  expect(await screen.findByText("No MCP servers configured")).toBeInTheDocument();
+  expect(
+    await screen.findByText("No MCP servers configured"),
+  ).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Reload" }));
 
   expect(await screen.findByText("github")).toBeInTheDocument();
@@ -80,7 +96,9 @@ it("surfaces load failures with a retry action", async () => {
 
   render(<Mcp />);
 
-  expect(await screen.findByText("Failed to load MCP servers")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Failed to load MCP servers"),
+  ).toBeInTheDocument();
   expect(screen.getByText("mcp config unreadable")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Try again" }));
 

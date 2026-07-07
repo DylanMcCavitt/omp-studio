@@ -1,7 +1,17 @@
-import type { SessionSearchHit, SessionSummary, SessionTranscript } from "@shared/domain";
+import type {
+  SessionSearchHit,
+  SessionSummary,
+  SessionTranscript,
+} from "@shared/domain";
 import type { OmpApi } from "@shared/ipc";
 import type { OmpMessage } from "@shared/rpc";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
@@ -33,15 +43,20 @@ function message(role: "user" | "assistant", text: string): OmpMessage {
 function transcript(s: SessionSummary, text: string): SessionTranscript {
   return {
     summary: s,
-    messages: [message("user", `Question about ${s.title}`), message("assistant", text)],
+    messages: [
+      message("user", `Question about ${s.title}`),
+      message("assistant", text),
+    ],
   };
 }
 
-function installBridge(options: {
-  sessions?: SessionSummary[];
-  transcripts?: Record<string, SessionTranscript>;
-  searchHits?: SessionSearchHit[];
-} = {}) {
+function installBridge(
+  options: {
+    sessions?: SessionSummary[];
+    transcripts?: Record<string, SessionTranscript>;
+    searchHits?: SessionSearchHit[];
+  } = {},
+) {
   const sessions = options.sessions ?? [];
   const transcripts = options.transcripts ?? {};
   Object.assign(window.omp, {
@@ -66,7 +81,10 @@ function installBridge(options: {
 
 beforeEach(() => {
   vi.useRealTimers();
-  useAppStore.setState({ ...PRISTINE_APP, sessionFocus: null, route: "dashboard" }, true);
+  useAppStore.setState(
+    { ...PRISTINE_APP, sessionFocus: null, route: "dashboard" },
+    true,
+  );
   useChatStore.setState(
     {
       ...PRISTINE_CHAT,
@@ -126,13 +144,21 @@ it("opens a selected historical session and renders its transcript", async () =>
   expect(screen.getByText("beta-project")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /Alpha refactor/ }));
 
-  expect(await screen.findByText("Alpha transcript replayed from disk")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Alpha transcript replayed from disk"),
+  ).toBeInTheDocument();
   expect(bridge.readSession).toHaveBeenCalledWith(alpha.path);
-  expect(screen.queryByText("Beta transcript replayed from disk")).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("Beta transcript replayed from disk"),
+  ).not.toBeInTheDocument();
 });
 
 it("switches search mode to matching transcript hits and opens the clicked hit", async () => {
-  const alpha = summary({ id: "alpha", path: "/sessions/alpha.jsonl", title: "Alpha refactor" });
+  const alpha = summary({
+    id: "alpha",
+    path: "/sessions/alpha.jsonl",
+    title: "Alpha refactor",
+  });
   const beta = summary({
     id: "beta",
     path: "/sessions/beta.jsonl",
@@ -178,13 +204,20 @@ it("switches search mode to matching transcript hits and opens the clicked hit",
   expect(await screen.findByText("Token rotation fix")).toBeInTheDocument();
   expect(screen.queryByText("Alpha refactor")).not.toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: /Rotate the token before retrying/ }));
-  expect(await screen.findByText("Token transcript opened at search hit")).toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: /Rotate the token before retrying/ }),
+  );
+  expect(
+    await screen.findByText("Token transcript opened at search hit"),
+  ).toBeInTheDocument();
   expect(bridge.readSession).toHaveBeenCalledWith(beta.path);
 });
 
 it("routes reveal and export actions for the selected session through the session bridge", async () => {
-  const alpha = summary({ path: "/sessions/alpha.jsonl", title: "Alpha refactor" });
+  const alpha = summary({
+    path: "/sessions/alpha.jsonl",
+    title: "Alpha refactor",
+  });
   const bridge = installBridge({
     sessions: [alpha],
     transcripts: { [alpha.path]: transcript(alpha, "Transcript body") },
@@ -192,21 +225,30 @@ it("routes reveal and export actions for the selected session through the sessio
   const user = userEvent.setup();
 
   render(<Sessions />);
-  await user.click(await screen.findByRole("button", { name: /Alpha refactor/ }));
+  await user.click(
+    await screen.findByRole("button", { name: /Alpha refactor/ }),
+  );
   await screen.findByText("Transcript body");
 
   await user.click(screen.getByRole("button", { name: "Session actions" }));
-  await user.click(screen.getByRole("menuitem", { name: "Reveal in file manager" }));
+  await user.click(
+    screen.getByRole("menuitem", { name: "Reveal in file manager" }),
+  );
   expect(bridge.session.reveal).toHaveBeenCalledWith(alpha.path);
 
   await user.click(screen.getByRole("button", { name: "Session actions" }));
   await user.click(screen.getByRole("menuitem", { name: "Export HTML…" }));
-  await waitFor(() => expect(bridge.session.exportHtml).toHaveBeenCalledWith(alpha.path));
+  await waitFor(() =>
+    expect(bridge.session.exportHtml).toHaveBeenCalledWith(alpha.path),
+  );
   expect(bridge.session.reveal).toHaveBeenLastCalledWith("/tmp/exported.html");
 });
 
 it("routes rename, archive, and delete mutations and refreshes the Sessions view", async () => {
-  const alpha = summary({ path: "/sessions/alpha.jsonl", title: "Alpha refactor" });
+  const alpha = summary({
+    path: "/sessions/alpha.jsonl",
+    title: "Alpha refactor",
+  });
   const bridge = installBridge({
     sessions: [alpha],
     transcripts: { [alpha.path]: transcript(alpha, "Transcript body") },
@@ -214,7 +256,9 @@ it("routes rename, archive, and delete mutations and refreshes the Sessions view
   const user = userEvent.setup();
 
   render(<Sessions />);
-  await user.click(await screen.findByRole("button", { name: /Alpha refactor/ }));
+  await user.click(
+    await screen.findByRole("button", { name: /Alpha refactor/ }),
+  );
   await screen.findByText("Transcript body");
 
   await user.click(screen.getByRole("button", { name: "Session actions" }));
@@ -222,12 +266,16 @@ it("routes rename, archive, and delete mutations and refreshes the Sessions view
   await user.clear(screen.getByLabelText("Name"));
   await user.type(screen.getByLabelText("Name"), "  New alias  ");
   await user.click(screen.getByRole("button", { name: "Save" }));
-  await waitFor(() => expect(bridge.session.rename).toHaveBeenCalledWith(alpha.path, "New alias"));
+  await waitFor(() =>
+    expect(bridge.session.rename).toHaveBeenCalledWith(alpha.path, "New alias"),
+  );
   expect(bridge.listSessions).toHaveBeenCalledTimes(2);
 
   await user.click(screen.getByRole("button", { name: "Session actions" }));
   await user.click(screen.getByRole("menuitem", { name: "Archive" }));
-  await waitFor(() => expect(bridge.session.archive).toHaveBeenCalledWith(alpha.path));
+  await waitFor(() =>
+    expect(bridge.session.archive).toHaveBeenCalledWith(alpha.path),
+  );
   expect(await screen.findByText("Select a session")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: /Alpha refactor/ }));
@@ -235,6 +283,8 @@ it("routes rename, archive, and delete mutations and refreshes the Sessions view
   await user.click(screen.getByRole("button", { name: "Session actions" }));
   await user.click(screen.getByRole("menuitem", { name: "Delete…" }));
   await user.click(screen.getByRole("button", { name: "Delete" }));
-  await waitFor(() => expect(bridge.session.delete).toHaveBeenCalledWith(alpha.path));
+  await waitFor(() =>
+    expect(bridge.session.delete).toHaveBeenCalledWith(alpha.path),
+  );
   expect(await screen.findByText("Select a session")).toBeInTheDocument();
 });

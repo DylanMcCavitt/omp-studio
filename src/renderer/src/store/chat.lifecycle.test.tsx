@@ -109,9 +109,15 @@ beforeEach(() => {
     },
     true,
   );
-  useAppStore.setState({ ...PRISTINE_APP, selectedProject: null, route: "dashboard" }, true);
+  useAppStore.setState(
+    { ...PRISTINE_APP, selectedProject: null, route: "dashboard" },
+    true,
+  );
   useSettingsStore.setState({ ...PRISTINE_SETTINGS, settings: SETTINGS }, true);
-  useApprovalStore.setState({ ...PRISTINE_APPROVALS, policies: {}, rulesBySession: {} }, true);
+  useApprovalStore.setState(
+    { ...PRISTINE_APPROVALS, policies: {}, rulesBySession: {} },
+    true,
+  );
   stubBridge();
 });
 
@@ -125,7 +131,10 @@ it("creates, selects, and closes sessions without leaving a stale active id", as
   expect(second).toBe("session-2");
   expect(useAppStore.getState().route).toBe("chat");
   expect(useChatStore.getState().activeSessionId).toBe("session-2");
-  expect(Object.keys(useChatStore.getState().openSessions)).toEqual(["session-1", "session-2"]);
+  expect(Object.keys(useChatStore.getState().openSessions)).toEqual([
+    "session-1",
+    "session-2",
+  ]);
 
   await useChatStore.getState().closeSession("session-2");
 
@@ -143,7 +152,9 @@ it("creates, selects, and closes sessions without leaving a stale active id", as
 it("reduces streaming assistant updates into one transcript row while preserving live text", async () => {
   await useChatStore.getState().openSession("streaming-session", rpcState());
 
-  useChatStore.getState()._handleFrame("streaming-session", { type: "turn_start" } as RpcFrame);
+  useChatStore
+    .getState()
+    ._handleFrame("streaming-session", { type: "turn_start" } as RpcFrame);
   useChatStore.getState()._handleFrame("streaming-session", {
     type: "message_update",
     assistantMessageEvent: { type: "text_delta", delta: "Hel" },
@@ -160,7 +171,9 @@ it("reduces streaming assistant updates into one transcript row while preserving
   expect(session?.liveText).toBe("Hello");
   expect(session?.messages).toHaveLength(1);
   expect(session?.messages[0]?.role).toBe("assistant");
-  expect(session?.messages[0]?.content).toEqual([{ type: "text", text: "Hello" }]);
+  expect(session?.messages[0]?.content).toEqual([
+    { type: "text", text: "Hello" },
+  ]);
 });
 
 it("routes approval requests to the addressed session and resolves only that queue", async () => {
@@ -179,9 +192,16 @@ it("routes approval requests to the addressed session and resolves only that que
     },
   });
 
-  expect(useChatStore.getState().openSessions["session-a"]?.uiRequests).toEqual([]);
-  expect(useChatStore.getState().openSessions["session-b"]?.uiRequests).toHaveLength(1);
-  expect(useChatStore.getState().openSessions["session-b"]?.uiRequests[0]?.request.id).toBe("approval-1");
+  expect(useChatStore.getState().openSessions["session-a"]?.uiRequests).toEqual(
+    [],
+  );
+  expect(
+    useChatStore.getState().openSessions["session-b"]?.uiRequests,
+  ).toHaveLength(1);
+  expect(
+    useChatStore.getState().openSessions["session-b"]?.uiRequests[0]?.request
+      .id,
+  ).toBe("approval-1");
 
   await useChatStore.getState().respondUi({
     sessionId: "session-b",
@@ -194,6 +214,10 @@ it("routes approval requests to the addressed session and resolves only that que
     requestId: "approval-1",
     response: { confirmed: true },
   });
-  expect(useChatStore.getState().openSessions["session-a"]?.uiRequests).toEqual([]);
-  expect(useChatStore.getState().openSessions["session-b"]?.uiRequests).toEqual([]);
+  expect(useChatStore.getState().openSessions["session-a"]?.uiRequests).toEqual(
+    [],
+  );
+  expect(useChatStore.getState().openSessions["session-b"]?.uiRequests).toEqual(
+    [],
+  );
 });

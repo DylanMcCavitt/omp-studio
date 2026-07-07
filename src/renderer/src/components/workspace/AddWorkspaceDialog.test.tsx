@@ -61,7 +61,9 @@ it("picks a directory, trims the optional label, persists the color, and selects
 
   render(<AddWorkspaceDialog onClose={onClose} />);
 
-  await user.click(screen.getByRole("button", { name: /Choose a project directory/ }));
+  await user.click(
+    screen.getByRole("button", { name: /Choose a project directory/ }),
+  );
   expect(await screen.findByText("/repo/omp-studio")).toBeInTheDocument();
   await user.type(screen.getByLabelText("Label (optional)"), "  Studio UI  ");
   await user.click(screen.getByRole("button", { name: "Blue" }));
@@ -75,7 +77,9 @@ it("picks a directory, trims the optional label, persists the color, and selects
     ),
   );
   expect(useAppStore.getState().selectedProject).toBe("/repo/omp-studio");
-  expect(useToastStore.getState().toasts[0]?.title).toBe("Added workspace “Studio UI”");
+  expect(useToastStore.getState().toasts[0]?.title).toBe(
+    "Added workspace “Studio UI”",
+  );
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
@@ -86,7 +90,9 @@ it("cancel leaves the workspace stores untouched", async () => {
 
   render(<AddWorkspaceDialog onClose={onClose} />);
 
-  await user.click(screen.getByRole("button", { name: /Choose a project directory/ }));
+  await user.click(
+    screen.getByRole("button", { name: /Choose a project directory/ }),
+  );
   expect(await screen.findByText("/repo/not-saved")).toBeInTheDocument();
   await user.type(screen.getByLabelText("Label (optional)"), "Discard me");
   await user.click(screen.getByRole("button", { name: "Cancel" }));
