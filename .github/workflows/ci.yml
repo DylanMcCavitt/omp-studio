@@ -108,3 +108,64 @@ jobs:
       # STUDIO_E2E_LIVE / RPC_LIVE intentionally unset: non-live smoke only.
       - name: e2e smoke (xvfb)
         run: xvfb-run -a npm run test:e2e
+
+  # Cross-OS smoke canaries: keep the branch-protected Ubuntu check above
+  # exactly named, and add macOS/Windows as non-required jobs while they prove
+  # stable. Flake mitigation is intentionally conservative here: run only the
+  # hermetic non-live smoke spec on native headed-capable runners, rely on the
+  # Playwright CI retry in playwright.config.ts, and promote these to required
+  # checks only after maintainers see repeated green runs.
+  # Windows runs the same smoke file with the rpc-ui subagent drill-in skipped:
+  # the app spawns OMP_BINARY directly with `--mode` as argv[0], so a script
+  # shim cannot cover that path on win32 without a product spawn wrapper.
+  e2e-smoke-macos:
+    name: e2e-smoke-macos
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Real Electron binary is required here (the app actually launches), so
+      # this job does NOT set ELECTRON_SKIP_BINARY_DOWNLOAD.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # STUDIO_E2E_LIVE / RPC_LIVE intentionally unset: non-live smoke only.
+      - name: e2e smoke (native macOS)
+        run: npx playwright test e2e/smoke.spec.ts
+
+  e2e-smoke-windows:
+    name: e2e-smoke-windows
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Real Electron binary is required here (the app actually launches), so
+      # this job does NOT set ELECTRON_SKIP_BINARY_DOWNLOAD.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # STUDIO_E2E_LIVE / RPC_LIVE intentionally unset: non-live smoke only.
+      - name: e2e smoke (native Windows)
+        run: npx playwright test e2e/smoke.spec.ts

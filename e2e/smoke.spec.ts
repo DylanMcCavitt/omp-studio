@@ -23,9 +23,9 @@ import {
 // It launches the BUILT app (out/main/index.js) and verifies that the v3 shell
 // boots, the right rail opens every destination panel without crashing, and the
 // workspace-scoped Files surface can open a real temp file in CodeMirror. It
-// uses a fake omp binary that only answers `omp stats --json`, forces gh to be
-// unresolvable (see beforeAll), starts no chat, spawns no real omp/gh child, and
-// runs no paid model turn.
+// uses a POSIX fake omp shim for stats plus rpc-ui chat, and a Windows Node
+// shim for stats-only coverage (the rpc-ui drill-in is skipped on win32; see
+// below), forces gh to be unresolvable, starts no paid model turn.
 //
 // Prerequisite: `npm run build` (so out/main/index.js exists). Run the whole
 // flow with `npm run build && npm run test:e2e`. On headless Linux CI, wrap with
@@ -118,11 +118,25 @@ let tempWorkspaceDir: string;
 const pageErrors: Error[] = [];
 const rendererCrashes: string[] = [];
 
+function writeFakeOmpStatsScript(dir: string, stats: unknown): void {
+  writeFileSync(
+    join(dir, "stats"),
+    `if (process.argv.includes("--json")) {
+  process.stdout.write(${JSON.stringify(`${JSON.stringify(stats)}\n`)});
+  process.exit(0);
+}
+process.exit(1);
+`,
+    "utf8",
+  );
+}
+
 test.beforeAll(async () => {
   // Hermetic, non-live posture. Five levers make the run deterministic and
   // side-effect-free regardless of the host:
-  //   - omp points at a fake script that only returns a small stats JSON payload,
-  //     so the Dashboard proves the native stats UI without touching real logs;
+  //   - POSIX OMP_BINARY points at a fake `omp` script that supports stats and
+  //     rpc-ui; Windows OMP_BINARY points at Node with a temp `stats` script
+  //     because rpc-ui spawns pass `--mode` as argv[0] with no shell;
   //   - gh points at a nonexistent binary, so GitHub IPC degrades gracefully and
   //     spawns no real gh child;
   //   - PI_CODING_AGENT_DIR points at an empty temp dir, so session/MCP/skills
@@ -177,7 +191,8 @@ test.beforeAll(async () => {
     "utf8",
   );
 
-  const fakeOmp = join(tempAgentDir, "omp");
+  const fakeOmp =
+    process.platform === "win32" ? process.execPath : join(tempAgentDir, "omp");
   const fakeSessionsDir = join(tempAgentDir, "sessions", "smoke-workspace");
   mkdirSync(fakeSessionsDir, { recursive: true });
   const fakeSubagentSessionFile = join(fakeSessionsDir, "subagent-live.jsonl");
@@ -246,9 +261,12 @@ test.beforeAll(async () => {
     ],
     generatedAt: new Date().toISOString(),
   };
-  writeFileSync(
-    fakeOmp,
-    `#!/usr/bin/env node
+  if (process.platform === "win32") {
+    writeFakeOmpStatsScript(tempAgentDir, fakeStats);
+  } else {
+    writeFileSync(
+      fakeOmp,
+      `#!/usr/bin/env node
 const { appendFileSync } = require("node:fs");
 const subagentSessionFile = ${JSON.stringify(fakeSubagentSessionFile)};
 if (process.argv[2] === "stats" && process.argv.includes("--json")) {
@@ -449,9 +467,10 @@ process.stdin.on("data", (chunk) => {
   }
 });
 `,
-    "utf8",
-  );
-  chmodSync(fakeOmp, 0o755);
+      "utf8",
+    );
+    chmodSync(fakeOmp, 0o755);
+  }
 
   const unresolvable = join(tempAgentDir, "no-such-binary");
   const env = {
@@ -467,6 +486,7 @@ process.stdin.on("data", (chunk) => {
   app = await electron.launch({
     args: [mainEntry, `--user-data-dir=${tempUserDataDir}`],
     env,
+    cwd: tempAgentDir,
   });
   page = await app.firstWindow();
   page.on("pageerror", (error) => pageErrors.push(error));
@@ -582,42 +602,50 @@ test("old start-session card is absent", async () => {
   ).toHaveCount(0);
 });
 
-test("hermetic fake omp streams a running subagent drill-in transcript", async () => {
-  await page.getByRole("button", { name: "Chats", exact: true }).click();
-  const chatTab = page.getByRole("tab", { name: "Chat", exact: true });
-  if ((await chatTab.count()) > 0) await chatTab.click();
-  await page.getByText("New chat", { exact: true }).click();
+// OmpRpcSession spawns OMP_BINARY directly with `--mode` as argv[0] and no
+// shell. Without a product spawn wrapper, Windows cannot run a script shim for
+// rpc-ui; the Windows CI canary intentionally covers the rest of smoke.
+const rpcUiTest = process.platform === "win32" ? test.skip : test;
 
-  await expect(page.getByLabel("Message")).toBeEnabled();
-  await page.getByLabel("Message").fill("spawn a hermetic subagent");
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+rpcUiTest(
+  "hermetic fake omp streams a running subagent drill-in transcript",
+  async () => {
+    await page.getByRole("button", { name: "Chats", exact: true }).click();
+    const chatTab = page.getByRole("tab", { name: "Chat", exact: true });
+    if ((await chatTab.count()) > 0) await chatTab.click();
+    await page.getByText("New chat", { exact: true }).click();
 
-  const panels = page.getByRole("button", { name: "Session panels" });
-  await expect(panels).toBeVisible();
-  await panels.click();
+    await expect(page.getByLabel("Message")).toBeEnabled();
+    await page.getByLabel("Message").fill("spawn a hermetic subagent");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
 
-  const inspect = page.getByRole("button", {
-    name: /Inspect Live drill child/,
-  });
-  await expect(inspect).toBeVisible({ timeout: 3_000 });
-  await inspect.click();
+    const panels = page.getByRole("button", { name: "Session panels" });
+    await expect(panels).toBeVisible();
+    await panels.click();
 
-  await expect(
-    page.getByText("Waiting for the subagent's first messages…"),
-  ).toBeVisible();
-  await expect(page.getByText("hermetic child tick 1")).toBeVisible({
-    timeout: 5_000,
-  });
-  await expect(page.getByText("hermetic child tick 2")).toBeVisible({
-    timeout: 5_000,
-  });
+    const inspect = page.getByRole("button", {
+      name: /Inspect Live drill child/,
+    });
+    await expect(inspect).toBeVisible({ timeout: 3_000 });
+    await inspect.click();
 
-  await page.getByRole("button", { name: "Back to chat" }).click();
-  await expect(page.getByRole("button", { name: "Back to chat" })).toHaveCount(
-    0,
-  );
-  await expect(page.getByLabel("Message")).toBeVisible();
-});
+    await expect(
+      page.getByText("Waiting for the subagent's first messages…"),
+    ).toBeVisible();
+    await expect(page.getByText("hermetic child tick 1")).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByText("hermetic child tick 2")).toBeVisible({
+      timeout: 5_000,
+    });
+
+    await page.getByRole("button", { name: "Back to chat" }).click();
+    await expect(
+      page.getByRole("button", { name: "Back to chat" }),
+    ).toHaveCount(0);
+    await expect(page.getByLabel("Message")).toBeVisible();
+  },
+);
 
 const liveTest = process.env.STUDIO_E2E_LIVE ? test : test.skip;
 
