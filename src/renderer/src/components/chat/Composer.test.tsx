@@ -7,8 +7,20 @@
 // The model chip and slash palette are stubbed so this exercises only the
 // placeholder wiring.
 
-import { act, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import {
+  AGENT_DRAG_MIME,
+  agentSteeringText,
+  serializeAgentDrag,
+} from "@/lib/agentDrag";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { useSettingsStore } from "@/store/settings";
@@ -22,6 +34,13 @@ vi.mock("@/components/chat/SlashCommandPalette", () => ({
 }));
 
 const SESSION_ID = "session-1";
+const AGENT = {
+  name: "planner",
+  description: "Plans the slice",
+  source: "project" as const,
+  spawns: "reviewer,tester",
+};
+const AGENT_TEXT = agentSteeringText(AGENT);
 
 beforeEach(() => {
   useChatStore.setState({ activeSessionId: null, openSessions: {} as never });
@@ -125,6 +144,62 @@ it("uses a primary IconButton for Send and a warn Button for Stop", () => {
   const stop = screen.getByRole("button", { name: "Stop" });
   expect(stop.className).toContain("bg-warn/10");
   expect(stop.className).toContain("text-ink");
+});
+
+it("routes an agent drop through the chooser and Steer injects editable text without submitting", async () => {
+  const user = userEvent.setup();
+  const prompt = vi.fn().mockResolvedValue(undefined);
+  Object.assign(window.omp, {
+    chat: { ...window.omp.chat, prompt },
+  });
+  activate("/repo");
+  render(<Composer sessionId={SESSION_ID} />);
+
+  const textarea = screen.getByLabelText("Message");
+  fireEvent.drop(textarea, {
+    dataTransfer: {
+      types: [AGENT_DRAG_MIME],
+      getData: (type: string) =>
+        type === AGENT_DRAG_MIME ? serializeAgentDrag(AGENT) : "",
+      files: [],
+    },
+  });
+
+  expect(
+    screen.getByRole("dialog", { name: "Route agent planner" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(AGENT_TEXT)).toBeInTheDocument();
+
+  await user.click(
+    screen.getByRole("button", { name: /steer current response/i }),
+  );
+
+  await waitFor(() => expect(textarea).toHaveValue(AGENT_TEXT));
+  await user.type(textarea, "x");
+
+  expect(textarea).toHaveValue(`${AGENT_TEXT}x`);
+  expect(prompt).not.toHaveBeenCalled();
+});
+
+it("returns focus to the composer textarea when the agent chooser is dismissed", async () => {
+  const user = userEvent.setup();
+  activate("/repo");
+  render(<Composer sessionId={SESSION_ID} />);
+
+  const textarea = screen.getByLabelText("Message");
+  textarea.focus();
+  fireEvent.drop(textarea, {
+    dataTransfer: {
+      types: [AGENT_DRAG_MIME],
+      getData: (type: string) =>
+        type === AGENT_DRAG_MIME ? serializeAgentDrag(AGENT) : "",
+      files: [],
+    },
+  });
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  await waitFor(() => expect(textarea).toHaveFocus());
 });
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@
 
 import type { AvailableCommand } from "@shared/rpc";
 import { ArrowUp, Navigation, Square } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AgentDropChooser } from "@/components/chat/AgentDropChooser";
 import { ModelControl } from "@/components/chat/ModelControl";
 import { PromptComposer } from "@/components/chat/PromptComposer";
@@ -56,6 +56,16 @@ export function Composer({ sessionId }: { sessionId: string }) {
     null,
   );
   const [steerText, setSteerText] = useState<string | null>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+
+  const closeDroppedAgent = () => {
+    setDroppedAgent(null);
+    requestAnimationFrame(() => {
+      composerRef.current
+        ?.querySelector<HTMLTextAreaElement>("textarea")
+        ?.focus();
+    });
+  };
 
   const streaming = status === "streaming";
   // Disabled until this pane's session is registered in the store — a pane
@@ -74,6 +84,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
   return (
     <div className="border-t border-border-subtle bg-bg-panel px-4 py-3">
       <div
+        ref={composerRef}
         data-testid="composer-width"
         className="relative mx-auto w-full max-w-[min(100%,72rem)]"
       >
@@ -82,7 +93,7 @@ export function Composer({ sessionId }: { sessionId: string }) {
             payload={droppedAgent}
             sessionId={sessionId}
             onSteer={setSteerText}
-            onClose={() => setDroppedAgent(null)}
+            onClose={closeDroppedAgent}
           />
         )}
         <PromptComposer

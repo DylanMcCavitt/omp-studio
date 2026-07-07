@@ -214,6 +214,13 @@ export function AgentDropChooser({
             disabledReason={`Pane limit reached — up to ${MAX_PANES} panes can be open.`}
             disabled={busy || !panesAvailable}
             onClick={route(async () => {
+              if (
+                layoutPaneIds(usePaneStore.getState().layout).length >=
+                MAX_PANES
+              ) {
+                openPaneWithFeedback({ kind: "chat", sessionId });
+                return;
+              }
               const id = await startParallel();
               if (id) openPaneWithFeedback({ kind: "chat", sessionId: id });
             })}
