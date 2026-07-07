@@ -73,7 +73,7 @@ function RepoRow({ repo }: { repo: GhRepo }) {
         <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium text-ink">
           {repo.nameWithOwner}
         </span>
-        <Badge variant={repo.isPrivate ? "warn" : "muted"}>
+        <Badge className="shrink-0" variant={repo.isPrivate ? "warn" : "muted"}>
           {repo.isPrivate ? "private" : "public"}
         </Badge>
       </div>
@@ -356,7 +356,10 @@ export default function GitHub() {
                 >
                   {repo.nameWithOwner}
                 </span>
-                <Badge variant={repo.isPrivate ? "warn" : "success"}>
+                <Badge
+                  className="shrink-0"
+                  variant={repo.isPrivate ? "warn" : "success"}
+                >
                   {repo.isPrivate ? "private" : "public"}
                 </Badge>
               </button>
