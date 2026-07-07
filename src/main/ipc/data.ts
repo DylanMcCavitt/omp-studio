@@ -8,6 +8,7 @@ import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
 import { dialog, shell } from "electron";
 import { safeOpenExternal } from "../external-open";
+import { scoped } from "../logger";
 import {
   listAgents,
   listMcpServers,
@@ -34,17 +35,29 @@ import {
   unarchiveSession,
 } from "../services/session-store";
 
+const log = scoped("ipc:data");
+
+function traceDashboardFallback<T>(
+  source: string,
+  fallback: T,
+): (error: unknown) => T {
+  return (error) => {
+    log.debug("dashboard aggregate unavailable", { source, error });
+    return fallback;
+  };
+}
+
 async function buildDashboard(cwd?: string): Promise<DashboardData> {
   const [sessions, models, mcp, skills, agents, repo, issues, prs] =
     await Promise.all([
-      listSessions().catch(() => []),
-      listModels().catch(() => []),
-      listMcpServers(cwd).catch(() => []),
-      listSkills(cwd).catch(() => []),
-      listAgents(cwd).catch(() => []),
-      currentRepo().catch(() => null),
-      listIssues().catch(() => []),
-      listPrs().catch(() => []),
+      listSessions().catch(traceDashboardFallback("sessions", [])),
+      listModels().catch(traceDashboardFallback("models", [])),
+      listMcpServers(cwd).catch(traceDashboardFallback("mcp", [])),
+      listSkills(cwd).catch(traceDashboardFallback("skills", [])),
+      listAgents(cwd).catch(traceDashboardFallback("agents", [])),
+      currentRepo().catch(traceDashboardFallback("repo", null)),
+      listIssues().catch(traceDashboardFallback("issues", [])),
+      listPrs().catch(traceDashboardFallback("prs", [])),
     ]);
 
   const byProject: ProjectSessions[] = [];

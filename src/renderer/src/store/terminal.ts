@@ -17,6 +17,23 @@ import { create } from "zustand";
 
 const MAX_DETACHED_BUFFER_CHARS = 64 * 1024;
 
+const loggedTerminalIpcFailures: Record<"write" | "resize", boolean> = {
+  write: false,
+  resize: false,
+};
+
+function warnTerminalIpcFailure(
+  operation: "write" | "resize",
+  error: unknown,
+): void {
+  if (!import.meta.env.DEV || loggedTerminalIpcFailures[operation]) return;
+  loggedTerminalIpcFailures[operation] = true;
+  console.warn(
+    `[terminal] ${operation} failed; suppressing further ${operation} failure logs`,
+    error,
+  );
+}
+
 /** Coarse, render-worthy lifecycle for one open terminal (not its scrollback). */
 export interface TerminalEntry {
   id: string;
@@ -174,12 +191,19 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => {
 
     write(id, data) {
       // Fire-and-forget: main no-ops an unknown/exited id, so a write that
-      // races an exit must never surface as an unhandled rejection.
-      void window.omp.terminal.write(id, data).catch(() => {});
+      // races an exit must never surface as an unhandled rejection. Dev logging
+      // is first-failure-only so a dead pty cannot spam the console.
+      void window.omp.terminal
+        .write(id, data)
+        .catch((error) => warnTerminalIpcFailure("write", error));
     },
 
     resize(id, cols, rows) {
-      void window.omp.terminal.resize(id, cols, rows).catch(() => {});
+      // Same exit-race swallow as write(); keep the warning rate-limited because
+      // resize can fire repeatedly during layout churn.
+      void window.omp.terminal
+        .resize(id, cols, rows)
+        .catch((error) => warnTerminalIpcFailure("resize", error));
     },
 
     async dispose(id) {

@@ -227,7 +227,10 @@ export async function probeCredential(
       // (which may hold the token) is never accumulated into a string.
       if (chunk.length > 0) hasStdout = true;
     });
-    // Drain stderr so the pipe never blocks; nothing is inspected or retained.
+    // Drain stderr so the pipe never blocks. This count-only credential probe
+    // intentionally does not inspect, retain, or log stderr: diagnostics can
+    // contain provider/token context, and the exit code is the only signal this
+    // probe is allowed to expose.
     child.stderr.on("data", () => {});
     child.on("error", () => {
       finish({ exitCode: -1, hasStdout });

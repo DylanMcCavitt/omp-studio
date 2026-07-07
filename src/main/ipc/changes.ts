@@ -1,9 +1,11 @@
 import type { ChangesStatus, FileDiff, GitWorkspaceInfo } from "@shared/domain";
 import { CH } from "@shared/ipc";
 import type { IpcMain } from "electron";
+import { scoped } from "../logger";
 import { createChangesService } from "../services/changes";
 import { resolveFilesRoot } from "./files";
 
+const log = scoped("ipc:changes");
 // Wire the Changes git channels to a workspace-scoped, read-only service.
 // Renderer supplies its selected workspace root; main validates that root
 // against main-owned settings (the SAME authorization Files uses) before git
@@ -20,7 +22,8 @@ export function registerChangesIpc(ipcMain: IpcMain): void {
     async (_event, workspaceRoot?: string | null): Promise<ChangesStatus> => {
       try {
         return await (await serviceFor(workspaceRoot)).status();
-      } catch {
+      } catch (error) {
+        log.debug("changes status unavailable", { error });
         return { repo: false, files: [] };
       }
     },
@@ -34,7 +37,8 @@ export function registerChangesIpc(ipcMain: IpcMain): void {
     ): Promise<GitWorkspaceInfo> => {
       try {
         return await (await serviceFor(workspaceRoot)).workspaceInfo();
-      } catch {
+      } catch (error) {
+        log.debug("changes workspace info unavailable", { error });
         return { repo: false, branch: null, worktreePath: null };
       }
     },
@@ -49,7 +53,8 @@ export function registerChangesIpc(ipcMain: IpcMain): void {
     ): Promise<FileDiff | null> => {
       try {
         return await (await serviceFor(workspaceRoot)).diff(relPath);
-      } catch {
+      } catch (error) {
+        log.debug("changes diff unavailable", { error });
         return null;
       }
     },
