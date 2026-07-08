@@ -397,7 +397,10 @@ function coerceUiPrefs(value: unknown): UiPrefs | undefined {
   return Object.keys(out).length === 0 ? undefined : out;
 }
 
-function coerceKeybindingChord(value: unknown): KeybindingChord | undefined {
+function coerceKeybindingChord(
+  actionId: string,
+  value: unknown,
+): KeybindingChord | undefined {
   if (!isRecord(value)) return undefined;
   const key =
     typeof value.key === "string" ? value.key.trim().toLowerCase() : "";
@@ -407,6 +410,7 @@ function coerceKeybindingChord(value: unknown): KeybindingChord | undefined {
   if (value.mod !== undefined && typeof value.mod !== "boolean") return;
   if (value.shift !== undefined && typeof value.shift !== "boolean") return;
   if (normalizedKey === "Escape") {
+    if (actionId !== "closeOverlay") return undefined;
     return mod || shift ? undefined : { key: "Escape" };
   }
   if (!mod) return undefined;
@@ -418,14 +422,26 @@ function coerceKeybindingChord(value: unknown): KeybindingChord | undefined {
   };
 }
 
+function keybindingChordKey(chord: KeybindingChord): string {
+  return [chord.mod ? "mod" : "", chord.shift ? "shift" : "", chord.key]
+    .filter(Boolean)
+    .join("+")
+    .toLowerCase();
+}
+
 function coerceKeybindings(
   value: unknown,
 ): StudioSettings["keybindings"] | undefined {
   if (!isRecord(value)) return undefined;
   const out: NonNullable<StudioSettings["keybindings"]> = {};
+  const seen = new Set<string>();
   for (const actionId of KEYBINDING_ACTION_IDS) {
-    const chord = coerceKeybindingChord(value[actionId]);
-    if (chord) out[actionId] = chord;
+    const chord = coerceKeybindingChord(actionId, value[actionId]);
+    if (!chord) continue;
+    const key = keybindingChordKey(chord);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out[actionId] = chord;
   }
   return Object.keys(out).length > 0 || Object.keys(value).length === 0
     ? out

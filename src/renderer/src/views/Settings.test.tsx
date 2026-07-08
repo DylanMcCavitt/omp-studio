@@ -161,6 +161,73 @@ it("blocks conflicting custom keybindings", async () => {
   );
 });
 
+it("cancels keybinding capture with Escape", async () => {
+  const user = userEvent.setup();
+  const update = seedSettings();
+
+  render(<Settings />);
+
+  await user.click(
+    screen.getByRole("button", { name: "Record New chat shortcut" }),
+  );
+  fireEvent.keyDown(
+    screen.getByRole("button", { name: "Press shortcut for New chat" }),
+    { key: "Escape" },
+  );
+
+  expect(update).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("button", { name: "Record New chat shortcut" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+it("clears keybinding capture on blur", async () => {
+  const user = userEvent.setup();
+  seedSettings();
+
+  render(<Settings />);
+
+  await user.click(
+    screen.getByRole("button", { name: "Record New chat shortcut" }),
+  );
+  fireEvent.blur(
+    screen.getByRole("button", { name: "Press shortcut for New chat" }),
+  );
+
+  expect(
+    screen.getByRole("button", { name: "Record New chat shortcut" }),
+  ).toBeInTheDocument();
+});
+
+it("ignores bare modifier keydown while capturing a keybinding", async () => {
+  const user = userEvent.setup();
+  const update = seedSettings();
+
+  render(<Settings />);
+
+  await user.click(
+    screen.getByRole("button", { name: "Record New chat shortcut" }),
+  );
+  const capture = screen.getByRole("button", {
+    name: "Press shortcut for New chat",
+  });
+  fireEvent.keyDown(capture, { key: "Control", ctrlKey: true });
+
+  expect(update).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Press shortcut for New chat" }),
+  ).toBeInTheDocument();
+
+  fireEvent.keyDown(capture, { key: "j", metaKey: true });
+  await waitFor(() =>
+    expect(update).toHaveBeenCalledWith({
+      keybindings: { newChat: { key: "j", mod: true } },
+    }),
+  );
+});
+
 it("gates enabling the built-in shell and preserves target/profile", async () => {
   const user = userEvent.setup();
   const update = seedSettings({

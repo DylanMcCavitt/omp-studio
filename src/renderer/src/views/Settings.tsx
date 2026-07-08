@@ -685,6 +685,12 @@ function KeybindingsPanel() {
                   if (capturing !== action.id) return;
                   event.preventDefault();
                   event.stopPropagation();
+                  if (event.key === "Escape") {
+                    setCapturing(null);
+                    setNotice(null);
+                    return;
+                  }
+                  if (isBareModifierKey(event.key)) return;
                   const chord = chordFromKeyboardEvent(event.nativeEvent);
                   if (!chord) {
                     setNotice({
@@ -694,6 +700,9 @@ function KeybindingsPanel() {
                     return;
                   }
                   updateKeybinding(action.id, chord);
+                }}
+                onBlur={() => {
+                  if (capturing === action.id) setCapturing(null);
                 }}
               >
                 {capturing === action.id
@@ -712,6 +721,12 @@ function KeybindingsPanel() {
         ))}
       </div>
     </Panel>
+  );
+}
+
+function isBareModifierKey(key: string): boolean {
+  return (
+    key === "Meta" || key === "Control" || key === "Shift" || key === "Alt"
   );
 }
 
