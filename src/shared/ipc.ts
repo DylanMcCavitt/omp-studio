@@ -306,6 +306,39 @@ export interface UiPrefs {
   pinnedCommands?: string[];
 }
 
+export const KEYBINDING_ACTION_IDS = [
+  "newChat",
+  "closeSession",
+  "toggleSidebar",
+  "toggleNavPalette",
+  "toggleSearch",
+  "toggleSlashPalette",
+  "closeOverlay",
+  "openSession1",
+  "openSession2",
+  "openSession3",
+  "openSession4",
+  "openSession5",
+  "openSession6",
+  "openSession7",
+  "openSession8",
+  "openSession9",
+] as const;
+
+export type KeybindingActionId = (typeof KEYBINDING_ACTION_IDS)[number];
+
+export interface KeybindingChord {
+  /** Lowercase letter/digit, or "Escape". */
+  key: string;
+  /** Platform command modifier: Cmd on macOS, Ctrl elsewhere. */
+  mod?: boolean;
+  shift?: boolean;
+}
+
+export type KeybindingSettings = Partial<
+  Record<KeybindingActionId, KeybindingChord>
+>;
+
 export type TerminalDefaultTarget = "built-in" | "external";
 export type ExternalTerminalProfile =
   | "system"
@@ -366,6 +399,8 @@ export interface StudioSettingsV2 extends Omit<StudioSettingsV1, "version"> {
   layout?: LayoutSettings;
   /** Features 3 & 6 — collapse state + pinned commands. */
   ui?: UiPrefs;
+  /** User overrides for renderer-local keyboard shortcuts. */
+  keybindings?: KeybindingSettings;
   /** Feature 2 — NON-SECRET Linear metadata only (key lives in the OS keychain). */
   linear?: { writesEnabled: boolean; defaultTeamId?: string | null };
   terminal?: TerminalSettings;

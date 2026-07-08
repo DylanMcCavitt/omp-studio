@@ -121,6 +121,75 @@ test("updateSettings merges known keys and drops unknown ones", async () => {
   expect(onDisk.theme).toBe("dark");
 });
 
+test("updateSettings persists valid keybindings and drops invalid chords", async () => {
+  const updated = await updateSettings({
+    keybindings: {
+      newChat: { key: "j", mod: true },
+      toggleSearch: { key: "f", mod: true, shift: true },
+      closeOverlay: { key: "Escape" },
+      closeSession: { key: "q" },
+      nope: { key: "x", mod: true },
+    },
+  } as unknown as Partial<StudioSettings>);
+
+  expect(updated.keybindings).toEqual({
+    newChat: { key: "j", mod: true },
+    toggleSearch: { key: "f", mod: true, shift: true },
+    closeOverlay: { key: "Escape" },
+  });
+
+  const loaded = await loadSettings();
+  expect(loaded.keybindings).toEqual(updated.keybindings);
+});
+
+test("loadSettings reserves Escape for the close-overlay keybinding", async () => {
+  writeFileSync(
+    settingsFile(),
+    `${JSON.stringify({
+      ...defaultSettings(),
+      keybindings: {
+        newChat: { key: "Escape" },
+        closeOverlay: { key: "Escape" },
+      },
+    })}\n`,
+    "utf8",
+  );
+
+  expect((await loadSettings()).keybindings).toEqual({
+    closeOverlay: { key: "Escape" },
+  });
+});
+
+test("updateSettings drops conflicting direct keybinding patches after the first action", async () => {
+  const updated = await updateSettings({
+    keybindings: {
+      newChat: { key: "j", mod: true },
+      closeSession: { key: "j", mod: true },
+      toggleSearch: { key: "f", mod: true, shift: true },
+    },
+  });
+
+  expect(updated.keybindings).toEqual({
+    newChat: { key: "j", mod: true },
+    toggleSearch: { key: "f", mod: true, shift: true },
+  });
+});
+
+test("malformed keybinding patches preserve the prior bindings; empty clears", async () => {
+  await updateSettings({
+    keybindings: { newChat: { key: "j", mod: true } },
+  });
+  await updateSettings({
+    keybindings: { closeSession: { key: "q" } },
+  } as unknown as Partial<StudioSettings>);
+  expect((await loadSettings()).keybindings).toEqual({
+    newChat: { key: "j", mod: true },
+  });
+
+  await updateSettings({ keybindings: {} });
+  expect((await loadSettings()).keybindings).toEqual({});
+});
+
 test("updateSettings coerces invalid values back to the current value", async () => {
   const updated = await updateSettings({
     theme: "neon" as unknown as StudioSettings["theme"],

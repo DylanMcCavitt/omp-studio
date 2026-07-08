@@ -39,7 +39,7 @@ export function worktreeChipLabel(worktreePath: string): string {
 export function WorkspaceSwitcher() {
   const selectedProject = useAppStore((s) => s.selectedProject);
   const setSelectedProject = useAppStore((s) => s.setSelectedProject);
-  const setOpenPanel = useShellStore((s) => s.setOpenPanel);
+  const openSettingsModal = useShellStore((s) => s.openSettingsModal);
   const workspaces = useSettingsStore((s) => s.settings?.workspaces);
   const recordWorkspace = useSettingsStore((s) => s.recordWorkspace);
   const [adding, setAdding] = useState(false);
@@ -205,7 +205,7 @@ export function WorkspaceSwitcher() {
         </MenuItem>
         <MenuItem
           icon={<SlidersHorizontal className="h-4 w-4" />}
-          onClick={() => setOpenPanel("settings")}
+          onClick={openSettingsModal}
         >
           Manage workspaces…
         </MenuItem>

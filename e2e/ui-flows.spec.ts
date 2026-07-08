@@ -19,9 +19,11 @@ import {
 // no paid turn runs) and then exercises the polished v3 shell as a real user
 // would. Beyond "every panel opens", it pins the UI/UX invariants the polish
 // sweep is responsible for:
-//   - every rail destination owns exactly ONE canonical title heading (the
+//   - every rail panel destination owns exactly ONE canonical title heading (the
 //     shell no longer renders the panel name, so a stray "eyebrow" duplicate is
 //     a regression);
+//   - Settings opens as a floating modal over the existing center view, then
+//     dismisses on Escape;
 //   - dismissing the terminal gate frees the UI (its scrim must not linger and
 //     swallow the next click);
 //   - the Files/Chats sidebar toggle, opening a file into CodeMirror, and the
@@ -42,7 +44,7 @@ const mainEntry = fileURLToPath(
 
 const README_TEXT = "# Smoke workspace\n\nOpened from the v3 file tree.\n";
 
-// Each rail destination, with its canonical title (the single <h1> the view
+// Each docked rail destination, with its canonical title (the single <h1> the view
 // owns) and any extra content proof. `title: null` => the panel renders no
 // heading in the hermetic state (Browser's disabled enable card), so we instead
 // assert it grew NO heading of its own. `closeVia: "terminal-gate"` => the
@@ -97,7 +99,6 @@ const RAIL_DESTINATIONS: readonly Destination[] = [
       await expect(panel.getByLabel("Linear API key")).toBeVisible();
     },
   },
-  { label: "Settings", title: "Settings" },
 ] as const;
 
 let app: ElectronApplication;
@@ -232,7 +233,7 @@ test("the shell boots with the OMP Studio title, Tools rail, and sidebar", async
 
   await expect(railNav()).toBeVisible();
   await expect(railNav().getByRole("button")).toHaveCount(
-    RAIL_DESTINATIONS.length,
+    RAIL_DESTINATIONS.length + 1,
   );
 
   // Sidebar rendered: the seeded workspace switcher + the Chats|Files toggle.
@@ -247,7 +248,7 @@ test("the shell boots with the OMP Studio title, Tools rail, and sidebar", async
   ).toBeVisible();
 });
 
-// Flow 2 — every rail destination opens, renders content, exposes exactly one
+// Flow 2 — every docked rail destination opens, renders content, exposes exactly one
 // canonical title (no duplicate eyebrow), surfaces no error boundary, and
 // closes cleanly.
 test("each rail destination opens, renders its content, and owns exactly one canonical title", async () => {
@@ -369,7 +370,32 @@ test("opening README.md from the tree renders it in CodeMirror", async () => {
   );
 });
 
-// Flow 6 — the ⌘K navigation palette opens on Cmd/Ctrl+K, lists workspaces,
+// Flow 6 — Settings is a floating modal, not a docked rail panel, and the center
+// editor stays mounted behind it.
+test("Settings opens as a modal over the current center and dismisses on Escape", async () => {
+  const editor = page.getByTestId("cm-editor");
+  await expect(editor).toBeVisible();
+
+  const settingsButton = railButton("Settings");
+  await settingsButton.click();
+  await expect(settingsButton).toHaveAttribute("aria-pressed", "true");
+
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Settings panel" }),
+  ).toHaveCount(0);
+  await expect(dialog.getByText("Defaults", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("Appearance", { exact: true })).toBeVisible();
+  await expect(editor).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(settingsButton).toHaveAttribute("aria-pressed", "false");
+  await expect(editor).toBeVisible();
+});
+
+// Flow 7 — the ⌘K navigation palette opens on Cmd/Ctrl+K, lists workspaces,
 // jumps + closes on selecting a row, and closes on Escape (AGE-700).
 test("the navigation palette opens with Cmd/Ctrl+K, jumps, and closes", async () => {
   // Move focus off any editable element (e.g. the CodeMirror content) so the
@@ -403,7 +429,7 @@ test("the navigation palette opens with Cmd/Ctrl+K, jumps, and closes", async ()
   await expect(palette).toBeHidden();
 });
 
-// Flow 7 — the whole run must be clean.
+// Flow 8 — the whole run must be clean.
 test("no uncaught renderer errors or crashes occurred during the UI-flow run", () => {
   expect(pageErrors).toEqual([]);
   expect(rendererCrashes).toEqual([]);

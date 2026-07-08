@@ -5,6 +5,8 @@ import type {
 } from "@shared/domain";
 import type {
   ExternalTerminalProfile,
+  KeybindingActionId,
+  KeybindingChord,
   TerminalDefaultTarget,
   TerminalSettings,
   ThemeMode,
@@ -37,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ModalShell } from "@/components/chat/ui-request/ModalShell";
 import { LinearConnectCard } from "@/components/linear/LinearConnectCard";
 import {
   Badge,
@@ -57,6 +60,16 @@ import {
 } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
+import {
+  canAssignChord,
+  chordFromKeyboardEvent,
+  displayActionBinding,
+  displayChord,
+  findKeybindingConflict,
+  invalidChordMessage,
+  SHORTCUT_ACTIONS,
+  shortcutActionById,
+} from "@/lib/keybindings";
 import { modelComboboxOptions } from "@/lib/model-options";
 import { type AsyncState, useAsync } from "@/lib/useAsync";
 import { sortWorkspaces } from "@/lib/workspaces";
@@ -123,7 +136,12 @@ interface DangerRequest {
   onConfirm: () => void;
 }
 
-export default function Settings() {
+export interface SettingsProps {
+  titleId?: string;
+  toolbarEnd?: ReactNode;
+}
+
+export default function Settings({ titleId, toolbarEnd }: SettingsProps = {}) {
   const settingsLoading = useSettingsStore((s) => s.loading);
   const settingsError = useSettingsStore((s) => s.error);
   const reloadSettings = useSettingsStore((s) => s.load);
@@ -139,21 +157,26 @@ export default function Settings() {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-ink">Settings</h1>
+          <h1 id={titleId} className="text-lg font-semibold text-ink">
+            Settings
+          </h1>
           <p className="text-sm text-ink-muted">
             Defaults, appearance, workspaces, providers, and harness paths
           </p>
         </div>
-        <IconButton
-          label="Reload"
-          onClick={() => {
-            models.reload();
-            providers.reload();
-            void reloadSettings();
-          }}
-        >
-          <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
-        </IconButton>
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton
+            label="Reload"
+            onClick={() => {
+              models.reload();
+              providers.reload();
+              void reloadSettings();
+            }}
+          >
+            <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
+          </IconButton>
+          {toolbarEnd}
+        </div>
       </div>
 
       <div className="scrollbar min-h-0 flex-1 overflow-auto px-6 py-6">
@@ -172,6 +195,7 @@ export default function Settings() {
           />
           <TerminalPanel requestDanger={setDanger} />
           <AppearancePanel />
+          <KeybindingsPanel />
           <WorkspacesPanel />
           <ProvidersPanel state={providers} />
           <IntegrationsPanel />
@@ -543,6 +567,177 @@ function AppearancePanel() {
         </Button>
       </Field>
     </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Keybindings
+// ---------------------------------------------------------------------------
+
+function KeybindingsPanel() {
+  const settings = useSettingsStore((s) => s.settings);
+  const update = useSettingsStore((s) => s.update);
+  const [capturing, setCapturing] = useState<KeybindingActionId | null>(null);
+  const [notice, setNotice] = useState<{
+    kind: "info" | "warn";
+    message: string;
+  } | null>(null);
+
+  const title = (
+    <span className="flex items-center gap-2">
+      <KeyRound className="h-4 w-4 text-accent" />
+      Keybindings
+    </span>
+  );
+
+  if (!settings) {
+    return (
+      <Panel title={title}>
+        <div className="flex justify-center p-4">
+          <Spinner />
+        </div>
+      </Panel>
+    );
+  }
+
+  const keybindings = settings.keybindings ?? {};
+  const updateKeybinding = (
+    actionId: KeybindingActionId,
+    chord: KeybindingChord,
+  ) => {
+    const action = shortcutActionById(actionId);
+    if (!action) return;
+    if (!canAssignChord(actionId, chord)) {
+      setNotice({
+        kind: "warn",
+        message: invalidChordMessage(actionId, chord),
+      });
+      return;
+    }
+    const conflict = findKeybindingConflict(actionId, chord, keybindings);
+    if (conflict) {
+      setNotice({
+        kind: "warn",
+        message: `${displayChord(chord)} is already assigned to ${conflict.action.label}.`,
+      });
+      return;
+    }
+    void update({ keybindings: { ...keybindings, [actionId]: chord } });
+    setCapturing(null);
+    setNotice({
+      kind: "info",
+      message: `${action.label} set to ${displayChord(chord)}.`,
+    });
+  };
+
+  const resetKeybinding = (actionId: KeybindingActionId) => {
+    const { [actionId]: _removed, ...next } = keybindings;
+    void update({ keybindings: next });
+    const action = shortcutActionById(actionId);
+    setNotice(
+      action
+        ? { kind: "info", message: `${action.label} reset to default.` }
+        : null,
+    );
+  };
+
+  return (
+    <Panel title={title} bodyClassName="space-y-3 p-4" className="scroll-mt-4">
+      {notice && (
+        <div
+          role={notice.kind === "warn" ? "alert" : "status"}
+          className={cn(
+            "rounded-lg border px-3 py-2 text-xs",
+            notice.kind === "warn"
+              ? "border-warn/30 bg-warn/10 text-warn"
+              : "border-border-subtle bg-bg-raised text-ink-muted",
+          )}
+        >
+          {notice.message}
+        </div>
+      )}
+
+      <div className="divide-y divide-border-subtle">
+        {SHORTCUT_ACTIONS.map((action) => (
+          <div
+            key={action.id}
+            data-keybinding-action={action.id}
+            className="grid gap-3 py-3 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,1fr)_auto]"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-ink">{action.label}</div>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                {action.description}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 md:justify-end">
+              <button
+                type="button"
+                aria-label={
+                  capturing === action.id
+                    ? `Press shortcut for ${action.label}`
+                    : `Record ${action.label} shortcut`
+                }
+                className={cn(
+                  "min-w-36 rounded-lg border px-3 py-2 text-left font-mono text-xs transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                  capturing === action.id
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border-subtle bg-bg-raised text-ink",
+                )}
+                onClick={() => {
+                  setCapturing(action.id);
+                  setNotice({
+                    kind: "info",
+                    message: `Press a shortcut for ${action.label}.`,
+                  });
+                }}
+                onKeyDown={(event) => {
+                  if (capturing !== action.id) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (event.key === "Escape") {
+                    setCapturing(null);
+                    setNotice(null);
+                    return;
+                  }
+                  if (isBareModifierKey(event.key)) return;
+                  const chord = chordFromKeyboardEvent(event.nativeEvent);
+                  if (!chord) {
+                    setNotice({
+                      kind: "warn",
+                      message: invalidChordMessage(action.id, chord),
+                    });
+                    return;
+                  }
+                  updateKeybinding(action.id, chord);
+                }}
+                onBlur={() => {
+                  if (capturing === action.id) setCapturing(null);
+                }}
+              >
+                {capturing === action.id
+                  ? "Press shortcut"
+                  : displayActionBinding(action, keybindings)}
+              </button>
+              <IconButton
+                label={`Reset ${action.label} shortcut`}
+                disabled={!keybindings[action.id]}
+                onClick={() => resetKeybinding(action.id)}
+              >
+                <RotateCcw className="h-4 w-4 text-ink-faint" />
+              </IconButton>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function isBareModifierKey(key: string): boolean {
+  return (
+    key === "Meta" || key === "Control" || key === "Shift" || key === "Alt"
   );
 }
 
@@ -1199,37 +1394,21 @@ function DangerDialog({
   request: DangerRequest;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialogRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-      <div
-        ref={dialogRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="danger-title"
-        aria-describedby="danger-message"
-        tabIndex={-1}
-        className="w-full max-w-md rounded-xl border border-warn/40 bg-bg-panel p-5 shadow-panel focus:outline-none"
-      >
-        <div className="mb-3 flex items-center gap-2 text-warn">
+    <ModalShell
+      title={request.title}
+      message={request.message}
+      onDismiss={onClose}
+      kicker={
+        <span className="flex items-center gap-2 text-warn">
           <ShieldAlert className="h-5 w-5 shrink-0" />
-          <h2 id="danger-title" className="text-sm font-semibold">
-            {request.title}
-          </h2>
-        </div>
-        <p id="danger-message" className="mb-5 text-sm text-ink-muted">
-          {request.message}
-        </p>
-        <div className="flex justify-end gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide">
+            Confirm risk
+          </span>
+        </span>
+      }
+      footer={
+        <>
           <Button variant="subtle" onClick={onClose}>
             Cancel
           </Button>
@@ -1242,8 +1421,8 @@ function DangerDialog({
           >
             {request.confirmLabel}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

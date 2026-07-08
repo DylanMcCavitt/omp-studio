@@ -5,8 +5,10 @@
 
 import type { WorkspaceColorKey } from "@shared/ipc";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
+import { useShellStore } from "@/store/shell";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 function seedWorkspace(color: WorkspaceColorKey | undefined) {
@@ -26,6 +28,7 @@ function seedWorkspace(color: WorkspaceColorKey | undefined) {
     recordWorkspace: vi.fn(),
   });
   useAppStore.setState({ selectedProject: "/p/alpha" } as never);
+  useShellStore.setState({ openPanelId: null, settingsModalOpen: false });
   Object.assign(window.omp, {
     changes: {
       workspaceInfo: vi.fn(() => new Promise(() => {})),
@@ -135,4 +138,20 @@ it("clears stale git metadata while a new workspace is loading", async () => {
     expect(screen.queryByText(/feature\/alpha/)).not.toBeInTheDocument();
   });
   expect(screen.getByRole("button", { name: /Beta/ })).toBeInTheDocument();
+});
+
+it("opens Settings as a modal from Manage workspaces without persisting a rail panel", async () => {
+  const user = userEvent.setup();
+  const setLayout = vi.fn();
+  seedWorkspace("blue");
+  useSettingsStore.setState({ setLayout });
+
+  render(<WorkspaceSwitcher />);
+
+  await user.click(screen.getByRole("button", { name: /Alpha/ }));
+  await user.click(screen.getByRole("menuitem", { name: /Manage workspaces/ }));
+
+  expect(useShellStore.getState().settingsModalOpen).toBe(true);
+  expect(useShellStore.getState().openPanelId).toBeNull();
+  expect(setLayout).not.toHaveBeenCalled();
 });
