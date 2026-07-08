@@ -42,7 +42,18 @@ export async function run({ page, pause, shot }) {
   await shot("conflict-warning");
   step("conflict warning blocks Cmd/Ctrl+K");
 
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  // Leave Settings. Escape may first cancel an armed capture, and with
+  // AGE-690's floating modal a further Escape dismisses the dialog; on the
+  // pre-modal docked layout Escape is a no-op and the rail button closes it.
+  const settingsHeading = page.getByRole("heading", { name: "Settings" });
+  for (let i = 0; i < 3; i++) {
+    if (!(await settingsHeading.isVisible().catch(() => false))) break;
+    await page.keyboard.press("Escape");
+    await pause(300);
+  }
+  if (await settingsHeading.isVisible().catch(() => false)) {
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+  }
   await pause(500);
   await page.keyboard.press("Control+J");
   await page.getByLabel("Message").waitFor({ timeout: 15000 });
