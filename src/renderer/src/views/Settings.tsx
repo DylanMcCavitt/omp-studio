@@ -123,7 +123,12 @@ interface DangerRequest {
   onConfirm: () => void;
 }
 
-export default function Settings() {
+export interface SettingsProps {
+  titleId?: string;
+  toolbarEnd?: ReactNode;
+}
+
+export default function Settings({ titleId, toolbarEnd }: SettingsProps = {}) {
   const settingsLoading = useSettingsStore((s) => s.loading);
   const settingsError = useSettingsStore((s) => s.error);
   const reloadSettings = useSettingsStore((s) => s.load);
@@ -139,21 +144,26 @@ export default function Settings() {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-ink">Settings</h1>
+          <h1 id={titleId} className="text-lg font-semibold text-ink">
+            Settings
+          </h1>
           <p className="text-sm text-ink-muted">
             Defaults, appearance, workspaces, providers, and harness paths
           </p>
         </div>
-        <IconButton
-          label="Reload"
-          onClick={() => {
-            models.reload();
-            providers.reload();
-            void reloadSettings();
-          }}
-        >
-          <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
-        </IconButton>
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton
+            label="Reload"
+            onClick={() => {
+              models.reload();
+              providers.reload();
+              void reloadSettings();
+            }}
+          >
+            <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
+          </IconButton>
+          {toolbarEnd}
+        </div>
       </div>
 
       <div className="scrollbar min-h-0 flex-1 overflow-auto px-6 py-6">

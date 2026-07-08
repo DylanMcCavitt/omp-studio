@@ -1,27 +1,31 @@
 // The thin fixed icon rail pinned to the far right of the shell (AGE-630). Lists
-// every railable destination (NAV_ENTRIES minus the primary `chat` surface);
-// clicking an icon toggles its overlay sheet open/closed via the shell store.
-// The active panel's icon is highlighted. This strip is always visible — the
-// panel itself is mounted by `Layout` as an absolute sheet over the main area.
+// every railable destination (NAV_ENTRIES minus the primary `chat` surface),
+// plus the Settings icon pinned at the bottom. Most icons toggle an overlay
+// sheet; Settings opens a floating modal so the current center stays mounted.
 
 import { IconButton } from "@/components/ui";
-import { RAIL_ENTRIES } from "@/lib/nav-registry";
+import { RAIL_ENTRIES, SETTINGS_ENTRY } from "@/lib/nav-registry";
 import { useShellStore } from "@/store/shell";
 
 export function RightRail() {
   const openPanelId = useShellStore((s) => s.openPanelId);
+  const settingsModalOpen = useShellStore((s) => s.settingsModalOpen);
   const togglePanel = useShellStore((s) => s.togglePanel);
+  const toggleSettingsModal = useShellStore((s) => s.toggleSettingsModal);
 
-  const renderItem = (entry: (typeof RAIL_ENTRIES)[number]) => {
+  const renderItem = (
+    entry: (typeof RAIL_ENTRIES)[number],
+    options?: { active?: boolean; onClick?: () => void },
+  ) => {
     const { icon: Icon, label, route } = entry;
-    const active = openPanelId === route;
+    const active = options?.active ?? openPanelId === route;
     return (
       <IconButton
         key={route}
         label={label}
         size="lg"
         variant={active ? "active" : "ghost"}
-        onClick={() => togglePanel(route)}
+        onClick={options?.onClick ?? (() => togglePanel(route))}
         aria-pressed={active}
         className="relative"
       >
@@ -36,19 +40,17 @@ export function RightRail() {
     );
   };
 
-  // Settings is pinned to the bottom of the rail; everything else stacks at the
-  // top, separated by a flexible spacer.
-  const primary = RAIL_ENTRIES.filter((e) => e.route !== "settings");
-  const footer = RAIL_ENTRIES.filter((e) => e.route === "settings");
-
   return (
     <nav
       aria-label="Tools"
       className="no-drag flex h-full w-12 shrink-0 flex-col items-center gap-1 border-l border-border bg-bg-raised py-2"
     >
-      {primary.map(renderItem)}
+      {RAIL_ENTRIES.map((entry) => renderItem(entry))}
       <div className="flex-1" />
-      {footer.map(renderItem)}
+      {renderItem(SETTINGS_ENTRY, {
+        active: settingsModalOpen,
+        onClick: toggleSettingsModal,
+      })}
     </nav>
   );
 }

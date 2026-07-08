@@ -17,6 +17,7 @@ import {
 } from "react-resizable-panels";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { usePersistedPanelLayout } from "@/components/layout/usePersistedPanelLayout";
+import { SettingsDialog } from "@/components/settings/SettingsDialog";
 import { RailPanelHost } from "@/components/shell/RailPanelHost";
 import { RightRail } from "@/components/shell/RightRail";
 import { Toaster } from "@/components/ui";
@@ -51,6 +52,8 @@ export function Layout({ children }: LayoutProps) {
   // the shell renders with default widths — fine, no interaction has happened.
   const settingsLoaded = useSettingsStore((s) => s.settings != null);
   const openPanelId = useShellStore((s) => s.openPanelId);
+  const settingsModalOpen = useShellStore((s) => s.settingsModalOpen);
+  const closeSettingsModal = useShellStore((s) => s.closeSettingsModal);
   const hydrate = useShellStore((s) => s.hydrate);
   const panelOpen = openPanelId != null && isRailRoute(openPanelId);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -140,6 +143,7 @@ export function Layout({ children }: LayoutProps) {
           />
         )}
         <RightRail />
+        {settingsModalOpen && <SettingsDialog onClose={closeSettingsModal} />}
       </div>
       <Toaster />
     </div>
