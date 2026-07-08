@@ -269,4 +269,33 @@
     color: var(--hljs-deletion);
     background-color: var(--hljs-deletion-bg);
   }
+
+  /* AGE-706 — themed terminal shell: #08080a surface + JetBrains Mono cursor blink. */
+  @keyframes ompBlinkTerminal {
+    0%,
+    49% {
+      opacity: 1;
+    }
+    50%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  .terminal-xterm .xterm {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .terminal-xterm .xterm-viewport,
+  .terminal-xterm .xterm-screen,
+  .terminal-xterm .xterm-rows {
+    background-color: rgb(var(--c-terminal-bg));
+  }
+
+  /* Blink only the focused block cursor; the unfocused outline cursor stays
+     steady. (CSS cannot pause the blink mid-keystroke the way xterm's native
+     cursorBlink does — accepted trade-off for the steps(1) spec timing.) */
+  .terminal-xterm .xterm.focus .xterm-cursor-block {
+    animation: ompBlinkTerminal 1.1s steps(1) infinite;
+  }
 }

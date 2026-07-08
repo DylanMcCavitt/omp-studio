@@ -46,6 +46,16 @@ const BASE: StudioSettings = {
   liveSessionLimit: 4,
   recentProjects: [],
   openSessions: [],
+  workspaces: [
+    {
+      id: "ws-app",
+      cwd: "/work/app",
+      label: "App workspace",
+      color: "teal",
+      pinned: true,
+      lastUsedAt: "2026-01-01T00:00:00.000Z",
+    },
+  ],
 };
 
 /**
@@ -163,6 +173,19 @@ it("shows an empty state (no shell) when enabled but no workspace is selected", 
   expect(screen.getByText("No workspace selected")).toBeInTheDocument();
   expect(screen.queryByTestId("xterm-surface")).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
+});
+
+it("renders the workspace tab with a Live Dot and workspace name when enabled", async () => {
+  seedSettings({ enabled: true, maxConcurrent: 4 });
+
+  render(<Terminal />);
+
+  const tab = await screen.findByTestId("terminal-workspace-tab");
+  expect(tab).toHaveTextContent("App workspace");
+  expect(tab.querySelector("[data-status='running']")).toBeTruthy();
+  expect(screen.getByTestId("terminal-shell-surface")).toHaveClass(
+    "bg-bg-terminal",
+  );
 });
 
 it("renders workspace-scoped terminal tabs and creates a second tab without killing the first", async () => {
@@ -371,4 +394,12 @@ it("lists exited terminal sessions in the tab bar", async () => {
 
   expect(screen.getByRole("tab", { name: /Terminal 1 exited/ })).toBeVisible();
   expect(screen.getByText("exited")).toBeInTheDocument();
+  expect(screen.getByTestId("terminal-workspace-tab")).toHaveTextContent(
+    "App workspace",
+  );
+  expect(
+    screen
+      .getByTestId("terminal-workspace-tab")
+      .querySelector("[data-status='done']"),
+  ).toBeTruthy();
 });

@@ -39,12 +39,39 @@ function cssRgb(name: string): string | undefined {
 
 /** Build an xterm theme from the app's live CSS variables (light or dark). */
 function readXtermTheme(): ITheme {
+  const bg = cssRgb("--c-terminal-bg");
+  const t1 = cssRgb("--c-ink");
+  const t2 = cssRgb("--c-ink-muted");
+  const t3 = cssRgb("--c-ink-faint");
+  // ANSI black must never equal the background (black-on-black / white-on-white
+  // output would vanish). Light theme: ink is dark, use it directly. Dark
+  // theme: ink is light, so use the strong border gray — a near-black that
+  // still separates from the #08080a surface.
+  const isDark = document.documentElement.classList.contains("dark");
+  const ansiBlack = isDark ? cssRgb("--c-border-strong") : t1;
   return {
-    background: cssRgb("--c-bg-raised"),
-    foreground: cssRgb("--c-ink"),
-    cursor: cssRgb("--c-accent"),
-    cursorAccent: cssRgb("--c-bg-raised"),
+    background: bg,
+    foreground: t1,
+    cursor: t1,
+    cursorAccent: bg,
     selectionBackground: cssRgb("--c-accent-soft"),
+    selectionForeground: t1,
+    black: ansiBlack,
+    red: cssRgb("--c-danger"),
+    green: cssRgb("--c-success"),
+    yellow: cssRgb("--c-warn"),
+    blue: t2,
+    magenta: t2,
+    cyan: t2,
+    white: t1,
+    brightBlack: t3,
+    brightRed: cssRgb("--c-danger"),
+    brightGreen: cssRgb("--c-success"),
+    brightYellow: cssRgb("--c-warn"),
+    brightBlue: t1,
+    brightMagenta: t1,
+    brightCyan: t1,
+    brightWhite: cssRgb("--c-ink-clear"),
   };
 }
 
@@ -68,10 +95,10 @@ export function XtermView({ id, cwd, active = false, onExit }: XtermViewProps) {
     store.ensureSubscribed();
 
     const term = new Terminal({
-      cursorBlink: true,
+      cursorBlink: false,
       fontSize: 13,
       fontFamily:
-        'ui-monospace, SFMono-Regular, Menlo, Monaco, "Cascadia Code", "Liberation Mono", monospace',
+        '"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace',
       scrollback: 5000,
       theme: readXtermTheme(),
     });
@@ -143,7 +170,8 @@ export function XtermView({ id, cwd, active = false, onExit }: XtermViewProps) {
     <div
       ref={containerRef}
       data-cwd={cwd}
-      className="h-full w-full overflow-hidden"
+      data-testid="xterm-surface"
+      className="terminal-xterm h-full w-full overflow-hidden bg-bg-terminal font-mono"
     />
   );
 }
