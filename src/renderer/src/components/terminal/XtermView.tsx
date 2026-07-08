@@ -43,6 +43,12 @@ function readXtermTheme(): ITheme {
   const t1 = cssRgb("--c-ink");
   const t2 = cssRgb("--c-ink-muted");
   const t3 = cssRgb("--c-ink-faint");
+  // ANSI black must never equal the background (black-on-black / white-on-white
+  // output would vanish). Light theme: ink is dark, use it directly. Dark
+  // theme: ink is light, so use the strong border gray — a near-black that
+  // still separates from the #08080a surface.
+  const isDark = document.documentElement.classList.contains("dark");
+  const ansiBlack = isDark ? cssRgb("--c-border-strong") : t1;
   return {
     background: bg,
     foreground: t1,
@@ -50,7 +56,7 @@ function readXtermTheme(): ITheme {
     cursorAccent: bg,
     selectionBackground: cssRgb("--c-accent-soft"),
     selectionForeground: t1,
-    black: bg,
+    black: ansiBlack,
     red: cssRgb("--c-danger"),
     green: cssRgb("--c-success"),
     yellow: cssRgb("--c-warn"),

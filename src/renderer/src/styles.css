@@ -292,7 +292,10 @@
     background-color: rgb(var(--c-terminal-bg));
   }
 
-  .terminal-xterm .xterm-cursor {
+  /* Blink only the focused block cursor; the unfocused outline cursor stays
+     steady. (CSS cannot pause the blink mid-keystroke the way xterm's native
+     cursorBlink does — accepted trade-off for the steps(1) spec timing.) */
+  .terminal-xterm .xterm.focus .xterm-cursor-block {
     animation: ompBlinkTerminal 1.1s steps(1) infinite;
   }
 }

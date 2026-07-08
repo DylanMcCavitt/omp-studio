@@ -84,18 +84,12 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.35" },
         },
-        // AGE-706 — terminal cursor: hard on/off blink per PRD spec.
-        ompBlinkTerminal: {
-          "0%, 49%": { opacity: "1" },
-          "50%, 100%": { opacity: "0" },
-        },
       },
       animation: {
         "fade-in": "fade-in 0.2s ease-out",
         "pulse-slow": "pulse 1.6s ease-in-out infinite",
         "omp-pulse": "ompPulse 1.8s infinite",
         "omp-blink": "ompBlink 1.3s infinite",
-        "omp-blink-terminal": "ompBlinkTerminal 1.1s steps(1) infinite",
       },
     },
   },

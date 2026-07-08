@@ -159,14 +159,7 @@ export default function Terminal() {
     : undefined;
   const workspaceLabel =
     workspace?.label ?? (cwd ? projectLabel(cwd) : "Terminal");
-  const activeEntry = activeId
-    ? entries.find((entry) => entry.id === activeId)
-    : entries[0];
-  const dotStatus = terminalDotStatus({
-    creating,
-    hasEntries: entries.length > 0,
-    activeExited: activeEntry?.exited,
-  });
+  const dotStatus = terminalDotStatus({ creating, entries });
 
   const openExternalTerminal = async () => {
     if (!cwd || openingExternal) return;

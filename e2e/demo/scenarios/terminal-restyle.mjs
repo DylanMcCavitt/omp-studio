@@ -35,7 +35,10 @@ export async function run({ page, pause, shot }) {
   const step = (name, ok = true) =>
     steps.push(`${ok ? "PASS" : "FAIL"} ${name}`);
 
-  await page.locator('nav[aria-label="Tools"]').getByRole("button", { name: "Terminal" }).click();
+  await page
+    .locator('nav[aria-label="Tools"]')
+    .getByRole("button", { name: "Terminal" })
+    .click();
   await page.waitForSelector(WORKSPACE_TAB, { timeout: 15000 });
   step("open Terminal panel from right rail");
 
