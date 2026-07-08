@@ -9,6 +9,7 @@ import { useShortcuts } from "@/lib/useShortcuts";
 import { useAppStore } from "@/store/app";
 import { useChatStore } from "@/store/chat";
 import { createSession } from "@/store/session-reducer";
+import { useSettingsStore } from "@/store/settings";
 import { useShellStore } from "@/store/shell";
 import { useUiStore } from "@/store/ui";
 
@@ -40,6 +41,7 @@ beforeEach(() => {
     slashPaletteToggle: 0,
   });
   useAppStore.setState({ route: "dashboard" });
+  useSettingsStore.setState({ settings: null });
   useShellStore.getState().setSidebarToggleHandler(null);
 });
 
@@ -49,6 +51,31 @@ describe("useShortcuts", () => {
     render(<Harness />);
     press("t", { metaKey: true });
     press("n", { ctrlKey: true });
+    expect(newChat).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads custom bindings from settings without reloading the listener", () => {
+    useSettingsStore.setState({
+      settings: {
+        keybindings: { newChat: { key: "j", mod: true } },
+      } as never,
+    });
+    const newChat = vi.spyOn(useChatStore.getState(), "newChat");
+    render(<Harness />);
+
+    press("t", { metaKey: true });
+    expect(newChat).not.toHaveBeenCalled();
+    press("j", { metaKey: true });
+    expect(newChat).toHaveBeenCalledTimes(1);
+
+    useSettingsStore.setState({
+      settings: {
+        keybindings: { newChat: { key: "l", mod: true } },
+      } as never,
+    });
+    press("j", { metaKey: true });
+    expect(newChat).toHaveBeenCalledTimes(1);
+    press("l", { metaKey: true });
     expect(newChat).toHaveBeenCalledTimes(2);
   });
 

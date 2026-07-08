@@ -15,6 +15,7 @@ import type {
   BrowserBookmark,
   BrowserHistoryEntry,
   ExternalTerminalProfile,
+  KeybindingChord,
   LayoutSettings,
   OpenSessionDescriptor,
   RecentProject,
@@ -24,7 +25,7 @@ import type {
   UiPrefs,
   Workspace,
 } from "@shared/ipc";
-import { WORKSPACE_COLOR_KEYS } from "@shared/ipc";
+import { KEYBINDING_ACTION_IDS, WORKSPACE_COLOR_KEYS } from "@shared/ipc";
 import type { ApprovalMode, ApprovalPolicy, ThinkingLevel } from "@shared/rpc";
 import { scoped } from "../logger";
 
@@ -109,6 +110,7 @@ export function defaultSettings(): StudioSettings {
     recentProjects: [],
     openSessions: [],
     linear: { writesEnabled: false },
+    keybindings: {},
     terminal: {
       enabled: false,
       maxConcurrent: DEFAULT_TERMINAL_MAX_CONCURRENT,
@@ -395,6 +397,57 @@ function coerceUiPrefs(value: unknown): UiPrefs | undefined {
   return Object.keys(out).length === 0 ? undefined : out;
 }
 
+function coerceKeybindingChord(
+  actionId: string,
+  value: unknown,
+): KeybindingChord | undefined {
+  if (!isRecord(value)) return undefined;
+  const key =
+    typeof value.key === "string" ? value.key.trim().toLowerCase() : "";
+  const normalizedKey = key === "escape" ? "Escape" : key;
+  const mod = value.mod === true;
+  const shift = value.shift === true;
+  if (value.mod !== undefined && typeof value.mod !== "boolean") return;
+  if (value.shift !== undefined && typeof value.shift !== "boolean") return;
+  if (normalizedKey === "Escape") {
+    if (actionId !== "closeOverlay") return undefined;
+    return mod || shift ? undefined : { key: "Escape" };
+  }
+  if (!mod) return undefined;
+  if (!/^[a-z0-9]$/.test(normalizedKey)) return undefined;
+  return {
+    key: normalizedKey,
+    mod: true,
+    ...(shift ? { shift: true } : {}),
+  };
+}
+
+function keybindingChordKey(chord: KeybindingChord): string {
+  return [chord.mod ? "mod" : "", chord.shift ? "shift" : "", chord.key]
+    .filter(Boolean)
+    .join("+")
+    .toLowerCase();
+}
+
+function coerceKeybindings(
+  value: unknown,
+): StudioSettings["keybindings"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: NonNullable<StudioSettings["keybindings"]> = {};
+  const seen = new Set<string>();
+  for (const actionId of KEYBINDING_ACTION_IDS) {
+    const chord = coerceKeybindingChord(actionId, value[actionId]);
+    if (!chord) continue;
+    const key = keybindingChordKey(chord);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out[actionId] = chord;
+  }
+  return Object.keys(out).length > 0 || Object.keys(value).length === 0
+    ? out
+    : undefined;
+}
+
 /**
  * NON-SECRET Linear metadata only. The API key lives in the OS keychain and
  * MUST never be persisted here, so we copy `writesEnabled`/`defaultTeamId`
@@ -646,6 +699,8 @@ function mergeKnown(
   if (layout) next.layout = layout;
   const ui = coerceUiPrefs(patch.ui);
   if (ui) next.ui = ui;
+  const keybindings = coerceKeybindings(patch.keybindings);
+  if (keybindings) next.keybindings = keybindings;
   const linear = coerceLinearMeta(patch.linear);
   if (linear) next.linear = linear;
   const terminal = coerceTerminal(patch.terminal);
