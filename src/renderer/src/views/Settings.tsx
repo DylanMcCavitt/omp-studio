@@ -5,6 +5,8 @@ import type {
 } from "@shared/domain";
 import type {
   ExternalTerminalProfile,
+  KeybindingActionId,
+  KeybindingChord,
   TerminalDefaultTarget,
   TerminalSettings,
   ThemeMode,
@@ -57,6 +59,16 @@ import {
 } from "@/components/workspace/WorkspaceColor";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
+import {
+  canAssignChord,
+  chordFromKeyboardEvent,
+  displayActionBinding,
+  displayChord,
+  findKeybindingConflict,
+  invalidChordMessage,
+  SHORTCUT_ACTIONS,
+  shortcutActionById,
+} from "@/lib/keybindings";
 import { modelComboboxOptions } from "@/lib/model-options";
 import { type AsyncState, useAsync } from "@/lib/useAsync";
 import { sortWorkspaces } from "@/lib/workspaces";
@@ -172,6 +184,7 @@ export default function Settings() {
           />
           <TerminalPanel requestDanger={setDanger} />
           <AppearancePanel />
+          <KeybindingsPanel />
           <WorkspacesPanel />
           <ProvidersPanel state={providers} />
           <IntegrationsPanel />
@@ -542,6 +555,162 @@ function AppearancePanel() {
           Reset layout
         </Button>
       </Field>
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Keybindings
+// ---------------------------------------------------------------------------
+
+function KeybindingsPanel() {
+  const settings = useSettingsStore((s) => s.settings);
+  const update = useSettingsStore((s) => s.update);
+  const [capturing, setCapturing] = useState<KeybindingActionId | null>(null);
+  const [notice, setNotice] = useState<{
+    kind: "info" | "warn";
+    message: string;
+  } | null>(null);
+
+  const title = (
+    <span className="flex items-center gap-2">
+      <KeyRound className="h-4 w-4 text-accent" />
+      Keybindings
+    </span>
+  );
+
+  if (!settings) {
+    return (
+      <Panel title={title}>
+        <div className="flex justify-center p-4">
+          <Spinner />
+        </div>
+      </Panel>
+    );
+  }
+
+  const keybindings = settings.keybindings ?? {};
+  const updateKeybinding = (
+    actionId: KeybindingActionId,
+    chord: KeybindingChord,
+  ) => {
+    const action = shortcutActionById(actionId);
+    if (!action) return;
+    if (!canAssignChord(actionId, chord)) {
+      setNotice({
+        kind: "warn",
+        message: invalidChordMessage(actionId, chord),
+      });
+      return;
+    }
+    const conflict = findKeybindingConflict(actionId, chord, keybindings);
+    if (conflict) {
+      setNotice({
+        kind: "warn",
+        message: `${displayChord(chord)} is already assigned to ${conflict.action.label}.`,
+      });
+      return;
+    }
+    void update({ keybindings: { ...keybindings, [actionId]: chord } });
+    setCapturing(null);
+    setNotice({
+      kind: "info",
+      message: `${action.label} set to ${displayChord(chord)}.`,
+    });
+  };
+
+  const resetKeybinding = (actionId: KeybindingActionId) => {
+    const { [actionId]: _removed, ...next } = keybindings;
+    void update({ keybindings: next });
+    const action = shortcutActionById(actionId);
+    setNotice(
+      action
+        ? { kind: "info", message: `${action.label} reset to default.` }
+        : null,
+    );
+  };
+
+  return (
+    <Panel title={title} bodyClassName="space-y-3 p-4" className="scroll-mt-4">
+      {notice && (
+        <div
+          role={notice.kind === "warn" ? "alert" : "status"}
+          className={cn(
+            "rounded-lg border px-3 py-2 text-xs",
+            notice.kind === "warn"
+              ? "border-warn/30 bg-warn/10 text-warn"
+              : "border-border-subtle bg-bg-raised text-ink-muted",
+          )}
+        >
+          {notice.message}
+        </div>
+      )}
+
+      <div className="divide-y divide-border-subtle">
+        {SHORTCUT_ACTIONS.map((action) => (
+          <div
+            key={action.id}
+            data-keybinding-action={action.id}
+            className="grid gap-3 py-3 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,1fr)_auto]"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-ink">{action.label}</div>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                {action.description}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 md:justify-end">
+              <button
+                type="button"
+                aria-label={
+                  capturing === action.id
+                    ? `Press shortcut for ${action.label}`
+                    : `Record ${action.label} shortcut`
+                }
+                className={cn(
+                  "min-w-36 rounded-lg border px-3 py-2 text-left font-mono text-xs transition-colors",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60",
+                  capturing === action.id
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border-subtle bg-bg-raised text-ink",
+                )}
+                onClick={() => {
+                  setCapturing(action.id);
+                  setNotice({
+                    kind: "info",
+                    message: `Press a shortcut for ${action.label}.`,
+                  });
+                }}
+                onKeyDown={(event) => {
+                  if (capturing !== action.id) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  const chord = chordFromKeyboardEvent(event.nativeEvent);
+                  if (!chord) {
+                    setNotice({
+                      kind: "warn",
+                      message: invalidChordMessage(action.id, chord),
+                    });
+                    return;
+                  }
+                  updateKeybinding(action.id, chord);
+                }}
+              >
+                {capturing === action.id
+                  ? "Press shortcut"
+                  : displayActionBinding(action, keybindings)}
+              </button>
+              <IconButton
+                label={`Reset ${action.label} shortcut`}
+                disabled={!keybindings[action.id]}
+                onClick={() => resetKeybinding(action.id)}
+              >
+                <RotateCcw className="h-4 w-4 text-ink-faint" />
+              </IconButton>
+            </div>
+          </div>
+        ))}
+      </div>
     </Panel>
   );
 }
