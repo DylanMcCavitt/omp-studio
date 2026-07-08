@@ -1,9 +1,8 @@
 // AGE-630 — the right icon rail and its shell store. The rail lists every
-// railable destination (NAV_ENTRIES minus the primary `chat` surface); clicking
-// an icon toggles that destination's docked panel open/closed and highlights the
-// active one. The store also persists the open-panel id through `setLayout` so it
-// can be restored on the next launch. Assertions go through roles + store state,
-// never styling.
+// railable destination (NAV_ENTRIES minus the primary `chat` surface) plus the
+// Settings modal icon. Panel icons persist through `setLayout`; Settings is
+// transient modal state. Assertions go through roles + store state, never
+// styling.
 
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -13,7 +12,7 @@ import { useShellStore } from "@/store/shell";
 import { RightRail } from "./RightRail";
 
 beforeEach(() => {
-  useShellStore.setState({ openPanelId: null });
+  useShellStore.setState({ openPanelId: null, settingsModalOpen: false });
   // Stub the debounced persist so store actions assert intent without timers.
   useSettingsStore.setState({ setLayout: vi.fn() });
 });
@@ -70,6 +69,20 @@ describe("shell store", () => {
     expect(useShellStore.getState().openPanelId).toBe("linear");
     expect(setLayout).not.toHaveBeenCalled();
   });
+
+  it("toggles Settings modal state without persisting a rail panel id", () => {
+    const setLayout = vi.fn();
+    useSettingsStore.setState({ setLayout });
+
+    useShellStore.getState().toggleSettingsModal();
+    expect(useShellStore.getState().settingsModalOpen).toBe(true);
+    expect(useShellStore.getState().openPanelId).toBeNull();
+    expect(setLayout).not.toHaveBeenCalled();
+
+    useShellStore.getState().toggleSettingsModal();
+    expect(useShellStore.getState().settingsModalOpen).toBe(false);
+    expect(setLayout).not.toHaveBeenCalled();
+  });
 });
 
 describe("RightRail", () => {
@@ -78,7 +91,7 @@ describe("RightRail", () => {
 
     const rail = screen.getByRole("navigation", { name: "Tools" });
     expect(within(rail).getAllByRole("button")).toHaveLength(
-      RAIL_ENTRIES.length,
+      RAIL_ENTRIES.length + 1,
     );
     expect(
       screen.queryByRole("button", { name: "Chat" }),
@@ -126,5 +139,19 @@ describe("RightRail", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  it("clicking Settings toggles the modal flag without opening a rail panel", async () => {
+    const user = userEvent.setup();
+    render(<RightRail />);
+
+    const settings = screen.getByRole("button", { name: "Settings" });
+    expect(settings).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(settings);
+
+    expect(useShellStore.getState().settingsModalOpen).toBe(true);
+    expect(useShellStore.getState().openPanelId).toBeNull();
+    expect(settings).toHaveAttribute("aria-pressed", "true");
   });
 });

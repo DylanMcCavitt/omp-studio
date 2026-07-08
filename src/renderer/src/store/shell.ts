@@ -38,6 +38,15 @@ interface ShellState {
    */
   hydrate: (id: Route | null) => void;
 
+  /** Whether the Settings surface is open as a floating modal. */
+  settingsModalOpen: boolean;
+  /** Open the Settings modal without changing the current center or rail panel. */
+  openSettingsModal: () => void;
+  /** Close the Settings modal. */
+  closeSettingsModal: () => void;
+  /** Toggle the Settings modal from the right rail button. */
+  toggleSettingsModal: () => void;
+
   /** The left sidebar's active surface (Chats list vs. Files tree). */
   sidebarMode: SidebarMode;
   /** Switch the left sidebar between its Chats and Files surfaces. */
@@ -77,6 +86,20 @@ export const useShellStore = create<ShellState>((set, get) => ({
 
   hydrate(id) {
     set({ openPanelId: id });
+  },
+
+  settingsModalOpen: false,
+
+  openSettingsModal() {
+    set({ settingsModalOpen: true });
+  },
+
+  closeSettingsModal() {
+    set({ settingsModalOpen: false });
+  },
+
+  toggleSettingsModal() {
+    set((state) => ({ settingsModalOpen: !state.settingsModalOpen }));
   },
 
   sidebarMode: "chats",
