@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ModalShell } from "@/components/chat/ui-request/ModalShell";
 import { LinearConnectCard } from "@/components/linear/LinearConnectCard";
 import {
   Badge,
@@ -1209,37 +1210,21 @@ function DangerDialog({
   request: DangerRequest;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialogRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-      <div
-        ref={dialogRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="danger-title"
-        aria-describedby="danger-message"
-        tabIndex={-1}
-        className="w-full max-w-md rounded-xl border border-warn/40 bg-bg-panel p-5 shadow-panel focus:outline-none"
-      >
-        <div className="mb-3 flex items-center gap-2 text-warn">
+    <ModalShell
+      title={request.title}
+      message={request.message}
+      onDismiss={onClose}
+      kicker={
+        <span className="flex items-center gap-2 text-warn">
           <ShieldAlert className="h-5 w-5 shrink-0" />
-          <h2 id="danger-title" className="text-sm font-semibold">
-            {request.title}
-          </h2>
-        </div>
-        <p id="danger-message" className="mb-5 text-sm text-ink-muted">
-          {request.message}
-        </p>
-        <div className="flex justify-end gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide">
+            Confirm risk
+          </span>
+        </span>
+      }
+      footer={
+        <>
           <Button variant="subtle" onClick={onClose}>
             Cancel
           </Button>
@@ -1252,8 +1237,8 @@ function DangerDialog({
           >
             {request.confirmLabel}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

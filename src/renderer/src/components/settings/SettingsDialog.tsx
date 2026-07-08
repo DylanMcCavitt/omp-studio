@@ -1,6 +1,6 @@
 import { X } from "lucide-react";
-import type { KeyboardEvent, PointerEvent } from "react";
-import { useId } from "react";
+import type { PointerEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
 import { IconButton } from "@/components/ui";
 import { useFocusTrap } from "@/lib/useFocusTrap";
@@ -10,8 +10,19 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const dialogRef = useFocusTrap<HTMLDivElement>();
   const titleId = useId();
 
-  const onKeyDown = (e: KeyboardEvent) => {
+  useEffect(() => {
+    const onDocumentKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      e.preventDefault();
+      onClose();
+    };
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => document.removeEventListener("keydown", onDocumentKeyDown);
+  }, [onClose]);
+
+  const onKeyDown = (e: ReactKeyboardEvent) => {
     if (e.key !== "Escape") return;
+    if (e.defaultPrevented) return;
     e.preventDefault();
     e.stopPropagation();
     onClose();

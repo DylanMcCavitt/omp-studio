@@ -1,5 +1,12 @@
+import type { ModelInfo } from "@shared/domain";
 import type { OmpApi, StudioSettings } from "@shared/ipc";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { useSettingsStore } from "@/store/settings";
@@ -26,7 +33,7 @@ const BASE: StudioSettings = {
   browser: { enabled: false },
 };
 
-function seedSettings() {
+function seedSettings(models: ModelInfo[] = []) {
   useSettingsStore.setState({
     settings: BASE,
     loading: false,
@@ -35,7 +42,7 @@ function seedSettings() {
     load: vi.fn(),
   });
   Object.assign(window.omp, {
-    listModels: vi.fn(async () => []),
+    listModels: vi.fn(async () => models),
     listProviders: vi.fn(async () => []),
   } as unknown as Partial<OmpApi>);
 }
@@ -96,6 +103,77 @@ it("dismisses on Escape and click-away", async () => {
     keys: "[MouseLeft]",
     target: screen.getByTestId("settings-modal-backdrop"),
   });
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "Settings" }),
+    ).not.toBeInTheDocument(),
+  );
+});
+
+it("lets an open Settings combobox consume Escape without closing the modal", async () => {
+  const user = userEvent.setup();
+  seedSettings([
+    {
+      provider: "openai",
+      id: "gpt-5",
+      selector: "openai/gpt-5",
+      name: "GPT-5",
+    },
+  ]);
+  render(<Harness />);
+
+  await user.click(screen.getByRole("button", { name: "Open settings" }));
+  const dialog = await screen.findByRole("dialog", { name: "Settings" });
+  await user.click(
+    within(dialog).getByRole("combobox", { name: "Default model" }),
+  );
+  expect(
+    await screen.findByRole("combobox", { name: "Search models…" }),
+  ).toBeInTheDocument();
+
+  await user.keyboard("{Escape}");
+
+  expect(screen.queryByRole("combobox", { name: "Search models…" })).toBeNull();
+  expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+});
+
+it("dismisses a nested danger confirmation on Escape before the Settings modal", async () => {
+  const user = userEvent.setup();
+  render(<Harness />);
+
+  await user.click(screen.getByRole("button", { name: "Open settings" }));
+  const settingsDialog = await screen.findByRole("dialog", {
+    name: "Settings",
+  });
+  await user.click(
+    within(settingsDialog).getByRole("switch", {
+      name: "Enable built-in terminal",
+    }),
+  );
+  expect(
+    await screen.findByRole("dialog", {
+      name: "Enable the built-in terminal?",
+    }),
+  ).toBeInTheDocument();
+
+  await user.keyboard("{Escape}");
+
+  expect(
+    screen.queryByRole("dialog", { name: "Enable the built-in terminal?" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+});
+
+it("dismisses from a document Escape fallback when focus leaves the dialog", async () => {
+  const user = userEvent.setup();
+  render(<Harness />);
+
+  await user.click(screen.getByRole("button", { name: "Open settings" }));
+  expect(await screen.findByRole("dialog", { name: "Settings" })).toBeVisible();
+  screen.getByRole("button", { name: "Close Settings" }).blur();
+
+  fireEvent.keyDown(document, { key: "Escape" });
+
   await waitFor(() =>
     expect(
       screen.queryByRole("dialog", { name: "Settings" }),
