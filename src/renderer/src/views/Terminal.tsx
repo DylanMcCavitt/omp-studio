@@ -14,8 +14,10 @@ import type { ExternalTerminalLauncherInfo } from "@shared/ipc";
 import { ExternalLink, Plus, TerminalSquare, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TerminalGate } from "@/components/terminal/TerminalGate";
+import { terminalDotStatus } from "@/components/terminal/terminal-dot-status";
 import { XtermView } from "@/components/terminal/XtermView";
 import { Button, EmptyState } from "@/components/ui";
+import { WorkspaceColorDot } from "@/components/workspace/WorkspaceColor";
 import { projectLabel } from "@/lib/workspaces";
 import { useAppStore } from "@/store/app";
 import { useSettingsStore } from "@/store/settings";
@@ -28,6 +30,7 @@ export default function Terminal() {
   const externalProfile = terminalSettings?.externalProfile ?? "system";
   const cwd = useAppStore((s) => s.selectedProject);
 
+  const workspaces = useSettingsStore((s) => s.settings?.workspaces);
   const terminals = useTerminalStore((s) => s.terminals);
   const createTerminal = useTerminalStore((s) => s.create);
   const disposeTerminal = useTerminalStore((s) => s.dispose);
@@ -151,6 +154,20 @@ export default function Terminal() {
       ? `${preferredExternal.label} is not available; external terminals open as separate apps.`
       : "No matching external terminal is available; external terminals open as separate apps.";
 
+  const workspace = cwd
+    ? workspaces?.find((entry) => entry.cwd === cwd)
+    : undefined;
+  const workspaceLabel =
+    workspace?.label ?? (cwd ? projectLabel(cwd) : "Terminal");
+  const activeEntry = activeId
+    ? entries.find((entry) => entry.id === activeId)
+    : entries[0];
+  const dotStatus = terminalDotStatus({
+    creating,
+    hasEntries: entries.length > 0,
+    activeExited: activeEntry?.exited,
+  });
+
   const openExternalTerminal = async () => {
     if (!cwd || openingExternal) return;
     setOpeningExternal(true);
@@ -171,21 +188,30 @@ export default function Terminal() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-ink">Terminal</h1>
-          <p
-            className="truncate text-sm text-ink-muted"
-            title={enabled && cwd ? cwd : undefined}
+      {enabled && cwd ? (
+        <div
+          data-testid="terminal-workspace-tab"
+          className="flex shrink-0 items-center gap-2 border-b border-border-subtle bg-bg-panel px-3 py-2"
+        >
+          <WorkspaceColorDot
+            color={workspace?.color}
+            status={dotStatus}
+            size={8}
+          />
+          <span
+            className="min-w-0 truncate font-mono text-sm text-ink"
+            title={cwd}
           >
-            {enabled && cwd
-              ? `Built-in xterm shell in ${projectLabel(cwd)} · ${cwd}`
-              : "A real shell at your user privilege — not a sandbox"}
-          </p>
+            {workspaceLabel}
+          </span>
         </div>
-      </div>
+      ) : (
+        <div className="flex shrink-0 items-center border-b border-border-subtle bg-bg-panel px-3 py-2">
+          <h1 className="font-mono text-sm text-ink-muted">Terminal</h1>
+        </div>
+      )}
       {enabled && cwd && (
-        <div className="flex shrink-0 items-center gap-1 border-b border-border bg-bg-panel px-3 py-2">
+        <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-bg-panel px-3 py-1.5">
           <div
             role="tablist"
             aria-label="Terminal sessions"
@@ -198,9 +224,9 @@ export default function Terminal() {
                 <div
                   key={entry.id}
                   className={[
-                    "flex max-w-64 items-center rounded-md border text-xs transition-colors",
+                    "flex max-w-52 items-center rounded border font-mono text-[11px] transition-colors",
                     selected
-                      ? "border-accent/50 bg-accent-soft text-accent"
+                      ? "border-border-strong bg-bg-terminal text-ink"
                       : "border-border-subtle bg-bg-raised text-ink-muted",
                   ].join(" ")}
                 >
@@ -209,23 +235,13 @@ export default function Terminal() {
                     role="tab"
                     aria-selected={selected}
                     onClick={() => setActiveId(entry.id)}
-                    className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1 text-left hover:text-ink"
+                    className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left hover:text-ink"
                     title={entry.cwd}
                   >
-                    <span
-                      className="min-w-0 flex-1 truncate font-mono text-[10px] opacity-70"
-                      title={entry.cwd}
-                    >
-                      {label}
-                    </span>
-                    <span className="font-mono text-[10px] opacity-70">
-                      {projectLabel(entry.cwd)}
-                    </span>
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
                     <span
                       className={
-                        entry.exited
-                          ? "rounded-full bg-warn/10 px-1.5 text-warn"
-                          : "rounded-full bg-success/10 px-1.5 text-success"
+                        entry.exited ? "text-ink-faint" : "text-ink-muted"
                       }
                     >
                       {entry.exited ? "exited" : "live"}
@@ -309,7 +325,10 @@ export default function Terminal() {
           {externalStatus}
         </div>
       )}
-      <div className="relative min-h-0 flex-1 bg-bg-raised">
+      <div
+        data-testid="terminal-shell-surface"
+        className="relative min-h-0 flex-1 bg-bg-terminal"
+      >
         {!enabled ? (
           <>
             {/* Inert backdrop behind the blocking gate. */}
