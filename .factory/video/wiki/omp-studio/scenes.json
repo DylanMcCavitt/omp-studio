@@ -1,0 +1,101 @@
+{
+  "total": 275.454,
+  "scenes": [
+    {
+      "id": 1,
+      "tag": "1-hook",
+      "start": 0.0,
+      "end": 20.809,
+      "duration": 20.809,
+      "text": "OMP Studio is a desktop cockpit for the Oh My Pi coding-agent harness. First, the key point: it drives a real coding agent, runs a real shell, and embeds a real browser, all inside one Electron window. It is pre-1.0, built by one author, and it ships for macOS, Linux, and Windows."
+    },
+    {
+      "id": 2,
+      "tag": "2-purpose",
+      "start": 20.809,
+      "end": 42.911,
+      "duration": 22.102,
+      "text": "The app gives you a single window to watch an agent work. You see its transcript, its tool calls, its reasoning, and its plan, as they happen. You can steer the agent mid-turn, approve tool calls, and drill into subagents. You can also open a terminal and a browser right beside the chat, so the agent's world and your own share the same desk."
+    },
+    {
+      "id": 3,
+      "tag": "3-tech",
+      "start": 42.911,
+      "end": 64.954,
+      "duration": 22.043,
+      "text": "It is built on Electron, electron-vite, and React 18, all in TypeScript. The numbers tell the story: about forty-five thousand lines of source across two hundred twenty-seven files, one hundred forty-five commits, and one author, in under three weeks. The renderer is React-heavy, so TSX dominates the line count."
+    },
+    {
+      "id": 4,
+      "tag": "4-process",
+      "start": 64.954,
+      "end": 89.107,
+      "duration": 24.153,
+      "text": "OMP Studio uses Electron's three-process model, and the boundary is load-bearing. The main process has full host access: filesystem, subprocesses, the OS keychain. The preload is an isolated CommonJS bridge that publishes one curated API. The renderer is a sandboxed React app that reaches the host only through that typed surface, called OmpApi."
+    },
+    {
+      "id": 5,
+      "tag": "5-rpc",
+      "start": 89.107,
+      "end": 111.604,
+      "duration": 22.497,
+      "text": "The chat talks to the omp harness over an RPC bridge. The main process spawns omp as a child, writes newline-delimited JSON commands to its stdin, and reads JSONL frames from stdout. A pure session reducer turns those frames into render state, and each frame is routed to the right session slice. The renderer never spawns anything itself."
+    },
+    {
+      "id": 6,
+      "tag": "6-chat",
+      "start": 111.604,
+      "end": 136.389,
+      "duration": 24.784,
+      "text": "The transcript is a virtualized list of content blocks: text, thinking, tool calls, and images. Long threads get a MessageScroller rail, a column of tick marks on the right edge for jumping through the conversation. The active tick tracks the topmost visible message, and clicks go through Virtuoso's index scroller, because virtualization means the target row may not be mounted."
+    },
+    {
+      "id": 7,
+      "tag": "7-shell",
+      "start": 136.389,
+      "end": 156.842,
+      "duration": 20.454,
+      "text": "The shell supports up to eight split panes. Each pane can hold a chat, a file view, or a subagent drill-in, and you can drag and dock them. A hot-and-cold split keeps pane ids cold in the store, while each transcript pane subscribes to its own live session slice. The left sidebar anchors on the open worktree and branch."
+    },
+    {
+      "id": 8,
+      "tag": "8-data",
+      "start": 156.842,
+      "end": 179.981,
+      "duration": 23.139,
+      "text": "Six read-only panels surface the agent's world: skills, MCP servers, agents, models and providers, GitHub, and Linear. Each is a main-process reader that degrades gracefully to empty when its source is missing. That graceful degradation is why the app, the unit tests, and the e2e smoke all run without the omp harness or gh installed."
+    },
+    {
+      "id": 9,
+      "tag": "9-security",
+      "start": 179.981,
+      "end": 205.625,
+      "duration": 25.643,
+      "text": "The trust model is the point. The renderer never touches the host directly and never loads remote content. The two capabilities that touch untrusted content, the terminal and the embedded browser, are isolated in their own sandboxed contexts and off by default. The terminal runs a real shell at user privilege, but the agent never drives it. The browser loads remote pages in a separate view with no IPC bridge."
+    },
+    {
+      "id": 10,
+      "tag": "10-proof",
+      "start": 205.625,
+      "end": 230.165,
+      "duration": 24.54,
+      "text": "Two recent tools harden the workflow. The demo recorder, npm run demo, launches the built app against hermetic fixtures and stitches an mp4 with ffmpeg, so a pull request can attach proof of a UI behavior. The sync-check script is a read-only drift radar: it flags stale branches, missing worktrees, and open pull request state, and it only ever prints suggestions."
+    },
+    {
+      "id": 11,
+      "tag": "11-build",
+      "start": 230.165,
+      "end": 254.264,
+      "duration": 24.099,
+      "text": "The gates are deliberate. Biome handles lint and format in one tool. tsc runs two typecheck projects split along the process boundary. Vitest covers the renderer, bun test covers node-side logic and the pure reducer, and Playwright runs the e2e smoke against the built app. A release is one command plus a tag push, and CI cuts the GitHub Release with notes pulled from the changelog."
+    },
+    {
+      "id": 12,
+      "tag": "12-recap",
+      "start": 254.264,
+      "end": 275.454,
+      "duration": 21.19,
+      "text": "You can remember OMP Studio as a typed, sandboxed Electron app that turns the omp harness into a desk you can actually sit at. It is young, fast-moving, and already a full interactive cockpit: a virtualized chat, a real terminal, a sandboxed browser, and six read-only panels, all behind one locked-down renderer."
+    }
+  ]
+}

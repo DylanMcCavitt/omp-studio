@@ -1,0 +1,35 @@
+[1-hook 0-26]
+OMP Studio is a desktop cockpit for the Oh My Pi coding-agent harness. First, the key point: it drives a real coding agent, runs a real shell, and embeds a real browser, all inside one Electron window. It is pre-1.0, built by one author, and it ships for macOS, Linux, and Windows.
+
+[2-purpose 26-56]
+The app gives you a single window to watch an agent work. You see its transcript, its tool calls, its reasoning, and its plan, as they happen. You can steer the agent mid-turn, approve tool calls, and drill into subagents. You can also open a terminal and a browser right beside the chat, so the agent's world and your own share the same desk.
+
+[3-tech 56-90]
+It is built on Electron, electron-vite, and React 18, all in TypeScript. The numbers tell the story: about forty-five thousand lines of source across two hundred twenty-seven files, one hundred forty-five commits, and one author, in under three weeks. The renderer is React-heavy, so TSX dominates the line count.
+
+[4-process 90-128]
+OMP Studio uses Electron's three-process model, and the boundary is load-bearing. The main process has full host access: filesystem, subprocesses, the OS keychain. The preload is an isolated CommonJS bridge that publishes one curated API. The renderer is a sandboxed React app that reaches the host only through that typed surface, called OmpApi.
+
+[5-rpc 128-168]
+The chat talks to the omp harness over an RPC bridge. The main process spawns omp as a child, writes newline-delimited JSON commands to its stdin, and reads JSONL frames from stdout. A pure session reducer turns those frames into render state, and each frame is routed to the right session slice. The renderer never spawns anything itself.
+
+[6-chat 168-206]
+The transcript is a virtualized list of content blocks: text, thinking, tool calls, and images. Long threads get a MessageScroller rail, a column of tick marks on the right edge for jumping through the conversation. The active tick tracks the topmost visible message, and clicks go through Virtuoso's index scroller, because virtualization means the target row may not be mounted.
+
+[7-shell 206-240]
+The shell supports up to eight split panes. Each pane can hold a chat, a file view, or a subagent drill-in, and you can drag and dock them. A hot-and-cold split keeps pane ids cold in the store, while each transcript pane subscribes to its own live session slice. The left sidebar anchors on the open worktree and branch.
+
+[8-data 240-278]
+Six read-only panels surface the agent's world: skills, MCP servers, agents, models and providers, GitHub, and Linear. Each is a main-process reader that degrades gracefully to empty when its source is missing. That graceful degradation is why the app, the unit tests, and the e2e smoke all run without the omp harness or gh installed.
+
+[9-security 278-322]
+The trust model is the point. The renderer never touches the host directly and never loads remote content. The two capabilities that touch untrusted content, the terminal and the embedded browser, are isolated in their own sandboxed contexts and off by default. The terminal runs a real shell at user privilege, but the agent never drives it. The browser loads remote pages in a separate view with no IPC bridge.
+
+[10-proof 322-360]
+Two recent tools harden the workflow. The demo recorder, npm run demo, launches the built app against hermetic fixtures and stitches an mp4 with ffmpeg, so a pull request can attach proof of a UI behavior. The sync-check script is a read-only drift radar: it flags stale branches, missing worktrees, and open pull request state, and it only ever prints suggestions.
+
+[11-build 360-398]
+The gates are deliberate. Biome handles lint and format in one tool. tsc runs two typecheck projects split along the process boundary. Vitest covers the renderer, bun test covers node-side logic and the pure reducer, and Playwright runs the e2e smoke against the built app. A release is one command plus a tag push, and CI cuts the GitHub Release with notes pulled from the changelog.
+
+[12-recap 398-432]
+You can remember OMP Studio as a typed, sandboxed Electron app that turns the omp harness into a desk you can actually sit at. It is young, fast-moving, and already a full interactive cockpit: a virtualized chat, a real terminal, a sandboxed browser, and six read-only panels, all behind one locked-down renderer.

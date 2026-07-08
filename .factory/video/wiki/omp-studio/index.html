@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>OMP Studio overview</title>
+<style>
+:root{
+  --bg:#000;--surface:#161413;--border:#342F2D;--gray:#9B8E87;--foot:#948781;
+  --white:#fff;--light:#F2F0F0;--orange:#EE6018;--orange2:#FF9F2B;--orange3:#F35E00;
+  --ff:"Geist","Inter",system-ui,sans-serif;--fm:"Geist Mono",ui-monospace,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--bg);color:var(--white);font-family:var(--ff);font-weight:300;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+.stage{position:relative;width:1280px;height:720px;overflow:hidden;background:var(--bg)}
+.mono{font-family:var(--fm);font-weight:400}
+/* header */
+.hdr{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;border-bottom:1px solid var(--border);z-index:50}
+.brand{font-family:var(--fm);font-size:14px;letter-spacing:.14em;color:var(--white)}
+.brand b{color:var(--orange);font-weight:400}
+.hdr .ctx{font-family:var(--fm);font-size:13px;color:var(--gray)}
+.cnt{font-family:var(--fm);font-size:13px;color:var(--gray)}
+.cnt b{color:var(--white);font-weight:400}
+/* progress */
+.prog{position:absolute;left:0;bottom:0;height:2px;width:0;background:var(--orange);z-index:50}
+.progtrack{position:absolute;left:0;bottom:0;height:2px;width:100%;background:var(--border);z-index:49}
+/* scenes */
+.scene{position:absolute;inset:64px 28px 28px 28px;opacity:0;will-change:opacity}
+.s-title{font-size:30px;line-height:1.1;letter-spacing:-.02em;margin-bottom:6px}
+.s-sub{font-family:var(--fm);font-size:13px;color:var(--gray);margin-bottom:22px}
+.s-tag{font-family:var(--fm);font-size:11px;color:var(--orange);letter-spacing:.12em;margin-bottom:14px}
+/* cards */
+.grid{display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:18px 20px}
+.card h3{font-family:var(--fm);font-size:13px;color:var(--white);margin-bottom:6px}
+.card p{font-size:15px;color:var(--gray);line-height:1.45}
+.card .p{font-family:var(--fm);font-size:11px;color:var(--foot);margin-top:8px}
+/* metrics */
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:20px 22px}
+.metric .v{font-family:var(--fm);font-size:34px;color:var(--white);line-height:1}
+.metric .v b{color:var(--orange);font-weight:400}
+.metric .k{font-family:var(--fm);font-size:11px;color:var(--gray);margin-top:8px;letter-spacing:.08em}
+/* diagram boxes */
+.drow{display:flex;gap:0;align-items:stretch}
+.dbox{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:14px 16px;flex:1}
+.dbox .t{font-family:var(--fm);font-size:12px;color:var(--white);margin-bottom:4px}
+.dbox .d{font-size:13px;color:var(--gray);line-height:1.4}
+.dbox .src{font-family:var(--fm);font-size:10px;color:var(--foot);margin-top:8px}
+.arrow{align-self:center;font-family:var(--fm);font-size:11px;color:var(--orange);padding:0 12px;white-space:nowrap}
+.arrow .a{color:var(--orange)}
+/* bar chart */
+.bars{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+.bar{display:flex;align-items:center;gap:14px}
+.bar .lbl{font-family:var(--fm);font-size:12px;color:var(--gray);width:46px}
+.bar .tr{flex:1;height:22px;background:var(--surface);border:1px solid var(--border);border-radius:3px;position:relative}
+.bar .fl{height:100%;background:linear-gradient(90deg,var(--orange2),var(--orange));border-radius:2px;width:0}
+.bar .n{font-family:var(--fm);font-size:11px;color:var(--white);position:absolute;right:8px;top:4px}
+/* source strip */
+.strip{display:flex;flex-direction:column;gap:8px}
+.srow{font-family:var(--fm);font-size:12px;color:var(--white);background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:9px 14px;display:flex;justify-content:space-between}
+.srow .d{color:var(--gray)}
+/* ticks */
+.trail{position:absolute;right:24px;top:80px;bottom:60px;width:18px;display:flex;flex-direction:column;justify-content:center;gap:7px}
+.tick{height:3px;border-radius:2px;background:var(--gray);opacity:.45}
+.tick.on{background:var(--orange);opacity:1;height:4px;width:20px}
+/* terminal */
+.term{background:#0c0b0a;border:1px solid var(--border);border-radius:5px;padding:16px 18px;font-family:var(--fm);font-size:13px;line-height:1.7;color:var(--gray)}
+.term .pmt{color:var(--orange)}
+.term .ok{color:var(--white)}
+.term .dim{color:var(--foot)}
+/* pane grid */
+.panes{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,1fr);gap:8px;height:230px}
+.pcell{background:var(--surface);border:1px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--fm);font-size:11px;color:var(--gray)}
+.pcell.on{border-color:var(--orange);color:var(--white)}
+/* boundary */
+.bnd{display:flex;flex-direction:column;gap:10px}
+.bndrow{display:flex;align-items:center;gap:14px}
+.bndl{font-family:var(--fm);font-size:11px;color:var(--gray);width:150px;text-align:right}
+.bndb{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:12px 16px;font-size:13px;color:var(--white)}
+.bndb.warn{border-color:var(--orange)}
+.bndb .src{font-family:var(--fm);font-size:10px;color:var(--foot);margin-top:6px}
+/* recap */
+.recap{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+.big{font-size:40px;line-height:1.05;letter-spacing:-.025em;max-width:980px}
+.big b{color:var(--orange);font-weight:300}
+.stipple{position:absolute;inset:0;background-image:radial-gradient(rgba(155,142,135,.10) 1px,transparent 1px);background-size:7px 7px;opacity:.5;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="stage" data-composition-id="main" data-start="0" data-width="1280" data-height="720" data-duration="276" data-fps="24">
+  <div class="hdr">
+    <div class="brand">FA<b>CTORY</b></div>
+    <div class="ctx mono">omp-studio</div>
+    <div class="cnt mono"><b id="cnum">01</b>/12</div>
+  </div>
+
+  <!-- 1 hook -->
+  <section class="scene" id="s1">
+    <div class="stipple"></div>
+    <div style="position:relative;display:flex;flex-direction:column;justify-content:center;height:100%">
+      <div class="s-tag">REPOSITORY OVERVIEW</div>
+      <div style="font-size:68px;line-height:1;letter-spacing:-.03em;margin-bottom:18px">OMP Studio</div>
+      <div style="font-size:22px;color:var(--gray);max-width:760px;line-height:1.4">A desktop cockpit for the Oh My Pi <span class="mono" style="color:var(--white)">omp</span> coding-agent harness.</div>
+      <div class="mono" style="font-size:12px;color:var(--foot);margin-top:30px">github.com/DylanMcCavitt/omp-studio &nbsp;·&nbsp; Electron · electron-vite · React 18 · TypeScript</div>
+    </div>
+  </section>
+
+  <!-- 2 purpose -->
+  <section class="scene" id="s2">
+    <div class="s-tag">02 · PURPOSE</div>
+    <div class="s-title">One window to watch an agent work</div>
+    <div class="s-sub">Transcript, tool calls, reasoning, and plan, as they happen</div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:18px">
+      <div class="card"><h3>CHAT</h3><p>Stream the agent transcript, steer mid-turn, approve tool calls, drill into subagents.</p><div class="p">features/chat</div></div>
+      <div class="card"><h3>TERMINAL</h3><p>A real login shell beside the chat. Off by default, user-driven only.</p><div class="p">features/terminal</div></div>
+      <div class="card"><h3>BROWSER</h3><p>An embedded browser in a sandboxed view, no IPC bridge to the app.</p><div class="p">features/browser</div></div>
+    </div>
+  </section>
+
+  <!-- 3 tech -->
+  <section class="scene" id="s3">
+    <div class="s-tag">03 · TECH STACK</div>
+    <div class="s-title">Electron, electron-vite, React 18, TypeScript</div>
+    <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-top:10px;margin-bottom:24px">
+      <div class="metric"><div class="v"><b>44.9k</b></div><div class="k">LINES OF SOURCE</div></div>
+      <div class="metric"><div class="v">227</div><div class="k">SOURCE FILES</div></div>
+      <div class="metric"><div class="v">145</div><div class="k">COMMITS</div></div>
+      <div class="metric"><div class="v">1</div><div class="k">AUTHOR · &lt;3 WK</div></div>
+    </div>
+    <div class="mono" style="font-size:12px;color:var(--gray);margin-bottom:10px">Lines of code by language in src/</div>
+    <div class="bars" style="max-width:760px">
+      <div class="bar"><div class="lbl">TS</div><div class="tr"><div class="fl" id="b1"></div><div class="n">15,916</div></div></div>
+      <div class="bar"><div class="lbl">TSX</div><div class="tr"><div class="fl" id="b2"></div><div class="n">28,678</div></div></div>
+      <div class="bar"><div class="lbl">CSS</div><div class="tr"><div class="fl" id="b3"></div><div class="n">272</div></div></div>
+    </div>
+  </section>
+
+  <!-- 4 process -->
+  <section class="scene" id="s4">
+    <div class="s-tag">04 · PROCESS MODEL</div>
+    <div class="s-title">Three processes, one typed boundary</div>
+    <div class="s-sub">The renderer reaches the host only through OmpApi</div>
+    <div class="drow" style="margin-top:24px">
+      <div class="dbox"><div class="t">MAIN</div><div class="d">Node · full host access: filesystem, subprocesses, keychain</div><div class="src">src/main/index.ts</div></div>
+      <div class="arrow"><span class="a">▶ ipcMain.handle ▶</span></div>
+      <div class="dbox"><div class="t">PRELOAD</div><div class="d">Isolated CommonJS bridge · publishes one curated API</div><div class="src">src/preload/index.ts</div></div>
+      <div class="arrow"><span class="a">▶ OmpApi ▶</span></div>
+      <div class="dbox" style="border-color:var(--orange)"><div class="t" style="color:var(--orange)">RENDERER</div><div class="d">React · sandbox + contextIsolation · no Node</div><div class="src">src/renderer</div></div>
+    </div>
+    <div class="mono" style="font-size:11px;color:var(--foot);margin-top:26px">window.omp is the only host surface · no ipcRenderer, no require, no remote content</div>
+  </section>
+
+  <!-- 5 rpc -->
+  <section class="scene" id="s5">
+    <div class="s-tag">05 · RPC BRIDGE</div>
+    <div class="s-title">Chat talks to omp over JSONL</div>
+    <div class="drow" style="margin-top:24px;align-items:center">
+      <div class="dbox"><div class="t">RENDERER STORE</div><div class="d">Per-session slice</div><div class="src">store/chat.ts</div></div>
+      <div class="arrow">ipc ▶</div>
+      <div class="dbox"><div class="t">RPC SESSION</div><div class="d">Match by id · forward events</div><div class="src">src/main/omp/rpc-session.ts</div></div>
+      <div class="arrow">stdin / stdout ▶</div>
+      <div class="dbox" style="border-color:var(--orange)"><div class="t" style="color:var(--orange)">OMP CHILD</div><div class="d">NDJSON commands in · JSONL frames out</div><div class="src">omp harness subprocess</div></div>
+    </div>
+    <div class="card" style="margin-top:24px;max-width:860px"><h3>PURE SESSION REDUCER</h3><p>Turns streaming frames into render state · no React/Zustand imports · unit-tested under <span class="mono">bun test</span></p><div class="p">src/renderer/src/store/session-reducer.ts</div></div>
+  </section>
+
+  <!-- 6 chat -->
+  <section class="scene" id="s6">
+    <div class="s-tag">06 · CHAT &amp; TRANSCRIPT</div>
+    <div class="s-title">Virtualized transcript + navigation trail</div>
+    <div class="strip" style="max-width:780px;margin-top:14px">
+      <div class="srow"><span>MessageList.tsx</span><span class="d">virtualized column · rows memoized</span></div>
+      <div class="srow"><span>MessageScroller.tsx</span><span class="d">right-edge tick trail · AGE-774</span></div>
+      <div class="srow"><span>useMessageVisibility.ts</span><span class="d">IntersectionObserver + MutationObserver</span></div>
+      <div class="srow"><span>messageScrollerBuckets.ts</span><span class="d">pure bucketing · max 50 ticks</span></div>
+    </div>
+    <div class="trail" id="trail"></div>
+    <div class="mono" style="font-size:11px;color:var(--foot);position:absolute;bottom:14px;left:0">clicks route through Virtuoso scrollToIndex · target row may not be mounted</div>
+  </section>
+
+  <!-- 7 shell -->
+  <section class="scene" id="s7">
+    <div class="s-tag">07 · SHELL PANE MODEL</div>
+    <div class="s-title">Up to eight split panes</div>
+    <div class="panes" style="max-width:560px;margin-top:14px">
+      <div class="pcell on">chat</div><div class="pcell">chat</div><div class="pcell">files</div><div class="pcell">subagent</div>
+      <div class="pcell">chat</div><div class="pcell">files</div><div class="pcell">subagent</div><div class="pcell">chat</div>
+    </div>
+    <div class="card" style="max-width:520px;margin-top:18px"><h3>HOT / COLD SPLIT</h3><p>Pane ids stay cold in the store; each transcript pane subscribes to its own live session slice.</p><div class="p">src/renderer/src/store/panes.ts</div></div>
+  </section>
+
+  <!-- 8 data -->
+  <section class="scene" id="s8">
+    <div class="s-tag">08 · READ-ONLY DATA SERVICES</div>
+    <div class="s-title">Six panels, graceful degradation</div>
+    <div class="s-sub">Each reader returns empty when its source is missing · the app always launches</div>
+    <div class="grid" style="grid-template-columns:repeat(3,1fr);margin-top:16px">
+      <div class="card"><h3>SKILLS</h3><div class="p">config-service.ts</div></div>
+      <div class="card"><h3>MCP SERVERS</h3><div class="p">config-service.ts</div></div>
+      <div class="card"><h3>AGENTS</h3><div class="p">config-service.ts</div></div>
+      <div class="card"><h3>MODELS &amp; PROVIDERS</h3><div class="p">config-service.ts</div></div>
+      <div class="card"><h3>GITHUB</h3><div class="p">needs gh</div></div>
+      <div class="card"><h3>LINEAR</h3><div class="p">keychain key · writes gated</div></div>
+    </div>
+  </section>
+
+  <!-- 9 security -->
+  <section class="scene" id="s9">
+    <div class="s-tag">09 · SECURITY BOUNDARIES</div>
+    <div class="s-title">The trust model is the point</div>
+    <div class="bnd" style="margin-top:20px">
+      <div class="bndrow"><div class="bndl">PRIVILEGED</div><div class="bndb">Renderer · sandbox + contextIsolation · CSP default-src 'self'<div class="src">never loads remote content</div></div></div>
+      <div class="bndrow"><div class="bndl">HOST ACCESS</div><div class="bndb">Main · filesystem, subprocesses, keychain behind typed IPC<div class="src">src/main/services/*</div></div></div>
+      <div class="bndrow"><div class="bndl">OPT-IN · OFF</div><div class="bndb warn">Terminal · real shell at user privilege · agent never drives pty input<div class="src">src/main/terminal/registry.ts</div></div></div>
+      <div class="bndrow"><div class="bndl">OPT-IN · OFF</div><div class="bndb warn">Browser · separate WebContentsView · no IPC bridge to app<div class="src">src/main/browser/view-manager.ts</div></div></div>
+    </div>
+  </section>
+
+  <!-- 10 proof -->
+  <section class="scene" id="s10">
+    <div class="s-tag">10 · PROOF TOOLING</div>
+    <div class="s-title">Harden the workflow</div>
+    <div class="term" style="max-width:860px;margin-top:18px">
+      <div><span class="pmt">$</span> <span class="ok">npm run build &amp;&amp; npm run demo -- message-scroller</span></div>
+      <div class="dim">  launches built app · hermetic fixtures · page.screenshot loop · ffmpeg mp4</div>
+      <div><span class="pmt">$</span> <span class="ok">npm run sync-check</span></div>
+      <div class="dim">  ## branches     synced / gone-upstream / no-upstream</div>
+      <div class="dim">  ## worktrees    ok / missing / stale</div>
+      <div class="dim">  ## pull requests open · read-only · prints suggestions only</div>
+    </div>
+  </section>
+
+  <!-- 11 build -->
+  <section class="scene" id="s11">
+    <div class="s-tag">11 · BUILD &amp; CI</div>
+    <div class="s-title">Deliberate gates</div>
+    <div class="strip" style="max-width:820px;margin-top:14px">
+      <div class="srow"><span>biome check</span><span class="d">lint + format</span></div>
+      <div class="srow"><span>tsc (node + web)</span><span class="d">two typecheck projects · process boundary</span></div>
+      <div class="srow"><span>vitest run</span><span class="d">renderer component suite</span></div>
+      <div class="srow"><span>bun test</span><span class="d">node-side · pure reducer · sync-check helpers</span></div>
+      <div class="srow"><span>playwright _electron</span><span class="d">hermetic e2e smoke</span></div>
+      <div class="srow"><span>npm run release -- patch</span><span class="d">tag push → CI cuts GitHub Release</span></div>
+    </div>
+  </section>
+
+  <!-- 12 recap -->
+  <section class="scene" id="s12">
+    <div class="stipple"></div>
+    <div style="position:relative;height:100%;display:flex;flex-direction:column;justify-content:center">
+      <div class="s-tag">12 · RECAP</div>
+      <div class="big">A typed, sandboxed Electron app that turns the <b>omp</b> harness into a desk you can actually sit at.</div>
+      <div class="recap" style="margin-top:30px;max-width:900px">
+        <div class="metric"><div class="v">12</div><div class="k">FEATURES</div></div>
+        <div class="metric"><div class="v">9</div><div class="k">SYSTEMS</div></div>
+        <div class="metric"><div class="v">8</div><div class="k">PANES MAX</div></div>
+        <div class="metric"><div class="v"><b>59</b></div><div class="k">WIKI PAGES</div></div>
+      </div>
+      <div class="mono" style="font-size:12px;color:var(--foot);margin-top:18px">Young, fast-moving, already a full interactive cockpit.</div>
+    </div>
+  </section>
+
+  <div class="progtrack"></div>
+  <div class="prog" id="prog"></div>
+</div>
+
+<script src="gsap.min.js"></script>
+<script>
+const S=[[0.00,20.81],[20.81,42.91],[42.91,64.95],[64.95,89.11],[89.11,111.60],[111.60,136.39],[136.39,156.84],[156.84,179.98],[179.98,205.62],[205.62,230.16],[230.16,254.26],[254.26,275.45]];
+const DUR=276;
+// build trail ticks
+(function(){const t=document.getElementById('trail');for(let i=0;i<14;i++){const k=document.createElement('div');k.className='tick'+(i===4?' on':'');t.appendChild(k)}})();
+const tl=gsap.timeline({defaults:{ease:'power2.out'}});
+S.forEach((s,i)=>{const el=document.getElementById('s'+(i+1));
+  tl.set(el,{opacity:0},s[0]).to(el,{opacity:1,duration:.5},s[0])
+    .to(el,{opacity:0,duration:.5},Math.max(s[1]-.5,s[0]+.5));
+  tl.to('#cnum',{textContent:(i<9?'0':'')+(i+1),snap:{textContent:1},duration:.1},s[0]);
+});
+tl.to('#prog',{width:1280-56,duration:DUR,ease:'none'},0);
+// bar chart fill (scene 3)
+tl.to('#b1',{width:'35.5%',duration:1.2,ease:'power2.out'},48.5);
+tl.to('#b2',{width:'64%',duration:1.2,ease:'power2.out'},49);
+tl.to('#b3',{width:'1.2%',duration:1.2,ease:'power2.out'},49.5);
+window.__timelines = window.__timelines || {};
+window.__timelines['main'] = tl;
+</script>
+</body>
+</html>

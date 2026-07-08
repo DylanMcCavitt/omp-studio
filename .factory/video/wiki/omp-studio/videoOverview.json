@@ -1,0 +1,21 @@
+{
+  "status": "ready",
+  "sizeBytes": 6401017,
+  "contentType": "video/mp4",
+  "generatedAt": "2026-07-07T18:49:00.000Z",
+  "durationSeconds": 276,
+  "captionTracks": [
+    {
+      "language": "en",
+      "label": "English",
+      "sizeBytes": 8278,
+      "contentType": "text/vtt"
+    }
+  ],
+  "warnings": [
+    "Factory brand guide (https://factory-brand-guide.vercel.app/) returned 404; brand assets could not be downloaded. Used fallback palette (dark canvas #000, Factory orange #EE6018) and a mono 'FACTORY' text label per skill fallback guidance.",
+    "Local Geist/Geist Mono font files unavailable; used fallback font stack (Geist/Inter/system-ui, Geist Mono/ui-monospace). HyperFrames mapped var(--ff)/var(--fm) to fallback fonts.",
+    "Local TTS Kokoro not available; used macOS 'say' (voice Samantha, rate 145) as local fallback. No cloud TTS used.",
+    "HyperFrames doctor reported low free memory (0.7 GB of 24 GB) — non-blocking warning; render completed successfully."
+  ]
+}

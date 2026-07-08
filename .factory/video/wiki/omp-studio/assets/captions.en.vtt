@@ -1,0 +1,485 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:02.312
+OMP Studio is a desktop cockpit
+
+2
+00:00:02.312 --> 00:00:04.624
+for the Oh My Pi coding-agent
+
+3
+00:00:04.624 --> 00:00:06.936
+harness. First, the key point: it
+
+4
+00:00:06.936 --> 00:00:09.248
+drives a real coding agent, runs
+
+5
+00:00:09.248 --> 00:00:11.561
+a real shell, and embeds a
+
+6
+00:00:11.561 --> 00:00:13.873
+real browser, all inside one Electron
+
+7
+00:00:13.873 --> 00:00:16.185
+window. It is pre-1.0, built by
+
+8
+00:00:16.185 --> 00:00:18.497
+one author, and it ships for
+
+9
+00:00:18.497 --> 00:00:20.809
+macOS, Linux, and Windows.
+
+10
+00:00:20.809 --> 00:00:22.818
+The app gives you a single
+
+11
+00:00:22.818 --> 00:00:24.828
+window to watch an agent work.
+
+12
+00:00:24.828 --> 00:00:26.837
+You see its transcript, its tool
+
+13
+00:00:26.837 --> 00:00:28.846
+calls, its reasoning, and its plan,
+
+14
+00:00:28.846 --> 00:00:30.855
+as they happen. You can steer
+
+15
+00:00:30.855 --> 00:00:32.865
+the agent mid-turn, approve tool calls,
+
+16
+00:00:32.865 --> 00:00:34.874
+and drill into subagents. You can
+
+17
+00:00:34.874 --> 00:00:36.883
+also open a terminal and a
+
+18
+00:00:36.883 --> 00:00:38.892
+browser right beside the chat, so
+
+19
+00:00:38.892 --> 00:00:40.902
+the agent's world and your own
+
+20
+00:00:40.902 --> 00:00:42.911
+share the same desk.
+
+21
+00:00:42.911 --> 00:00:45.360
+It is built on Electron, electron-vite,
+
+22
+00:00:45.360 --> 00:00:47.809
+and React 18, all in TypeScript.
+
+23
+00:00:47.809 --> 00:00:50.259
+The numbers tell the story: about
+
+24
+00:00:50.259 --> 00:00:52.708
+forty-five thousand lines of source across
+
+25
+00:00:52.708 --> 00:00:55.157
+two hundred twenty-seven files, one hundred
+
+26
+00:00:55.157 --> 00:00:57.606
+forty-five commits, and one author, in
+
+27
+00:00:57.606 --> 00:01:00.056
+under three weeks. The renderer is
+
+28
+00:01:00.056 --> 00:01:02.505
+React-heavy, so TSX dominates the line
+
+29
+00:01:02.505 --> 00:01:04.954
+count.
+
+30
+00:01:04.954 --> 00:01:07.638
+OMP Studio uses Electron's three-process model,
+
+31
+00:01:07.638 --> 00:01:10.321
+and the boundary is load-bearing. The
+
+32
+00:01:10.321 --> 00:01:13.005
+main process has full host access:
+
+33
+00:01:13.005 --> 00:01:15.689
+filesystem, subprocesses, the OS keychain. The
+
+34
+00:01:15.689 --> 00:01:18.372
+preload is an isolated CommonJS bridge
+
+35
+00:01:18.372 --> 00:01:21.056
+that publishes one curated API. The
+
+36
+00:01:21.056 --> 00:01:23.740
+renderer is a sandboxed React app
+
+37
+00:01:23.740 --> 00:01:26.423
+that reaches the host only through
+
+38
+00:01:26.423 --> 00:01:29.107
+that typed surface, called OmpApi.
+
+39
+00:01:29.107 --> 00:01:31.357
+The chat talks to the omp
+
+40
+00:01:31.357 --> 00:01:33.606
+harness over an RPC bridge. The
+
+41
+00:01:33.606 --> 00:01:35.856
+main process spawns omp as a
+
+42
+00:01:35.856 --> 00:01:38.106
+child, writes newline-delimited JSON commands to
+
+43
+00:01:38.106 --> 00:01:40.356
+its stdin, and reads JSONL frames
+
+44
+00:01:40.356 --> 00:01:42.605
+from stdout. A pure session reducer
+
+45
+00:01:42.605 --> 00:01:44.855
+turns those frames into render state,
+
+46
+00:01:44.855 --> 00:01:47.105
+and each frame is routed to
+
+47
+00:01:47.105 --> 00:01:49.354
+the right session slice. The renderer
+
+48
+00:01:49.354 --> 00:01:51.604
+never spawns anything itself.
+
+49
+00:01:51.604 --> 00:01:54.082
+The transcript is a virtualized list
+
+50
+00:01:54.082 --> 00:01:56.561
+of content blocks: text, thinking, tool
+
+51
+00:01:56.561 --> 00:01:59.039
+calls, and images. Long threads get
+
+52
+00:01:59.039 --> 00:02:01.518
+a MessageScroller rail, a column of
+
+53
+00:02:01.518 --> 00:02:03.996
+tick marks on the right edge
+
+54
+00:02:03.996 --> 00:02:06.474
+for jumping through the conversation. The
+
+55
+00:02:06.474 --> 00:02:08.953
+active tick tracks the topmost visible
+
+56
+00:02:08.953 --> 00:02:11.431
+message, and clicks go through Virtuoso's
+
+57
+00:02:11.431 --> 00:02:13.910
+index scroller, because virtualization means the
+
+58
+00:02:13.910 --> 00:02:16.389
+target row may not be mounted.
+
+59
+00:02:16.389 --> 00:02:18.434
+The shell supports up to eight
+
+60
+00:02:18.434 --> 00:02:20.480
+split panes. Each pane can hold
+
+61
+00:02:20.480 --> 00:02:22.525
+a chat, a file view, or
+
+62
+00:02:22.525 --> 00:02:24.571
+a subagent drill-in, and you can
+
+63
+00:02:24.571 --> 00:02:26.616
+drag and dock them. A hot-and-cold
+
+64
+00:02:26.616 --> 00:02:28.661
+split keeps pane ids cold in
+
+65
+00:02:28.661 --> 00:02:30.707
+the store, while each transcript pane
+
+66
+00:02:30.707 --> 00:02:32.752
+subscribes to its own live session
+
+67
+00:02:32.752 --> 00:02:34.798
+slice. The left sidebar anchors on
+
+68
+00:02:34.798 --> 00:02:36.842
+the open worktree and branch.
+
+69
+00:02:36.842 --> 00:02:39.156
+Six read-only panels surface the agent's
+
+70
+00:02:39.156 --> 00:02:41.470
+world: skills, MCP servers, agents, models
+
+71
+00:02:41.470 --> 00:02:43.784
+and providers, GitHub, and Linear. Each
+
+72
+00:02:43.784 --> 00:02:46.098
+is a main-process reader that degrades
+
+73
+00:02:46.098 --> 00:02:48.412
+gracefully to empty when its source
+
+74
+00:02:48.412 --> 00:02:50.725
+is missing. That graceful degradation is
+
+75
+00:02:50.725 --> 00:02:53.039
+why the app, the unit tests,
+
+76
+00:02:53.039 --> 00:02:55.353
+and the e2e smoke all run
+
+77
+00:02:55.353 --> 00:02:57.667
+without the omp harness or gh
+
+78
+00:02:57.667 --> 00:02:59.981
+installed.
+
+79
+00:02:59.981 --> 00:03:02.118
+The trust model is the point.
+
+80
+00:03:02.118 --> 00:03:04.255
+The renderer never touches the host
+
+81
+00:03:04.255 --> 00:03:06.392
+directly and never loads remote content.
+
+82
+00:03:06.392 --> 00:03:08.529
+The two capabilities that touch untrusted
+
+83
+00:03:08.529 --> 00:03:10.666
+content, the terminal and the embedded
+
+84
+00:03:10.666 --> 00:03:12.803
+browser, are isolated in their own
+
+85
+00:03:12.803 --> 00:03:14.939
+sandboxed contexts and off by default.
+
+86
+00:03:14.939 --> 00:03:17.076
+The terminal runs a real shell
+
+87
+00:03:17.076 --> 00:03:19.213
+at user privilege, but the agent
+
+88
+00:03:19.213 --> 00:03:21.350
+never drives it. The browser loads
+
+89
+00:03:21.350 --> 00:03:23.487
+remote pages in a separate view
+
+90
+00:03:23.487 --> 00:03:25.625
+with no IPC bridge.
+
+91
+00:03:25.625 --> 00:03:27.856
+Two recent tools harden the workflow.
+
+92
+00:03:27.856 --> 00:03:30.087
+The demo recorder, npm run demo,
+
+93
+00:03:30.087 --> 00:03:32.318
+launches the built app against hermetic
+
+94
+00:03:32.318 --> 00:03:34.549
+fixtures and stitches an mp4 with
+
+95
+00:03:34.549 --> 00:03:36.780
+ffmpeg, so a pull request can
+
+96
+00:03:36.780 --> 00:03:39.010
+attach proof of a UI behavior.
+
+97
+00:03:39.010 --> 00:03:41.241
+The sync-check script is a read-only
+
+98
+00:03:41.241 --> 00:03:43.472
+drift radar: it flags stale branches,
+
+99
+00:03:43.472 --> 00:03:45.703
+missing worktrees, and open pull request
+
+100
+00:03:45.703 --> 00:03:47.934
+state, and it only ever prints
+
+101
+00:03:47.934 --> 00:03:50.165
+suggestions.
+
+102
+00:03:50.165 --> 00:03:52.356
+The gates are deliberate. Biome handles
+
+103
+00:03:52.356 --> 00:03:54.547
+lint and format in one tool.
+
+104
+00:03:54.547 --> 00:03:56.737
+tsc runs two typecheck projects split
+
+105
+00:03:56.737 --> 00:03:58.928
+along the process boundary. Vitest covers
+
+106
+00:03:58.928 --> 00:04:01.119
+the renderer, bun test covers node-side
+
+107
+00:04:01.119 --> 00:04:03.310
+logic and the pure reducer, and
+
+108
+00:04:03.310 --> 00:04:05.501
+Playwright runs the e2e smoke against
+
+109
+00:04:05.501 --> 00:04:07.692
+the built app. A release is
+
+110
+00:04:07.692 --> 00:04:09.882
+one command plus a tag push,
+
+111
+00:04:09.882 --> 00:04:12.073
+and CI cuts the GitHub Release
+
+112
+00:04:12.073 --> 00:04:14.264
+with notes pulled from the changelog.
+
+113
+00:04:14.264 --> 00:04:16.618
+You can remember OMP Studio as
+
+114
+00:04:16.618 --> 00:04:18.973
+a typed, sandboxed Electron app that
+
+115
+00:04:18.973 --> 00:04:21.327
+turns the omp harness into a
+
+116
+00:04:21.327 --> 00:04:23.682
+desk you can actually sit at.
+
+117
+00:04:23.682 --> 00:04:26.036
+It is young, fast-moving, and already
+
+118
+00:04:26.036 --> 00:04:28.391
+a full interactive cockpit: a virtualized
+
+119
+00:04:28.391 --> 00:04:30.745
+chat, a real terminal, a sandboxed
+
+120
+00:04:30.745 --> 00:04:33.100
+browser, and six read-only panels, all
+
+121
+00:04:33.100 --> 00:04:35.454
+behind one locked-down renderer.
