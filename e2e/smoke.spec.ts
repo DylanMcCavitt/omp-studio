@@ -99,7 +99,6 @@ const RAIL_DESTINATIONS: readonly {
       await expect(panel.getByLabel("Linear API key")).toBeVisible();
     },
   },
-  { label: "Settings", assertRendered: heading("Settings") },
 ] as const;
 
 function heading(name: string) {
@@ -524,7 +523,9 @@ test("titlebar exposes the Live Dot navigation controls", async () => {
 test("right rail exposes the v3 destinations and each panel opens", async () => {
   const rail = page.getByRole("navigation", { name: "Tools" });
   await expect(rail).toBeVisible();
-  await expect(rail.getByRole("button")).toHaveCount(RAIL_DESTINATIONS.length);
+  await expect(rail.getByRole("button")).toHaveCount(
+    RAIL_DESTINATIONS.length + 1,
+  );
   await expect(
     rail.getByRole("button", { name: "Chat", exact: true }),
   ).toHaveCount(0);
@@ -556,6 +557,26 @@ test("right rail exposes the v3 destinations and each panel opens", async () => 
     await expect(panel).toBeHidden();
     await expect(button).toHaveAttribute("aria-pressed", "false");
   }
+});
+
+test("Settings opens as a floating modal and dismisses", async () => {
+  const rail = page.getByRole("navigation", { name: "Tools" });
+  const button = rail.getByRole("button", { name: "Settings", exact: true });
+
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
+
+  const dialog = page.getByRole("dialog", { name: "Settings" });
+  await expect(dialog).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Settings panel" }),
+  ).toHaveCount(0);
+  await expect(dialog.getByText("Defaults", { exact: true })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(button).toHaveAttribute("aria-pressed", "false");
 });
 
 test("left sidebar shows the workspace switcher and Files tree", async () => {

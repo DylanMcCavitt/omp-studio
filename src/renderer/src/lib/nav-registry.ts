@@ -121,19 +121,28 @@ export const NAV_ENTRIES: readonly NavEntry[] = Object.entries(
   NAV_REGISTRY,
 ).map(([route, def]) => ({ route: route as Route, ...def }));
 
+/** Settings stays in the rail chrome, but opens as a modal instead of a panel. */
+export const SETTINGS_ENTRY: NavEntry = {
+  route: "settings",
+  ...NAV_REGISTRY.settings,
+};
+
 /**
  * The destinations shown in the right icon rail. Chat is the primary center
- * surface, and Sessions stays panel-renderable for existing history/deep links
- * without occupying one of the nine v3 rail icons.
+ * surface, Sessions stays panel-renderable for existing history/deep links,
+ * and Settings is rendered separately because it opens as a modal.
  */
 export const RAIL_ENTRIES: readonly NavEntry[] = NAV_ENTRIES.filter(
-  (e) => !e.primary && e.route !== "sessions",
+  (e) => !e.primary && e.route !== "sessions" && e.route !== "settings",
 );
 
 /** Panel entries keyed by route — a small static lookup for the panel host. */
 const PANEL_ENTRY_BY_ROUTE: Partial<Record<Route, NavEntry>> =
   Object.fromEntries(
-    NAV_ENTRIES.filter((e) => !e.primary).map((e) => [e.route, e]),
+    NAV_ENTRIES.filter((e) => !e.primary && e.route !== "settings").map((e) => [
+      e.route,
+      e,
+    ]),
   );
 
 /** The panel entry for `route`, or undefined when it is not panel-renderable. */

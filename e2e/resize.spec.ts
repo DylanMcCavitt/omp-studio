@@ -49,7 +49,6 @@ const VIEWS = [
   "Agents",
   "GitHub",
   "Linear",
-  "Settings",
 ] as const;
 
 let app: ElectronApplication;
@@ -163,7 +162,9 @@ function railButton(label: string) {
 async function openView(label: string): Promise<void> {
   const button = railButton(label);
   await expect(button).toBeVisible();
-  await button.click();
+  if ((await button.getAttribute("aria-pressed")) !== "true") {
+    await button.click();
+  }
   await expect(button).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("complementary", { name: `${label} panel` }),
@@ -229,6 +230,13 @@ for (const width of WIDTHS) {
 
 test("real Linear issue rows stay inside a narrow tool panel", async () => {
   await setContentSize(760, HEIGHT);
+  // Close the Linear panel if a previous test left it open, so opening it
+  // after the mock IPC handlers are installed remounts and refetches.
+  const linearButton = railButton("Linear");
+  if ((await linearButton.getAttribute("aria-pressed")) === "true") {
+    await linearButton.click();
+    await expect(linearButton).toHaveAttribute("aria-pressed", "false");
+  }
   await installMockLinearIssueIpc();
   await openView("Linear");
 

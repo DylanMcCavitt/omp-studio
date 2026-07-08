@@ -39,6 +39,7 @@ import {
   X,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { ModalShell } from "@/components/chat/ui-request/ModalShell";
 import { LinearConnectCard } from "@/components/linear/LinearConnectCard";
 import {
   Badge,
@@ -135,7 +136,12 @@ interface DangerRequest {
   onConfirm: () => void;
 }
 
-export default function Settings() {
+export interface SettingsProps {
+  titleId?: string;
+  toolbarEnd?: ReactNode;
+}
+
+export default function Settings({ titleId, toolbarEnd }: SettingsProps = {}) {
   const settingsLoading = useSettingsStore((s) => s.loading);
   const settingsError = useSettingsStore((s) => s.error);
   const reloadSettings = useSettingsStore((s) => s.load);
@@ -151,21 +157,26 @@ export default function Settings() {
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-ink">Settings</h1>
+          <h1 id={titleId} className="text-lg font-semibold text-ink">
+            Settings
+          </h1>
           <p className="text-sm text-ink-muted">
             Defaults, appearance, workspaces, providers, and harness paths
           </p>
         </div>
-        <IconButton
-          label="Reload"
-          onClick={() => {
-            models.reload();
-            providers.reload();
-            void reloadSettings();
-          }}
-        >
-          <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
-        </IconButton>
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton
+            label="Reload"
+            onClick={() => {
+              models.reload();
+              providers.reload();
+              void reloadSettings();
+            }}
+          >
+            <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
+          </IconButton>
+          {toolbarEnd}
+        </div>
       </div>
 
       <div className="scrollbar min-h-0 flex-1 overflow-auto px-6 py-6">
@@ -1383,37 +1394,21 @@ function DangerDialog({
   request: DangerRequest;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialogRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-      <div
-        ref={dialogRef}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="danger-title"
-        aria-describedby="danger-message"
-        tabIndex={-1}
-        className="w-full max-w-md rounded-xl border border-warn/40 bg-bg-panel p-5 shadow-panel focus:outline-none"
-      >
-        <div className="mb-3 flex items-center gap-2 text-warn">
+    <ModalShell
+      title={request.title}
+      message={request.message}
+      onDismiss={onClose}
+      kicker={
+        <span className="flex items-center gap-2 text-warn">
           <ShieldAlert className="h-5 w-5 shrink-0" />
-          <h2 id="danger-title" className="text-sm font-semibold">
-            {request.title}
-          </h2>
-        </div>
-        <p id="danger-message" className="mb-5 text-sm text-ink-muted">
-          {request.message}
-        </p>
-        <div className="flex justify-end gap-2">
+          <span className="text-xs font-semibold uppercase tracking-wide">
+            Confirm risk
+          </span>
+        </span>
+      }
+      footer={
+        <>
           <Button variant="subtle" onClick={onClose}>
             Cancel
           </Button>
@@ -1426,8 +1421,8 @@ function DangerDialog({
           >
             {request.confirmLabel}
           </Button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }
