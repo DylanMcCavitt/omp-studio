@@ -38,3 +38,10 @@ durable, non-obvious context.
 - **Demo proof recordings.** `npm run build && DEMO_OUT=/opt/cursor/artifacts xvfb-run -a npm run demo -- <scenario>`
   records a hermetic mp4 + keyframe PNGs of the built app (scenarios under
   `e2e/demo/scenarios/`). ffmpeg must be on PATH. Attach the artifacts as PR proof.
+
+## Review finding lifecycle
+
+- Reply in the original review thread whenever a finding is fixed, blocked, deferred, rejected, or otherwise updated.
+- Include the disposition, relevant commit, verification, and any remaining work.
+- A finding is incomplete until its thread has a current status reply, even if the code changed or the comment became outdated.
+- Do not resolve review threads without explicit authorization.
